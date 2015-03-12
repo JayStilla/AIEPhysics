@@ -5,6 +5,8 @@
 
 #include <PxPhysicsAPI.h>
 
+using namespace physx;
+
 // #PVD_AVAILABLE // uncomment this if we ever get PVD binaries in /MDd
 
 // derived application class that wraps up all globals neatly
@@ -25,17 +27,17 @@ protected:
 	glm::mat4	m_cameraMatrix;
 	glm::mat4	m_projectionMatrix;
 
-
-	// PhysX
-
+	// # PhysX
 	void setUpPhysXTutorial();
+	void updatePhysX(float a_deltaTime);
+	void cleanUpPhysX();
+	void PhysXTutorial::addWidget(PxShape * pShape, PxRigidActor * actor);
 
-	void updatePhysX();
+	void addBox(PxShape* pShape, PxRigidActor* actor);
+	void addSphere(PxShape * pShape, PxRigidActor * actor);
+	void addCapsule(PxShape* pShape, PxRigidActor * actor);
 
-	void cleanUpPhysX();	// @AIE - there is a typo in the tutorial (Phsyx vs PhysX)
-
-	void addWidget(physx::PxShape * pShape, physx::PxRigidDynamic * actor);
-	void addBox(physx::PxShape * pShape, physx::PxRigidDynamic * actor);
+	void useBallGun();
 
 #ifdef PVD_AVAILABLE
 	void setUpVisualDebugger();
