@@ -1,4 +1,4 @@
-#include "PhysXTutorial.h"
+#include "PhysXTrigger.h"
 #include "Gizmos.h"
 #include "Utilities.h"
 #include <GL/glew.h>

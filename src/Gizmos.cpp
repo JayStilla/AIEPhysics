@@ -900,3 +900,43 @@ void Gizmos::draw2D(const glm::mat4& a_projection)
 		glUseProgram(0);
 	}
 }
+
+void Gizmos::addGrid(const glm::vec3& a_center, int a_increments, float a_size,
+	const glm::vec4& a_colour, const glm::vec4& a_axisColor,
+	const glm::vec4& a_fillColor, const glm::mat4* a_transform)
+{
+	static glm::mat4 identity = glm::mat4(1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1);
+	if (nullptr == a_transform)
+	{
+		a_transform = &identity;
+	}
+	int halfIncrements = a_increments / 2;
+	glm::vec3 corners[4] = { glm::vec3(halfIncrements*a_size, halfIncrements*a_size, 0),
+		glm::vec3(halfIncrements*a_size, -halfIncrements*a_size, 0),
+		glm::vec3(-halfIncrements*a_size, -halfIncrements*a_size, 0),
+		glm::vec3(-halfIncrements*a_size, halfIncrements*a_size, 0) };
+	for (unsigned int i = 0; i < 4; ++i)
+		corners[i] = (*a_transform * glm::vec4(corners[i], 0)).xyz + a_center;
+	Gizmos::addTri(corners[0], corners[1], corners[2], a_fillColor);
+	Gizmos::addTri(corners[2], corners[1], corners[0], a_fillColor);
+	Gizmos::addTri(corners[2], corners[3], corners[0], a_fillColor);
+	Gizmos::addTri(corners[0], corners[3], corners[2], a_fillColor);
+	for (int i = 0; i <= a_increments; ++i)
+	{
+		glm::vec4 colour = (i == 0 || i == halfIncrements || i == a_increments) ? a_axisColor : a_colour;
+		glm::vec3 l1Start = glm::vec3((-halfIncrements + i)*a_size, halfIncrements*a_size, 0);
+		glm::vec3 l1End = glm::vec3((-halfIncrements + i)*a_size, -halfIncrements*a_size, 0);
+		glm::vec3 l2Start = glm::vec3(halfIncrements*a_size, (-halfIncrements + i)*a_size, 0);
+		glm::vec3 l2End = glm::vec3(-halfIncrements*a_size, (-halfIncrements + i)*a_size, 0);
+
+		l1Start = (*a_transform * glm::vec4(l1Start, 0)).xyz + a_center;
+		l1End = (*a_transform * glm::vec4(l1End, 0)).xyz + a_center;
+		l2Start = (*a_transform * glm::vec4(l2Start, 0)).xyz + a_center;
+		l2End = (*a_transform * glm::vec4(l2End, 0)).xyz + a_center;
+		Gizmos::addLine(l1Start, l1End, colour);
+		Gizmos::addLine(l2Start, l2End, colour);
+	}
+}

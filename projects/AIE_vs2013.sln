@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.31101.0
+VisualStudioVersion = 12.0.21005.1
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AIEFramework", "AIEFramework\AIEFramework_vs2013.vcxproj", "{BBD02D30-A9A5-41ED-9C12-67EC17B5C08B}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -11,12 +11,19 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FBXLoader", "..\tools\FBXLoader\FBXLoader_vs2013.vcxproj", "{5D056CED-A513-41EE-A0DD-6ECFE546F6B0}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PhysXTutorials", "PhysXTutorials\PhysXTutorials.vcxproj", "{1C72126F-6E5B-425A-B839-F0B49496DEF6}"
+	ProjectSection(ProjectDependencies) = postProject
+		{BBD02D30-A9A5-41ED-9C12-67EC17B5C08B} = {BBD02D30-A9A5-41ED-9C12-67EC17B5C08B}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PhysXTrigger", "PhysXTrigger\PhysXTrigger.vcxproj", "{FACE98E5-1453-47CA-9296-C8BCB86CC780}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PhysXRagdoll", "PhysXRagdoll\PhysXRagdoll.vcxproj", "{CF527FBA-ADB2-4E98-AD13-96255C22AB53}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PhysXController", "PhysXController\PhysXController.vcxproj", "{221C46D4-7651-41C7-833B-05980C587002}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PhysXCloth", "PhysXCloth\PhysXCloth.vcxproj", "{CB0C1F39-C9D5-44EC-B54E-FE06F76D7196}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Physics2D", "Physics2D\Physics2D.vcxproj", "{2FA70EB6-F742-40E9-B13B-5C0B3FBA41A6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -48,6 +55,14 @@ Global
 		{221C46D4-7651-41C7-833B-05980C587002}.Debug|Win32.Build.0 = Debug|Win32
 		{221C46D4-7651-41C7-833B-05980C587002}.Release|Win32.ActiveCfg = Release|Win32
 		{221C46D4-7651-41C7-833B-05980C587002}.Release|Win32.Build.0 = Release|Win32
+		{CB0C1F39-C9D5-44EC-B54E-FE06F76D7196}.Debug|Win32.ActiveCfg = Debug|Win32
+		{CB0C1F39-C9D5-44EC-B54E-FE06F76D7196}.Debug|Win32.Build.0 = Debug|Win32
+		{CB0C1F39-C9D5-44EC-B54E-FE06F76D7196}.Release|Win32.ActiveCfg = Release|Win32
+		{CB0C1F39-C9D5-44EC-B54E-FE06F76D7196}.Release|Win32.Build.0 = Release|Win32
+		{2FA70EB6-F742-40E9-B13B-5C0B3FBA41A6}.Debug|Win32.ActiveCfg = Debug|Win32
+		{2FA70EB6-F742-40E9-B13B-5C0B3FBA41A6}.Debug|Win32.Build.0 = Debug|Win32
+		{2FA70EB6-F742-40E9-B13B-5C0B3FBA41A6}.Release|Win32.ActiveCfg = Release|Win32
+		{2FA70EB6-F742-40E9-B13B-5C0B3FBA41A6}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
