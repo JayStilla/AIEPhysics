@@ -28,6 +28,7 @@ PxMaterial * g_PhysicsMaterial = nullptr;
 PxCooking * g_PhysicsCooker = nullptr;
 
 PxActor * volume = nullptr;
+PxActor * volume2 = nullptr; 
 
 std::vector<PxRigidActor*> g_PhysXActors;
 
@@ -158,7 +159,7 @@ bool PhysXTutorial::onCreate(int a_argc, char* a_argv[])
 	float density = 10;
 	PxBoxGeometry box(1, 1, 1);
 	PxTransform transform(PxVec3(0, 2, 0));
-	PxRigidDynamic* dynamicActor = PxCreateDynamic(*g_Physics, transform, box, *g_PhysicsMaterial, density);
+	PxRigidDynamic* dynamicActor = PxCreateDynamic(*g_Physics, transform, box, *g_PhysicsMaterial, density); 
 	//add it to the physX scene
 	g_PhysicsScene->addActor(*dynamicActor);
 	//add it to our copy of the scene
@@ -166,8 +167,6 @@ bool PhysXTutorial::onCreate(int a_argc, char* a_argv[])
 
 	// record which volume will trigger a callback
 	volume = dynamicActor;
-
-
 
 	return true;
 }

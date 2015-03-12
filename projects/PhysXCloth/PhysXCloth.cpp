@@ -76,7 +76,7 @@ bool PhysXTutorial::onCreate(int a_argc, char* a_argv[])
 	setUpPhysXTutorial();
 
 	// set cloth properties
-	float springSize = 0.2f;
+	float springSize = 0.3f;
 	unsigned int springRows = 40;
 	unsigned int springCols = 40;
 
@@ -98,8 +98,8 @@ bool PhysXTutorial::onCreate(int a_argc, char* a_argv[])
 			m_clothPositions[r * springCols + c].y = clothPosition.y;
 			m_clothPositions[r * springCols + c].z = clothPosition.z + springSize * r - halfWidth;
 
-			clothTextureCoords[r * springCols + c].x = 1.0f - r / (springRows - 1.0f);
-			clothTextureCoords[r * springCols + c].y = 1.0f - c / (springCols - 1.0f);
+			clothTextureCoords[r * springCols + c].x = 1.0f + r / (springRows - 1.0f);
+			clothTextureCoords[r * springCols + c].y = 1.0f + c / (springCols - 1.0f);
 		}
 	}
 
@@ -402,7 +402,7 @@ PxCloth* PhysXTutorial::createCloth(const glm::vec3& a_position,
 
 	// cook the geometry into fabric
 	PxDefaultMemoryOutputStream buf;
-	g_ClothCooker = new PxClothFabricCooker(clothDesc, PxVec3(0, -9.8f, 0));
+	g_ClothCooker = new PxClothFabricCooker(clothDesc, PxVec3(0, 9.8f, 0));
 	g_ClothCooker->save(buf, false);
 
 	PxDefaultMemoryInputData data(buf.getData(), buf.getSize());
@@ -431,7 +431,7 @@ PxCloth* PhysXTutorial::createCloth(const glm::vec3& a_position,
 		PxClothStretchConfig bendCfg;
 		//bendCfg.solverType = PxClothPhaseSolverConfig::eFAST;
 		bendCfg.stiffness = 1;
-		bendCfg.stretchLimit = 0.5;
+		bendCfg.stretchLimit = 1;
 		cloth->setStretchConfig(PxClothFabricPhaseType::eBENDING, bendCfg);
 		//cloth->setStretchConfig(PxClothFabricPhaseType::eSTRETCHING, bendCfg);
 		cloth->setStretchConfig(PxClothFabricPhaseType::eSHEARING, bendCfg);

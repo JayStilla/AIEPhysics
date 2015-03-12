@@ -303,7 +303,7 @@ void PhysXTutorial::controlPlayer(float a_deltaTime)
 }
 void PhysXTutorial::setUpPhysXTutorial()
 {
-	gravity = -30.0f;  //sets gravity here so we have access to it in our player controller
+	gravity = -20.0f;  //sets gravity here so we have access to it in our player controller
 
 	//instantiate our memory allocator
 	PxAllocatorCallback *myCallback = new myAllocator();
@@ -449,7 +449,7 @@ void PhysXTutorial::addBox(PxShape * pShape, PxRigidActor * actor)
 	position.z = m.getPosition().z;
 
 	glm::vec3 extents = glm::vec3(width, height, length);
-	glm::vec4 colour = glm::vec4(1, 0, 0, 1);
+	glm::vec4 colour = glm::vec4(0, 0, 1, 1);
 
 	//create our box gizmo
 	Gizmos::addAABBFilled(position, extents, colour, &M);
@@ -481,7 +481,7 @@ void PhysXTutorial::addSphere(PxShape * pShape, PxRigidActor * actor)
 void PhysXTutorial::addCapsule(PxShape* pShape, PxRigidActor * actor)
 {
 	//creates a gizmo representation of a capsule using 2 spheres and a cylinder
-	glm::vec4 colour(0, 0, 1, 1);  //make our capsule blue
+	glm::vec4 colour(1, 0, 0, 1);  //make our capsule blue
 	PxCapsuleGeometry capsuleGeometry;
 	float radius = 1; //temporary values whilst we try and get the real value from PhysX
 	float halfHeight = 1;;
