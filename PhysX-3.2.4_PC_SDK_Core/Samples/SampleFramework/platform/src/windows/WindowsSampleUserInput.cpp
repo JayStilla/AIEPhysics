@@ -1,45 +1,36 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #include <windows/WindowsSampleUserInput.h>
 
+#include <PxAssert.h>
+
 #include <stdio.h>
 #include <direct.h>
-#include <XInput.h>
-
-#pragma comment(lib, "XInput.lib")
 
 static bool gTimeInit=false;
 
@@ -54,6 +45,30 @@ using namespace physx;
 
 WindowsSampleUserInput::WindowsSampleUserInput()
 {	
+	mXInputLibrary          = 0;
+	mpXInputGetState        = 0;
+	mpXInputGetCapabilities = 0;
+
+	static const unsigned int xInputLibCount = 4;
+	static const char* xInputLibs[xInputLibCount] = { "xinput1_4.dll" ,
+													  "xinput1_3.dll",
+	                                                  "xinput1_2.dll",
+	                                                  "xinput1_1.dll" };
+	for (unsigned int i = 0; i < xInputLibCount; ++i)
+	{
+		mXInputLibrary = LoadLibraryA(xInputLibs[i]);
+		if(mXInputLibrary)
+			break;
+	}
+	PX_ASSERT(mXInputLibrary && "Could not load XInput library.");
+	if (mXInputLibrary)
+	{
+		mpXInputGetState        = (LPXINPUTGETSTATE)GetProcAddress(mXInputLibrary, "XInputGetState");
+		mpXInputGetCapabilities = (LPXINPUTGETCAPABILITIES)GetProcAddress(mXInputLibrary, "XInputGetCapabilities");
+		PX_ASSERT(mpXInputGetState && "Error loading XInputGetState function.");
+		PX_ASSERT(mpXInputGetCapabilities && "Error loading XInputGetCapabilities function.");
+	}
+
 	mGamePadConnected = false;
 	mConnectedPad = 0;
 
@@ -96,28 +111,28 @@ WindowsSampleUserInput::WindowsSampleUserInput()
 	registerUserInput(WKEY_Y,"KEY_Y", "Y");	
 	registerUserInput(WKEY_Z,"KEY_Z", "Z");	
 
-	registerUserInput(WKEY_SPACE  ,"KEY_SPACE","SPACE");
-	registerUserInput(WKEY_RETURN ,"KEY_RETURN","ENTER");
-	registerUserInput(WKEY_SHIFT ,"KEY_SHIFT","SHIFT");
-	registerUserInput(WKEY_CONTROL ,"KEY_CONTROL","CONTROL");
-	registerUserInput(WKEY_ESCAPE ,"KEY_ESCAPE","ESCAPE");
-	registerUserInput(WKEY_COMMA ,"KEY_COMMA","comma");
-	registerUserInput(WKEY_NUMPAD0 ,"KEY_NUMPAD0","numpad0");
-	registerUserInput(WKEY_NUMPAD1 ,"KEY_NUMPAD1","numpad1");
-	registerUserInput(WKEY_NUMPAD2 ,"KEY_NUMPAD2","numpad2");
-	registerUserInput(WKEY_NUMPAD3 ,"KEY_NUMPAD3","numpad3");
-	registerUserInput(WKEY_NUMPAD4 ,"KEY_NUMPAD4","numpad4");
-	registerUserInput(WKEY_NUMPAD5 ,"KEY_NUMPAD5","numpad5");
-	registerUserInput(WKEY_NUMPAD6 ,"KEY_NUMPAD6","numpad6");
-	registerUserInput(WKEY_NUMPAD7 ,"KEY_NUMPAD7","numpad7");
-	registerUserInput(WKEY_NUMPAD8 ,"KEY_NUMPAD8","numpad8");
-	registerUserInput(WKEY_NUMPAD9 ,"KEY_NUMPAD9","numpad9");
-	registerUserInput(WKEY_MULTIPLY ,"KEY_MULTIPLY","multiply");
-	registerUserInput(WKEY_ADD ,"KEY_ADD","add");
-	registerUserInput(WKEY_SEPARATOR ,"KEY_SEPARATOR","separator");
-	registerUserInput(WKEY_SUBTRACT ,"KEY_SUBTRACT","subtract");
-	registerUserInput(WKEY_DECIMAL ,"KEY_DECIMAL","DECIMAL on keypad");
-	registerUserInput(WKEY_DIVIDE ,"KEY_DIVIDE","divide");
+	registerUserInput(WKEY_SPACE  ,"KEY_SPACE","Space");
+	registerUserInput(WKEY_RETURN ,"KEY_RETURN","Enter");
+	registerUserInput(WKEY_SHIFT ,"KEY_SHIFT","Shift");
+	registerUserInput(WKEY_CONTROL ,"KEY_CONTROL","Control");
+	registerUserInput(WKEY_ESCAPE ,"KEY_ESCAPE","Escape");
+	registerUserInput(WKEY_COMMA ,"KEY_COMMA",",");
+	registerUserInput(WKEY_NUMPAD0 ,"KEY_NUMPAD0","Numpad 0");
+	registerUserInput(WKEY_NUMPAD1 ,"KEY_NUMPAD1","Numpad 1");
+	registerUserInput(WKEY_NUMPAD2 ,"KEY_NUMPAD2","Numpad 2");
+	registerUserInput(WKEY_NUMPAD3 ,"KEY_NUMPAD3","Numpad 3");
+	registerUserInput(WKEY_NUMPAD4 ,"KEY_NUMPAD4","Numpad 4");
+	registerUserInput(WKEY_NUMPAD5 ,"KEY_NUMPAD5","Numpad 5");
+	registerUserInput(WKEY_NUMPAD6 ,"KEY_NUMPAD6","Numpad 6");
+	registerUserInput(WKEY_NUMPAD7 ,"KEY_NUMPAD7","Numpad 7");
+	registerUserInput(WKEY_NUMPAD8 ,"KEY_NUMPAD8","Numpad 8");
+	registerUserInput(WKEY_NUMPAD9 ,"KEY_NUMPAD9","Numpad 9");
+	registerUserInput(WKEY_MULTIPLY ,"KEY_MULTIPLY","*");
+	registerUserInput(WKEY_ADD ,"KEY_ADD","+");
+	registerUserInput(WKEY_SEPARATOR ,"KEY_SEPARATOR","Separator");
+	registerUserInput(WKEY_SUBTRACT ,"KEY_SUBTRACT","-");
+	registerUserInput(WKEY_DECIMAL ,"KEY_DECIMAL",".");
+	registerUserInput(WKEY_DIVIDE ,"KEY_DIVIDE","/");
 
 	registerUserInput(WKEY_F1 ,"KEY_F1","F1");
 	registerUserInput(WKEY_F2 ,"KEY_F2","F2");
@@ -132,20 +147,21 @@ WindowsSampleUserInput::WindowsSampleUserInput()
 	registerUserInput(WKEY_F11 ,"KEY_F11","F11");
 	registerUserInput(WKEY_F12 ,"KEY_F12","F12");
 
-	registerUserInput(WKEY_TAB ,"KEY_TAB","TAB");
-	registerUserInput(WKEY_PRIOR ,"KEY_PRIOR","PRIOR");
-	registerUserInput(WKEY_NEXT ,"KEY_NEXT","NEXT");
-	registerUserInput(WKEY_UP ,"KEY_UP","UP");
-	registerUserInput(WKEY_DOWN ,"KEY_DOWN","DOWN");
-	registerUserInput(WKEY_LEFT ,"KEY_LEFT","LEFT");
-	registerUserInput(WKEY_RIGHT ,"KEY_RIGHT","RIGHT");
+	registerUserInput(WKEY_TAB ,"KEY_TAB","Tab");
+	registerUserInput(WKEY_BACKSPACE,"KEY_BACKSPACE","Backspace");
+	registerUserInput(WKEY_PRIOR ,"KEY_PRIOR","PgUp");
+	registerUserInput(WKEY_NEXT ,"KEY_NEXT","PgDn");
+	registerUserInput(WKEY_UP ,"KEY_UP","Up Arrow");
+	registerUserInput(WKEY_DOWN ,"KEY_DOWN","Down Arrow");
+	registerUserInput(WKEY_LEFT ,"KEY_LEFT","Left Arrow");
+	registerUserInput(WKEY_RIGHT ,"KEY_RIGHT","Right Arrow");
 
 	// mouse
-	registerUserInput(MOUSE_BUTTON_LEFT ,"MOUSE_BUTTON_LEFT","left mouse button");
-	registerUserInput(MOUSE_BUTTON_RIGHT ,"MOUSE_BUTTON_RIGHT","right mouse button");
-	registerUserInput(MOUSE_BUTTON_CENTER ,"MOUSE_BUTTON_CENTER","middle mouse button");
+	registerUserInput(MOUSE_BUTTON_LEFT ,"MOUSE_BUTTON_LEFT","Left Mouse Button");
+	registerUserInput(MOUSE_BUTTON_RIGHT ,"MOUSE_BUTTON_RIGHT","Right Mouse Button");
+	registerUserInput(MOUSE_BUTTON_CENTER ,"MOUSE_BUTTON_CENTER","Middle Mouse Button");
 
-	registerUserInput(MOUSE_MOVE,"MOUSE_MOVE", "mouse move");	
+	registerUserInput(MOUSE_MOVE,"MOUSE_MOVE", "Mouse Move");	
 
 	//assumes the pad naming conventions of xbox
 	registerUserInput(GAMEPAD_DIGI_UP,"GAMEPAD_DIGI_UP", "gpad UP");
@@ -291,16 +307,17 @@ WindowsSampleUserInput::~WindowsSampleUserInput()
 	mScanCodesMap.clear();
 	mAnalogStates.clear();
 	mDigitalStates.clear();
-
+	if (mXInputLibrary) 
+	{
+		FreeLibrary(mXInputLibrary);
+		mXInputLibrary = 0;
+	}
 }
 
 WindowsSampleUserInputIds WindowsSampleUserInput::getKeyCode(WPARAM wParam) const
 {
 	WindowsSampleUserInputIds keyCode = WKEY_UNKNOWN;
 	const int keyparam = (int)wParam;
-	// PT: TODO: the comment below is of course wrong. You just need to use the proper event code (WM_CHAR)
-	//there are no lowercase virtual key codes!!
-	//if(     keyparam >= 'a' && keyparam <= 'z') keyCode = (RendererWindow::KeyCode)((keyparam - 'a')+WKEY_A);		else 
 
 	if(keyparam >= 'A' && keyparam <= 'Z')						keyCode = (WindowsSampleUserInputIds)((keyparam - 'A')+WKEY_A);
 	else if(keyparam >= '0' && keyparam <= '9')					keyCode = (WindowsSampleUserInputIds)((keyparam - '0')+WKEY_0);
@@ -329,6 +346,7 @@ WindowsSampleUserInputIds WindowsSampleUserInput::getKeyCode(WPARAM wParam) cons
 	else if(keyparam == VK_F12)									keyCode = WKEY_F12;
 	//
 	else if(keyparam == VK_TAB)									keyCode = WKEY_TAB;
+	else if(keyparam == VK_BACK)								keyCode = WKEY_BACKSPACE;
 	//
 	else if(keyparam == VK_PRIOR)								keyCode = WKEY_PRIOR;
 	else if(keyparam == VK_NEXT)								keyCode = WKEY_NEXT;
@@ -465,19 +483,14 @@ void WindowsSampleUserInput::onKeyDown(WPARAM wParam, LPARAM lParam)
 		events = getInputEvents((PxU16)keyCode);
 	}
 
-	if(!events)
+	if(!events || !getInputEventListener())
 		return;
 
 	for (size_t i = events->size(); i--;)
 	{
 		const InputEvent& ie = mInputEvents[(*events)[i]];
 		mDigitalStates[ie.m_Id] = true;
-
-		if(getInputEventListener())
-		{
-			if(!getInputEventListener()->onDigitalInputEvent(ie, true))
-				return;
-		}
+		getInputEventListener()->onDigitalInputEvent(ie, true);
 	}		
 }
 
@@ -496,19 +509,14 @@ void WindowsSampleUserInput::onKeyUp(WPARAM wParam, LPARAM lParam)
 		events = getInputEvents((PxU16)keyCode);
 	}
 
-	if(!events)
+	if(!events || !getInputEventListener())
 		return;
 
 	for (size_t i = events->size(); i--;)
 	{
 		const InputEvent& ie = mInputEvents[(*events)[i]];
 		mDigitalStates[ie.m_Id] = false;
-
-		if(getInputEventListener())
-		{
-			if(!getInputEventListener()->onDigitalInputEvent(ie, false))
-				return;
-		}
+		getInputEventListener()->onDigitalInputEvent(ie, false);
 	}		
 }
 
@@ -527,15 +535,13 @@ void WindowsSampleUserInput::onKeyEvent(const KeyEvent& keyEvent)
 		if(keyEvent.m_Flags == KEY_EVENT_UP)
 		{
 			mDigitalStates[ie.m_Id] = false;
-			if(!getInputEventListener()->onDigitalInputEvent(ie, false))
-				return;
+			getInputEventListener()->onDigitalInputEvent(ie, false);
 		}
 
 		if(keyEvent.m_Flags == KEY_EVENT_DOWN)
 		{
 			mDigitalStates[ie.m_Id] = true;
-			if(!getInputEventListener()->onDigitalInputEvent(ie, true))
-				return;
+			getInputEventListener()->onDigitalInputEvent(ie, true);
 		}
 	}
 }
@@ -596,14 +602,12 @@ void WindowsSampleUserInput::onGamepadAnalogButton(physx::PxU32 buttonIndex,cons
 			if(newUp)
 			{
 				mDigitalStates[ie.m_Id] = true;
-				if(!getInputEventListener()->onDigitalInputEvent(ie, true))
-					return;
+				getInputEventListener()->onDigitalInputEvent(ie, true);
 			}
 			if(newDown)
 			{
 				mDigitalStates[ie.m_Id] = false;
-				if(!getInputEventListener()->onDigitalInputEvent(ie, false))
-					return;
+				getInputEventListener()->onDigitalInputEvent(ie, false);
 			}
 		}
 	}
@@ -625,8 +629,7 @@ void WindowsSampleUserInput::onGamepadButton(physx::PxU32 buttonIndex, bool butt
 	{
 		const InputEvent& ie = mInputEvents[(*events)[i]];
 		mDigitalStates[ie.m_Id] = buttonDown;
-		if(!getInputEventListener()->onDigitalInputEvent(ie, buttonDown))
-			return;
+		getInputEventListener()->onDigitalInputEvent(ie, buttonDown);
 	}
 }
 
@@ -683,13 +686,16 @@ void WindowsSampleUserInput::processGamepads()
 
 	static PxI32 disConnected[4] = {1, 2, 3, 4};
 
+	if (!hasXInput())
+		return;
+
 	// PT: TODO: share this with PxApplication
 	for(PxU32 p=0;p<MAX_GAMEPADS;p++)
 	{
 		if((--disConnected[p]) == 0)
 		{
 			XINPUT_STATE inputState;
-			DWORD state = XInputGetState(p, &inputState);
+			DWORD state = mpXInputGetState(p, &inputState);
 			if(state == ERROR_DEVICE_NOT_CONNECTED)
 			{
 				disConnected[p] = 4;
@@ -700,7 +706,7 @@ void WindowsSampleUserInput::processGamepads()
 					for (PxU32 k=0;k<MAX_GAMEPADS;k++)
 					{
 						XINPUT_STATE inputStateDisc;
-						DWORD stateDisc = XInputGetState(k, &inputStateDisc);
+						DWORD stateDisc = mpXInputGetState(k, &inputStateDisc);
 						if(stateDisc == ERROR_SUCCESS)
 						{
 							mConnectedPad = k;
@@ -720,7 +726,7 @@ void WindowsSampleUserInput::processGamepads()
 
 				disConnected[p] = 1; //force to test next time
 				XINPUT_CAPABILITIES caps;
-				XInputGetCapabilities(p, XINPUT_FLAG_GAMEPAD, &caps);
+				mpXInputGetCapabilities(p, XINPUT_FLAG_GAMEPAD, &caps);
 
 				//gamepad
 				{

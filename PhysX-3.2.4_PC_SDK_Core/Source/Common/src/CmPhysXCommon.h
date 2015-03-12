@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -50,11 +50,6 @@
 // caused troubles (e.g. TTP 1705, TTP 306).
 #define PX_PARALLEL_TOLERANCE	1e-02f
 
-// This is version number for cloth fabric 
-// starting from version number 1
-#define PX_CLOTH_FABRIC_VERSION 2
-
-
 #ifndef CACHE_LOCAL_CONTACTS_XP
 #define CACHE_LOCAL_CONTACTS_XP 1
 #endif
@@ -70,25 +65,6 @@ namespace physx
 	// alias shared foundation to something usable
 	namespace Ps = shdfnd;
 }
-
-#if defined(PX_VC) // make the SDK compile clean on /W4
-
-	// these are reasonable
-	#pragma warning (disable : 4100) // unreferenced formal parameter
-
-	// these are dubious
-	#pragma warning (disable : 4244) // conversion from ... to ..., possible loss of data
-	#pragma warning (disable : 4245) // conversion from ... to ..., signed/unsigned mismatch
-
-	// these we should remove
-	#pragma warning (disable : 4702) // unreachable code
-	#pragma warning (disable : 4714) // function marked as __forceinline not inlined
-	#pragma warning (disable : 4389) // '==' : signed/unsigned mismatch
-	#pragma warning (disable : 4706) // assignment within conditional expression
-	#pragma warning (disable : 4189) // local variable is initialized but not referenced
-
-#endif
-
 
 #ifdef PX_CHECKED
 	#define PX_CHECK_MSG(exp, msg)				(!!(exp) || (physx::shdfnd::getFoundation().error(physx::PxErrorCode::eINVALID_PARAMETER, __FILE__, __LINE__, msg), 0) )
@@ -108,7 +84,7 @@ namespace physx
 	// VC compiler defines __FUNCTION__ as a string literal so it is possible to concatenate it with another string
 	// Example: #define PX_CHECK_VALID(x)	PX_CHECK_MSG(physx::shdfnd::checkValid(x), __FUNCTION__ ": parameter invalid!")
 	#define PX_CHECK_VALID(x)				PX_CHECK_MSG(physx::shdfnd::checkValid(x), __FUNCTION__)
-#elif defined PX_GNUC
+#elif defined(PX_GNUC) || defined(PX_GHS)
 	// GCC compiler defines __FUNCTION__ as a variable, hence, it is NOT possible concatenate an additional string to it
 	// In GCC, __FUNCTION__ only returns the function name, using __PRETTY_FUNCTION__ will return the full function definition
 	#define PX_CHECK_VALID(x)				PX_CHECK_MSG(physx::shdfnd::checkValid(x), __PRETTY_FUNCTION__)

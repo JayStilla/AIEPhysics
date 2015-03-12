@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -38,12 +38,16 @@
 	#include "foundation/windows/PxWindowsIntrinsics.h"
 #elif defined PX_X360
 	#include "foundation/xbox360/PxXbox360Intrinsics.h"
-#elif (defined PX_LINUX || defined PX_ANDROID || defined PX_APPLE)
-	#include "foundation/linux/PxLinuxIntrinsics.h"
+#elif (defined PX_LINUX || defined PX_ANDROID || defined PX_APPLE || defined PX_PS4)
+	#include "foundation/unix/PxUnixIntrinsics.h"
 #elif defined PX_PS3
 	#include "foundation/ps3/PxPS3Intrinsics.h"
 #elif defined PX_PSP2
 	#include "foundation/psp2/PxPSP2Intrinsics.h"
+#elif defined PX_WIIU
+	#include "foundation/wiiu/PxWiiUIntrinsics.h"
+#elif defined PX_XBOXONE
+	#include "foundation/XboxOne/PxXboxOneIntrinsics.h"
 #else
 	#error "Platform not supported!"
 #endif

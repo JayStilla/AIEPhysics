@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -63,12 +63,12 @@ SampleRandomPrecomputed::SampleRandomPrecomputed(PhysXSample& app)
 		mPrecomputedRandomSequence[i] = float(rand()) * denom;
 	}
 	mPrecomputedRandomSequence[PRECOMPUTED_RANDOM_SEQUENCE_SIZE]=1.0f;
-	FileOutputStream stream(filename);
+	PxDefaultFileOutputStream stream(filename);
 	stream.write(mPrecomputedRandomSequence,sizeof(PxF32)*(PRECOMPUTED_RANDOM_SEQUENCE_SIZE+1));
 
 #else
 	const char* filename = getSampleMediaFilename("SampleBaseRandomSequence");
-	FileInputData stream(filename);
+	PxDefaultFileInputData stream(filename);
 	if(!stream.isValid())
 		app.fatalError("SampleBaseRandomSequence file not found");
 	stream.read(mPrecomputedRandomSequence,sizeof(PxF32)*(PRECOMPUTED_RANDOM_SEQUENCE_SIZE+1));

@@ -23,9 +23,10 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
-#ifndef _PHYSX_SAMPLE_H
-#define _PHYSX_SAMPLE_H
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
+
+#ifndef PHYSX_SAMPLE_H
+#define PHYSX_SAMPLE_H
 
 #include "PhysXSampleApplication.h"
 #include "SampleStepper.h"
@@ -53,10 +54,31 @@ namespace PVD {
 	using namespace physx::debugger::comm;
 }
 
+struct PhysXShape
+{
+	PxRigidActor*	mActor;
+	PxShape*		mShape;
+
+	PhysXShape(PxRigidActor* actor, PxShape* shape) : mActor(actor), mShape(shape) {}
+	PhysXShape(const PhysXShape& shape) : mActor(shape.mActor), mShape(shape.mShape) {}
+	bool operator<(const PhysXShape& shape) const { return mActor == shape.mActor ? mShape < shape.mShape : mActor < shape.mActor; }
+};
+
+enum StepperType
+{
+	DEFAULT_STEPPER,
+	FIXED_STEPPER,
+	INVERTED_FIXED_STEPPER,
+	VARIABLE_STEPPER
+};
+
 class PhysXSample	: public PVD::PvdConnectionHandler //receive notifications when pvd is connected and disconnected.
 					, public RAWImportCallback
 					, public SampleAllocateable
+					, public PxDeletionListener
 {
+	typedef std::map<PhysXShape, RenderBaseActor*> PhysXShapeToRenderActorMap;
+
 public:
 															PhysXSample(PhysXSampleApplication& app, PxU32 maxSubSteps=8);
 	virtual													~PhysXSample();
@@ -70,18 +92,19 @@ public:
 					void									removeActor(PxRigidActor* actor);
 					void									removeRenderObject(RenderBaseActor *renderAcotr);
 #if PX_USE_CLOTH_API
-					void									createRenderObjectsFromCloth(const PxCloth& cloth, const PxClothMeshDesc &meshDesc, RenderMaterial* material = NULL, const PxReal* uvs = NULL, bool enableDebugRender = true, const PxVec3& color = PxVec3(0.5f, 0.5f, 0.5f), PxReal scale = 1.0f);
+					void									createRenderObjectsFromCloth(const PxCloth& cloth, const PxClothMeshDesc &meshDesc, RenderMaterial* material = NULL, const PxVec2* uvs = NULL, bool enableDebugRender = true, PxReal scale = 1.0f);
+					void									removeRenderClothActor(RenderClothActor& renderActor);
 #endif
 					void									createRenderObjectsFromActor(PxRigidActor* actor, RenderMaterial* material=NULL);
-					RenderBaseActor*						createRenderBoxFromShape(PxShape* shape, RenderMaterial* material=NULL, const PxReal* uvs=NULL);
-					RenderBaseActor*						createRenderObjectFromShape(PxShape* shape, RenderMaterial* material=NULL);
+					RenderBaseActor*						createRenderBoxFromShape(PxRigidActor* actor, PxShape* shape, RenderMaterial* material=NULL, const PxReal* uvs=NULL);
+					RenderBaseActor*						createRenderObjectFromShape(PxRigidActor* actor, PxShape* shape, RenderMaterial* material=NULL);
 					RenderMeshActor*						createRenderMeshFromRawMesh(const RAWMesh& data, PxShape* shape = NULL);
 					RenderTexture*							createRenderTextureFromRawTexture(const RAWTexture& data);
 					RenderMaterial*							createRenderMaterialFromTextureFile(const char* filename);
-					PxCloth*								createClothFromMeshDesc(PxClothMeshDesc &meshDesc, const PxTransform &pose, PxClothCollisionData* collData,	const PxVec3& gravityDir = PxVec3(0,0,-1), 
-																const PxReal* uv = 0, const char *textureFile = 0, const PxVec3& color = PxVec3(0.5f, 0.5f, 0.5f), PxReal scale = 1.0f);
-					PxCloth*								createClothFromObj(const char *objFileName, const PxTransform& pose, PxClothCollisionData* collData, const char* textureFileName);
-					PxCloth*                                createGridCloth(PxReal sizeX, PxReal sizeY, PxU32 numX, PxU32 numY,	const PxTransform &pose, PxClothCollisionData *colData = NULL,	const char* filename = NULL);
+					PxCloth*								createClothFromMeshDesc(const PxClothMeshDesc &meshDesc, const PxTransform &pose, const PxVec3& gravityDir = PxVec3(0,0,-1), 
+																const PxVec2* uv = 0, const char *textureFile = 0, PxReal scale = 1.0f);
+					PxCloth*								createClothFromObj(const char *objFileName, const PxTransform& pose, const char* textureFileName);
+					PxCloth*                                createGridCloth(PxReal sizeX, PxReal sizeY, PxU32 numX, PxU32 numY,	const PxTransform &pose, const char* filename = NULL);
 					PxRigidActor*							createGrid(RenderMaterial* material=NULL);
 					PxRigidDynamic*							createBox(const PxVec3& pos, const PxVec3& dims, const PxVec3* linVel=NULL, RenderMaterial* material=NULL, PxReal density=1.0f);
 					PxRigidDynamic*							createSphere(const PxVec3& pos, PxReal radius, const PxVec3* linVel=NULL, RenderMaterial* material=NULL, PxReal density=1.0f);
@@ -90,7 +113,8 @@ public:
 					PxRigidDynamic*							createCompound(const PxVec3& pos, const std::vector<PxTransform>& localPoses, const std::vector<const PxGeometry*>& geometries, const PxVec3* linVel=NULL, RenderMaterial* material=NULL, PxReal density=1.0f);
 					PxRigidDynamic*							createTestCompound(const PxVec3& pos, PxU32 nbBoxes, float boxSize, float amplitude, const PxVec3* linVel, RenderMaterial* material, PxReal density, bool makeSureVolumeEmpty = false);
 #if PX_USE_PARTICLE_SYSTEM_API
-					RenderParticleSystemActor*				createRenderObjectFromParticleSystem(ParticleSystem& ps, RenderMaterial* material = NULL);
+					RenderParticleSystemActor*				createRenderObjectFromParticleSystem(ParticleSystem& ps, RenderMaterial* material = NULL, 
+																bool useMeshInstancing = false, bool useFading = false, PxReal fadingPeriod = 1.0f, PxReal instancingScale = 1.0f);
 #endif
 					void									createRenderObjectsFromScene();
 					
@@ -99,7 +123,11 @@ public:
 
 					void									setSubStepper(const PxReal stepSize, const PxU32 maxSteps) { getStepper()->setSubStepper(stepSize, maxSteps); }
 					void									togglePause();
+					void									toggleFlyCamera();
 					void									initRenderObjects();
+
+					// project from world coords to screen coords (can be used for text rendering)
+					void									project(const PxVec3& v, int& x, int& y, float& depth);
 
 public:
 	virtual			void									onInit();
@@ -109,8 +137,11 @@ public:
 	// called after simulate() has completed
 	virtual			void									onSubstep(float dtime) {}
 
+	// called after simulate() has completed, but before fetchResult() is called
+	virtual			void									onSubstepPreFetchResult() {}
+
 	// called before simulate() is called
-	virtual			void									onSubstepSetup(float dtime, pxtask::BaseTask* cont) {}
+	virtual			void									onSubstepSetup(float dtime, PxBaseTask* cont) {}
 	// called after simulate() has started
 	virtual			void									onSubstepStart(float dtime) {}
 
@@ -121,8 +152,8 @@ public:
 	virtual			void									onTickPostRender(float dtime);
 
 	virtual			void									onAnalogInputEvent(const SampleFramework::InputEvent& , float val);
-	virtual			bool									onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);
-	virtual			void									onPointerInputEvent(const SampleFramework::InputEvent& ie, physx::PxU32 x, physx::PxU32 y, physx::PxReal dx, physx::PxReal dy, bool val);
+	virtual			void									onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);
+	virtual			void									onPointerInputEvent(const SampleFramework::InputEvent& ie, PxU32 x, PxU32 y, PxReal dx, PxReal dy, bool val);
 
 	virtual			void									onKeyDownEx(SampleFramework::SampleUserInput::KeyCode keyCode, PxU32 param);
 
@@ -138,10 +169,15 @@ public:
 	virtual			void									collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents);
 	virtual			SampleFramework::SampleDirManager&		getSampleOutputDirManager();
 
+	// delete listener
+	virtual			void									onRelease(const PxBase* observed, void* userData, PxDeletionEventFlag::Enum deletionEvent);
+
+
 protected:
 	// Let samples override this
-	virtual			void									getDefaultSceneDesc(PxSceneDesc&)  {}
-	virtual			void									customizeSceneDesc(PxSceneDesc&)	{}
+	virtual			void									getDefaultSceneDesc(PxSceneDesc&)		{}
+	virtual			void									customizeSceneDesc(PxSceneDesc&)		{}
+	virtual			void									customizeTolerances(PxTolerancesScale&)	{}
 	virtual			void									renderScene() {}
 	// this lets samples customize the debug objects
 	enum DebugObjectType
@@ -161,12 +197,14 @@ protected:
 	virtual			PxReal									getDebugCapsuleObjectHalfHeight()	const	{ return 1.0f;						}
 	virtual			PxReal									getDebugConvexObjectScale()			const	{ return 0.3f;						}
 	virtual			void									onDebugObjectCreation(PxRigidDynamic* actor){									}
-	Stepper*		getStepper();
+					Stepper*								getStepper();
 
 	void													prepareInputEventUserInputInfo(const char* sampleName,PxU32 &userInputCS, PxU32 &inputEventCS);
 
 private:
 	///////////////////////////////////////////////////////////////////////////////
+
+	PhysXSample&	operator= (const PhysXSample&);
 	// Implements PvdConnectionFactoryHandler
 	virtual			void									onPvdSendClassDescriptions(PVD::PvdConnection&) {}
 	virtual			void									onPvdConnected(PVD::PvdConnection& inFactory);
@@ -178,6 +216,7 @@ public:	// Helpers from PhysXSampleApplication
 
 	PX_FORCE_INLINE	void									toggleVisualizationParam(PxScene& scene, PxVisualizationParameter::Enum param)
 															{
+																PxSceneWriteLock scopedLock(scene);
                                                                 const bool visualization = scene.getVisualizationParameter(param) == 1.0f;
                                                                 scene.setVisualizationParameter(param, visualization ? 0.0f : 1.0f);
 																mApplication.refreshVisualizationMenuState(param);						
@@ -205,7 +244,7 @@ public:	// getter & setter
 	PX_FORCE_INLINE	PxReal									getDebugRenderScale()				const	{ return mDebugRenderScale; }
 
 	PX_FORCE_INLINE	bool									isPaused()							const	{ return mApplication.isPaused(); }
-#ifdef PX_WINDOWS
+#if PX_SUPPORT_GPU_PHYSX
 	PX_FORCE_INLINE	bool									isGpuSupported()					const	{ return mCudaContextManager && mCudaContextManager->contextIsValid(); }
 #else
 	PX_FORCE_INLINE	bool									isGpuSupported()					const	{ return false; }
@@ -213,21 +252,23 @@ public:	// getter & setter
 	PX_FORCE_INLINE void									setMenuExpandState(bool menuExpand)		 { mApplication.mMenuExpand = menuExpand; }
 	PX_FORCE_INLINE void									setEyeTransform(const PxVec3& pos, const PxVec3& rot) {mApplication.setEyeTransform(pos, rot); }
 	PX_FORCE_INLINE void									resetExtendedHelpText()					{ mExtendedHelpPage = 0; }
-
 	PX_FORCE_INLINE void									addPhysicsActors(PxRigidActor* actor)	{ mPhysicsActors.push_back(actor); }
+					void									unlink(RenderBaseActor* renderActor, PxShape* shape, PxRigidActor* actor);
+					void									link(RenderBaseActor* renderActor, PxShape* shape, PxRigidActor* actor);
+					RenderBaseActor*						getRenderActor(PxRigidActor* actor, PxShape* shape);
+					const char*								getSampleOutputFilePath(const char* inFilePath, const char* outExtension);
+					void									showExtendedInputEventHelp(PxU32 x, PxU32 y);
 
-	const char*												getSampleOutputFilePath(const char* inFilePath, const char* outExtension);
-	
-	void													showExtendedInputEventHelp(PxU32 x, PxU32 y);
+					void									freeDeletedActors();
+	PX_FORCE_INLINE	StepperType								getStepperType()					const	{ return mStepperType; }
 
-	void													freeDeletedActors();
-
-private:
-					void									togglePvdConnection();
-					void									createPvdConnection();
-					void									updateSweepSettingForShapes();
-					void									updateRenderObjectsFromRigidActor(PxRigidActor& actor);
+protected:
+					void									updateRenderObjectsFromRigidActor(PxRigidActor& actor, RenderMaterial* mat = NULL);
 					void									updateRenderObjectsFromArticulation(PxArticulation& articulation);					
+
+protected:
+					void									togglePvdConnection();
+					void									createPvdConnection();					
 
 					void									bufferActiveTransforms();
 					void									updateRenderObjectsDebug(float dtime); // update of render actors debug draw information, will be called while the simulation is NOT running
@@ -238,18 +279,17 @@ private:
 					void									saveInputEvents(const std::vector<const SampleFramework::InputEvent*>& );					
 					void									parseSampleOutputAsset(const char* sampleName, PxU32 , PxU32 );
 					void									spawnDebugObject();
+					void									removeRenderActorsFromPhysicsActor(const PxRigidActor* actor);
 
 protected:	// configurations
 					bool									mInitialDebugRender;
 					bool									mCreateCudaCtxManager;
 					bool									mCreateGroundPlane;
-					bool									mUseDebugStepper;
-					bool									mUseFixedStepper;
+					StepperType								mStepperType;
 					PxU32									mMaxNumSubSteps;
 					PxU32									mNbThreads;
                     PxU32									mMaxNumSpus;
 					PxReal									mDefaultDensity;
-					bool									mUseFullPvdConnection;
 
 protected:	// control
 					bool									mDisplayFPS;
@@ -264,6 +304,7 @@ protected:	// control
 
 					DefaultCameraController&				mCameraController;
 					DefaultCameraController					mFlyCameraController;
+					PhysXSampleApplication::PvdParameters&	mPvdParams;
 
 protected:
 					PhysXSampleApplication&					mApplication;
@@ -277,8 +318,8 @@ protected:
 #ifdef PX_PS3
 					PxDefaultSpuDispatcher*					mSpuDispatcher;
 #endif
-#ifdef PX_WINDOWS
-					pxtask::CudaContextManager*				mCudaContextManager;
+#if PX_SUPPORT_GPU_PHYSX
+					PxCudaContextManager*					mCudaContextManager;
 #endif
 					std::vector<PxRigidActor*>				mPhysicsActors;
 					std::vector<RenderBaseActor*>			mDeletedRenderActors;
@@ -299,7 +340,8 @@ protected:
 					std::vector<PxActor*>					mDeletedActors;
 					PxU32									mActiveTransformCount;
 					PxU32									mActiveTransformCapacity;
-
+					bool									mIsFlyCamera;
+					PhysXShapeToRenderActorMap				mPhysXShapeToRenderActorMap;
 
 private:
 					PxU32									mMeshTag;
@@ -307,28 +349,30 @@ private:
 					PxReal									mScale;
 
 					PxReal									mDebugRenderScale;
+protected:
 					bool									mWaitForResults;
+private:
 					PxToolkit::FPS							mFPS;
 
 					CameraController*						mSavedCameraController;
 
 					DebugStepper							mDebugStepper;
 					FixedStepper							mFixedStepper;
+					InvertedFixedStepper					mInvertedFixedStepper;
 					VariableStepper							mVariableStepper;
 					bool									mWireFrame;
 
 					PxReal									mSimulationTime;
-					physx::Picking*							mPicking;
+					Picking*								mPicking;
 					bool									mPicked;
 					physx::PxU8								mExtendedHelpPage;
 					physx::PxU32							mDebugObjectType;
 
-					static const PxU32						SCRATCH_BLOCK_SIZE = 0;		// 4MB scratch block
+					static const PxU32						SCRATCH_BLOCK_SIZE = 1024*128;
 					void*									mScratchBlock;
-
 };
 
 PxToolkit::BasicRandom& getSampleRandom();
 PxErrorCallback& getSampleErrorCallback();
 
-#endif // _PHYSX_SAMPLE_H
+#endif // PHYSX_SAMPLE_H

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -41,8 +41,20 @@
 	#error "This file should only be included by Windows or WIN8ARM builds!!"
 #endif
 
-#include <math.h>
+#pragma warning (push)
+//'symbol' is not defined as a preprocessor macro, replacing with '0' for 'directives'
+#pragma warning (disable : 4668) 
+#ifdef PX_VC10
+#pragma warning( disable : 4987 ) // nonstandard extension used: 'throw (...)'
+#endif 
 #include <intrin.h>
+#pragma warning (pop)
+
+#pragma warning(push)
+#pragma warning( disable : 4985 ) // 'symbol name': attributes not present on previous declaration
+#include <math.h>
+#pragma warning (pop)
+
 #include <float.h>
 #include <mmintrin.h>
 
@@ -103,68 +115,55 @@ namespace shdfnd
 	}
 
 	/*!
-	Sets \c count bytes starting at \c dst to zero.
-	*/
-	PX_FORCE_INLINE void* memZero(void* PX_RESTRICT dest, PxU32 count)
-	{
-		return memset(dest, 0, count);
-	}
-
-	/*!
-	Sets \c count bytes starting at \c dst to \c c.
-	*/
-	PX_FORCE_INLINE void* memSet(void* PX_RESTRICT dest, PxI32 c, PxU32 count)
-	{
-		return memset(dest, c, count);
-	}
-
-	/*!
-	Copies \c count bytes from \c src to \c dst. User memMove if regions overlap.
-	*/
-	PX_FORCE_INLINE void* memCopy(void* PX_RESTRICT dest, const void* PX_RESTRICT src, PxU32 count)
-	{
-		return memcpy(dest, src, count);
-	}
-
-	/*!
-	Copies \c count bytes from \c src to \c dst. Supports overlapping regions.
-	*/
-	PX_FORCE_INLINE void* memMove(void* PX_RESTRICT dest, const void* PX_RESTRICT src, PxU32 count)
-	{
-		return memmove(dest, src, count);
-	}
-
-	/*!
-	Set 128B to zero starting at \c dst+offset. Must be aligned.
-	*/
-	PX_FORCE_INLINE void memZero128(void* PX_RESTRICT dest, PxU32 offset = 0)
-	{
-		PX_ASSERT(((size_t(dest)+offset) & 0x7f) == 0);
-		memSet((char* PX_RESTRICT)dest+offset, 0, 128);
-	}
-
-	/*!
-	Prefetch aligned 128B around \c ptr+offset.
+	Prefetch aligned cache size around \c ptr+offset.
 	*/
 #ifndef PX_ARM
-	PX_FORCE_INLINE void prefetch128(const void* ptr, PxU32 offset = 0)
+	PX_FORCE_INLINE void prefetchLine(const void* ptr, PxU32 offset = 0)
 	{
-		_mm_prefetch(((const char*)ptr + offset), _MM_HINT_T0);
+		//cache line on X86/X64 is 64-bytes so a 128-byte prefetch would require 2 prefetches.
+		//However, we can only dispatch a limited number of prefetch instructions so we opt to prefetch just 1 cache line
+		/*_mm_prefetch(((const char*)ptr + offset), _MM_HINT_T0);*/
+		//We get slightly better performance prefetching to non-temporal addresses instead of all cache levels
+		_mm_prefetch(((const char*)ptr + offset), _MM_HINT_NTA);
 	}
 #else
-	PX_FORCE_INLINE void prefetch128(const void* , PxU32 = 0)
+	PX_FORCE_INLINE void prefetchLine(const void* ptr, PxU32 offset = 0)
 	{
+		// arm does have 32b cache line size
+		__prefetch (((const char*)ptr + offset));
 	}
 #endif
 
 	/*!
 	Prefetch \c count bytes starting at \c ptr.
 	*/
-	PX_FORCE_INLINE void prefetch(const void* ptr, PxU32 count = 0)
+#ifndef PX_ARM
+	PX_FORCE_INLINE void prefetch(const void* ptr, PxU32 count = 1)
 	{
-		for(PxU32 i=0; i<=count; i+=128)
-			prefetch128(ptr, i);
+		const char* cp = (char*)ptr;
+		PxU64 p = size_t(ptr);
+		PxU64 startLine = p>>6, endLine = (p+count-1)>>6;
+		PxU64 lines = endLine - startLine + 1;
+		do
+		{
+			prefetchLine(cp);
+			cp+=64;
+		} while(--lines);
 	}
+#else
+	PX_FORCE_INLINE void prefetch(const void* ptr, PxU32 count = 1)
+	{
+		const char* cp = (char*)ptr;
+		PxU32 p = size_t(ptr);
+		PxU32 startLine = p>>5, endLine = (p+count-1)>>5;
+		PxU32 lines = endLine - startLine + 1;
+		do
+		{
+			prefetchLine(cp);
+			cp+=32;
+		} while(--lines);
+	}
+#endif
 
 	//! \brief platform-specific reciprocal
 	PX_CUDA_CALLABLE PX_FORCE_INLINE float recipFast(float a)				{	return 1.0f/a;			}
@@ -184,5 +183,8 @@ namespace shdfnd
 
 } // namespace shdfnd
 } // namespace physx
+
+#define PX_EXPECT_TRUE(x) x
+#define PX_EXPECT_FALSE(x) x
 
 #endif

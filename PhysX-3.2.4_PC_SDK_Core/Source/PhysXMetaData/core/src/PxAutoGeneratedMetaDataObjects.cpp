@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
 
@@ -35,7 +35,6 @@
 // physx/PhysXMetaDataGenerator/llvm/tools/clang/lib/Frontend/PhysXMetaDataAction.cpp
 #include "PxMetaDataObjects.h"
 #include "PxPhysicsAPI.h"
-#include "PsIntrinsics.h"
 #include "PxMetaDataCppPrefix.h"
 using namespace physx;
 PxU32 getPxMaterial_ReferenceCount( const PxMaterial* inObj ) { return inObj->getReferenceCount(); }
@@ -76,44 +75,43 @@ PX_PHYSX_CORE_API PxMaterialGeneratedValues::PxMaterialGeneratedValues( const Px
 		,ConcreteTypeName( getPxMaterial_ConcreteTypeName( inSource ) )
 		,UserData( inSource->userData )
 {
+	PX_UNUSED(inSource);
 }
 PxScene * getPxActor_Scene( const PxActor* inObj ) { return inObj->getScene(); }
 void setPxActor_Name( PxActor* inObj, const char * inArg){ inObj->setName( inArg ); }
 const char * getPxActor_Name( const PxActor* inObj ) { return inObj->getName(); }
-PxBounds3 getPxActor_WorldBounds( const PxActor* inObj ) { return inObj->getWorldBounds(); }
 void setPxActor_ActorFlags( PxActor* inObj, PxActorFlags inArg){ inObj->setActorFlags( inArg ); }
 PxActorFlags getPxActor_ActorFlags( const PxActor* inObj ) { return inObj->getActorFlags(); }
 void setPxActor_DominanceGroup( PxActor* inObj, PxDominanceGroup inArg){ inObj->setDominanceGroup( inArg ); }
 PxDominanceGroup getPxActor_DominanceGroup( const PxActor* inObj ) { return inObj->getDominanceGroup(); }
 void setPxActor_OwnerClient( PxActor* inObj, PxClientID inArg){ inObj->setOwnerClient( inArg ); }
 PxClientID getPxActor_OwnerClient( const PxActor* inObj ) { return inObj->getOwnerClient(); }
-void setPxActor_ClientBehaviorBits( PxActor* inObj, PxU32 inArg){ inObj->setClientBehaviorBits( inArg ); }
-PxU32 getPxActor_ClientBehaviorBits( const PxActor* inObj ) { return inObj->getClientBehaviorBits(); }
+void setPxActor_ClientBehaviorFlags( PxActor* inObj, PxActorClientBehaviorFlags inArg){ inObj->setClientBehaviorFlags( inArg ); }
+PxActorClientBehaviorFlags getPxActor_ClientBehaviorFlags( const PxActor* inObj ) { return inObj->getClientBehaviorFlags(); }
 PxAggregate * getPxActor_Aggregate( const PxActor* inObj ) { return inObj->getAggregate(); }
 inline void * getPxActorUserData( const PxActor* inOwner ) { return inOwner->userData; }
 inline void setPxActorUserData( PxActor* inOwner, void * inData) { inOwner->userData = inData; }
 PX_PHYSX_CORE_API PxActorGeneratedInfo::PxActorGeneratedInfo()
 	: Scene( "Scene", getPxActor_Scene)
 	, Name( "Name", setPxActor_Name, getPxActor_Name)
-	, WorldBounds( "WorldBounds", getPxActor_WorldBounds)
 	, ActorFlags( "ActorFlags", setPxActor_ActorFlags, getPxActor_ActorFlags)
 	, DominanceGroup( "DominanceGroup", setPxActor_DominanceGroup, getPxActor_DominanceGroup)
 	, OwnerClient( "OwnerClient", setPxActor_OwnerClient, getPxActor_OwnerClient)
-	, ClientBehaviorBits( "ClientBehaviorBits", setPxActor_ClientBehaviorBits, getPxActor_ClientBehaviorBits)
+	, ClientBehaviorFlags( "ClientBehaviorFlags", setPxActor_ClientBehaviorFlags, getPxActor_ClientBehaviorFlags)
 	, Aggregate( "Aggregate", getPxActor_Aggregate)
 	, UserData( "UserData", setPxActorUserData, getPxActorUserData )
 {}
 PX_PHYSX_CORE_API PxActorGeneratedValues::PxActorGeneratedValues( const PxActor* inSource )
 		:Scene( getPxActor_Scene( inSource ) )
 		,Name( getPxActor_Name( inSource ) )
-		,WorldBounds( getPxActor_WorldBounds( inSource ) )
 		,ActorFlags( getPxActor_ActorFlags( inSource ) )
 		,DominanceGroup( getPxActor_DominanceGroup( inSource ) )
 		,OwnerClient( getPxActor_OwnerClient( inSource ) )
-		,ClientBehaviorBits( getPxActor_ClientBehaviorBits( inSource ) )
+		,ClientBehaviorFlags( getPxActor_ClientBehaviorFlags( inSource ) )
 		,Aggregate( getPxActor_Aggregate( inSource ) )
 		,UserData( inSource->userData )
 {
+	PX_UNUSED(inSource);
 }
 void setPxRigidActor_GlobalPose( PxRigidActor* inObj, const PxTransform & inArg){ inObj->setGlobalPose( inArg ); }
 PxTransform getPxRigidActor_GlobalPose( const PxRigidActor* inObj ) { return inObj->getGlobalPose(); }
@@ -130,32 +128,56 @@ PX_PHYSX_CORE_API PxRigidActorGeneratedValues::PxRigidActorGeneratedValues( cons
 		:PxActorGeneratedValues( inSource )
 		,GlobalPose( getPxRigidActor_GlobalPose( inSource ) )
 {
+	PX_UNUSED(inSource);
 }
 void setPxRigidBody_CMassLocalPose( PxRigidBody* inObj, const PxTransform & inArg){ inObj->setCMassLocalPose( inArg ); }
 PxTransform getPxRigidBody_CMassLocalPose( const PxRigidBody* inObj ) { return inObj->getCMassLocalPose(); }
 void setPxRigidBody_Mass( PxRigidBody* inObj, PxReal inArg){ inObj->setMass( inArg ); }
 PxReal getPxRigidBody_Mass( const PxRigidBody* inObj ) { return inObj->getMass(); }
+PxReal getPxRigidBody_InvMass( const PxRigidBody* inObj ) { return inObj->getInvMass(); }
 void setPxRigidBody_MassSpaceInertiaTensor( PxRigidBody* inObj, const PxVec3 & inArg){ inObj->setMassSpaceInertiaTensor( inArg ); }
 PxVec3 getPxRigidBody_MassSpaceInertiaTensor( const PxRigidBody* inObj ) { return inObj->getMassSpaceInertiaTensor(); }
+PxVec3 getPxRigidBody_MassSpaceInvInertiaTensor( const PxRigidBody* inObj ) { return inObj->getMassSpaceInvInertiaTensor(); }
 void setPxRigidBody_LinearVelocity( PxRigidBody* inObj, const PxVec3 & inArg){ inObj->setLinearVelocity( inArg ); }
 PxVec3 getPxRigidBody_LinearVelocity( const PxRigidBody* inObj ) { return inObj->getLinearVelocity(); }
 void setPxRigidBody_AngularVelocity( PxRigidBody* inObj, const PxVec3 & inArg){ inObj->setAngularVelocity( inArg ); }
 PxVec3 getPxRigidBody_AngularVelocity( const PxRigidBody* inObj ) { return inObj->getAngularVelocity(); }
+void setPxRigidBody_RigidDynamicFlags( PxRigidBody* inObj, PxRigidDynamicFlags inArg){ inObj->setRigidDynamicFlags( inArg ); }
+PxRigidDynamicFlags getPxRigidBody_RigidDynamicFlags( const PxRigidBody* inObj ) { return inObj->getRigidDynamicFlags(); }
+void setPxRigidBody_RigidBodyFlags( PxRigidBody* inObj, PxRigidBodyFlags inArg){ inObj->setRigidBodyFlags( inArg ); }
+PxRigidBodyFlags getPxRigidBody_RigidBodyFlags( const PxRigidBody* inObj ) { return inObj->getRigidBodyFlags(); }
+void setPxRigidBody_MinCCDAdvanceCoefficient( PxRigidBody* inObj, PxReal inArg){ inObj->setMinCCDAdvanceCoefficient( inArg ); }
+PxReal getPxRigidBody_MinCCDAdvanceCoefficient( const PxRigidBody* inObj ) { return inObj->getMinCCDAdvanceCoefficient(); }
+void setPxRigidBody_MaxDepenetrationVelocity( PxRigidBody* inObj, const PxReal inArg){ inObj->setMaxDepenetrationVelocity( inArg ); }
+PxReal getPxRigidBody_MaxDepenetrationVelocity( const PxRigidBody* inObj ) { return inObj->getMaxDepenetrationVelocity(); }
 PX_PHYSX_CORE_API PxRigidBodyGeneratedInfo::PxRigidBodyGeneratedInfo()
 	: CMassLocalPose( "CMassLocalPose", setPxRigidBody_CMassLocalPose, getPxRigidBody_CMassLocalPose)
 	, Mass( "Mass", setPxRigidBody_Mass, getPxRigidBody_Mass)
+	, InvMass( "InvMass", getPxRigidBody_InvMass)
 	, MassSpaceInertiaTensor( "MassSpaceInertiaTensor", setPxRigidBody_MassSpaceInertiaTensor, getPxRigidBody_MassSpaceInertiaTensor)
+	, MassSpaceInvInertiaTensor( "MassSpaceInvInertiaTensor", getPxRigidBody_MassSpaceInvInertiaTensor)
 	, LinearVelocity( "LinearVelocity", setPxRigidBody_LinearVelocity, getPxRigidBody_LinearVelocity)
 	, AngularVelocity( "AngularVelocity", setPxRigidBody_AngularVelocity, getPxRigidBody_AngularVelocity)
+	, RigidDynamicFlags( "RigidDynamicFlags", setPxRigidBody_RigidDynamicFlags, getPxRigidBody_RigidDynamicFlags)
+	, RigidBodyFlags( "RigidBodyFlags", setPxRigidBody_RigidBodyFlags, getPxRigidBody_RigidBodyFlags)
+	, MinCCDAdvanceCoefficient( "MinCCDAdvanceCoefficient", setPxRigidBody_MinCCDAdvanceCoefficient, getPxRigidBody_MinCCDAdvanceCoefficient)
+	, MaxDepenetrationVelocity( "MaxDepenetrationVelocity", setPxRigidBody_MaxDepenetrationVelocity, getPxRigidBody_MaxDepenetrationVelocity)
 {}
 PX_PHYSX_CORE_API PxRigidBodyGeneratedValues::PxRigidBodyGeneratedValues( const PxRigidBody* inSource )
 		:PxRigidActorGeneratedValues( inSource )
 		,CMassLocalPose( getPxRigidBody_CMassLocalPose( inSource ) )
 		,Mass( getPxRigidBody_Mass( inSource ) )
+		,InvMass( getPxRigidBody_InvMass( inSource ) )
 		,MassSpaceInertiaTensor( getPxRigidBody_MassSpaceInertiaTensor( inSource ) )
+		,MassSpaceInvInertiaTensor( getPxRigidBody_MassSpaceInvInertiaTensor( inSource ) )
 		,LinearVelocity( getPxRigidBody_LinearVelocity( inSource ) )
 		,AngularVelocity( getPxRigidBody_AngularVelocity( inSource ) )
+		,RigidDynamicFlags( getPxRigidBody_RigidDynamicFlags( inSource ) )
+		,RigidBodyFlags( getPxRigidBody_RigidBodyFlags( inSource ) )
+		,MinCCDAdvanceCoefficient( getPxRigidBody_MinCCDAdvanceCoefficient( inSource ) )
+		,MaxDepenetrationVelocity( getPxRigidBody_MaxDepenetrationVelocity( inSource ) )
 {
+	PX_UNUSED(inSource);
 }
 void setPxRigidDynamic_KinematicTarget( PxRigidDynamic* inObj, const PxTransform & inArg){ inObj->setKinematicTarget( inArg ); }
 void setPxRigidDynamic_LinearDamping( PxRigidDynamic* inObj, PxReal inArg){ inObj->setLinearDamping( inArg ); }
@@ -167,12 +189,14 @@ PxReal getPxRigidDynamic_MaxAngularVelocity( const PxRigidDynamic* inObj ) { ret
 _Bool getPxRigidDynamic_IsSleeping( const PxRigidDynamic* inObj ) { return inObj->isSleeping(); }
 void setPxRigidDynamic_SleepThreshold( PxRigidDynamic* inObj, PxReal inArg){ inObj->setSleepThreshold( inArg ); }
 PxReal getPxRigidDynamic_SleepThreshold( const PxRigidDynamic* inObj ) { return inObj->getSleepThreshold(); }
+void setPxRigidDynamic_StabilizationThreshold( PxRigidDynamic* inObj, PxReal inArg){ inObj->setStabilizationThreshold( inArg ); }
+PxReal getPxRigidDynamic_StabilizationThreshold( const PxRigidDynamic* inObj ) { return inObj->getStabilizationThreshold(); }
+void setPxRigidDynamic_WakeCounter( PxRigidDynamic* inObj, PxReal inArg){ inObj->setWakeCounter( inArg ); }
+PxReal getPxRigidDynamic_WakeCounter( const PxRigidDynamic* inObj ) { return inObj->getWakeCounter(); }
 void setPxRigidDynamic_SolverIterationCounts( PxRigidDynamic* inObj, PxU32 inArg0, PxU32 inArg1 ) { inObj->setSolverIterationCounts( inArg0, inArg1 ); }
 void getPxRigidDynamic_SolverIterationCounts( const PxRigidDynamic* inObj, PxU32& inArg0, PxU32& inArg1 ) { inObj->getSolverIterationCounts( inArg0, inArg1 ); }
 void setPxRigidDynamic_ContactReportThreshold( PxRigidDynamic* inObj, PxReal inArg){ inObj->setContactReportThreshold( inArg ); }
 PxReal getPxRigidDynamic_ContactReportThreshold( const PxRigidDynamic* inObj ) { return inObj->getContactReportThreshold(); }
-void setPxRigidDynamic_RigidDynamicFlags( PxRigidDynamic* inObj, PxRigidDynamicFlags inArg){ inObj->setRigidDynamicFlags( inArg ); }
-PxRigidDynamicFlags getPxRigidDynamic_RigidDynamicFlags( const PxRigidDynamic* inObj ) { return inObj->getRigidDynamicFlags(); }
 const char * getPxRigidDynamic_ConcreteTypeName( const PxRigidDynamic* inObj ) { return inObj->getConcreteTypeName(); }
 PX_PHYSX_CORE_API PxRigidDynamicGeneratedInfo::PxRigidDynamicGeneratedInfo()
 	: KinematicTarget( "KinematicTarget", setPxRigidDynamic_KinematicTarget)
@@ -181,9 +205,10 @@ PX_PHYSX_CORE_API PxRigidDynamicGeneratedInfo::PxRigidDynamicGeneratedInfo()
 	, MaxAngularVelocity( "MaxAngularVelocity", setPxRigidDynamic_MaxAngularVelocity, getPxRigidDynamic_MaxAngularVelocity)
 	, IsSleeping( "IsSleeping", getPxRigidDynamic_IsSleeping)
 	, SleepThreshold( "SleepThreshold", setPxRigidDynamic_SleepThreshold, getPxRigidDynamic_SleepThreshold)
+	, StabilizationThreshold( "StabilizationThreshold", setPxRigidDynamic_StabilizationThreshold, getPxRigidDynamic_StabilizationThreshold)
+	, WakeCounter( "WakeCounter", setPxRigidDynamic_WakeCounter, getPxRigidDynamic_WakeCounter)
 	, SolverIterationCounts( "SolverIterationCounts", "minPositionIters", "minVelocityIters", setPxRigidDynamic_SolverIterationCounts, getPxRigidDynamic_SolverIterationCounts)
 	, ContactReportThreshold( "ContactReportThreshold", setPxRigidDynamic_ContactReportThreshold, getPxRigidDynamic_ContactReportThreshold)
-	, RigidDynamicFlags( "RigidDynamicFlags", setPxRigidDynamic_RigidDynamicFlags, getPxRigidDynamic_RigidDynamicFlags)
 	, ConcreteTypeName( "ConcreteTypeName", getPxRigidDynamic_ConcreteTypeName)
 {}
 PX_PHYSX_CORE_API PxRigidDynamicGeneratedValues::PxRigidDynamicGeneratedValues( const PxRigidDynamic* inSource )
@@ -193,10 +218,12 @@ PX_PHYSX_CORE_API PxRigidDynamicGeneratedValues::PxRigidDynamicGeneratedValues( 
 		,MaxAngularVelocity( getPxRigidDynamic_MaxAngularVelocity( inSource ) )
 		,IsSleeping( getPxRigidDynamic_IsSleeping( inSource ) )
 		,SleepThreshold( getPxRigidDynamic_SleepThreshold( inSource ) )
+		,StabilizationThreshold( getPxRigidDynamic_StabilizationThreshold( inSource ) )
+		,WakeCounter( getPxRigidDynamic_WakeCounter( inSource ) )
 		,ContactReportThreshold( getPxRigidDynamic_ContactReportThreshold( inSource ) )
-		,RigidDynamicFlags( getPxRigidDynamic_RigidDynamicFlags( inSource ) )
 		,ConcreteTypeName( getPxRigidDynamic_ConcreteTypeName( inSource ) )
 {
+	PX_UNUSED(inSource);
 	getPxRigidDynamic_SolverIterationCounts( inSource, SolverIterationCounts[0], SolverIterationCounts[1] );
 }
 const char * getPxRigidStatic_ConcreteTypeName( const PxRigidStatic* inObj ) { return inObj->getConcreteTypeName(); }
@@ -207,6 +234,7 @@ PX_PHYSX_CORE_API PxRigidStaticGeneratedValues::PxRigidStaticGeneratedValues( co
 		:PxRigidActorGeneratedValues( inSource )
 		,ConcreteTypeName( getPxRigidStatic_ConcreteTypeName( inSource ) )
 {
+	PX_UNUSED(inSource);
 }
 PxArticulationJoint * getPxArticulationLink_InboundJoint( const PxArticulationLink* inObj ) { return inObj->getInboundJoint(); }
 PxU32 getPxArticulationLink_Children( const PxArticulationLink* inObj, PxArticulationLink ** outBuffer, PxU32 inBufSize ) { return inObj->getChildren( outBuffer, inBufSize ); }
@@ -222,6 +250,7 @@ PX_PHYSX_CORE_API PxArticulationLinkGeneratedValues::PxArticulationLinkGenerated
 		,InboundJoint( getPxArticulationLink_InboundJoint( inSource ) )
 		,ConcreteTypeName( getPxArticulationLink_ConcreteTypeName( inSource ) )
 {
+	PX_UNUSED(inSource);
 }
 void setPxArticulationJoint_ParentPose( PxArticulationJoint* inObj, const PxTransform & inArg){ inObj->setParentPose( inArg ); }
 PxTransform getPxArticulationJoint_ParentPose( const PxArticulationJoint* inObj ) { return inObj->getParentPose(); }
@@ -231,8 +260,10 @@ void setPxArticulationJoint_TargetOrientation( PxArticulationJoint* inObj, const
 PxQuat getPxArticulationJoint_TargetOrientation( const PxArticulationJoint* inObj ) { return inObj->getTargetOrientation(); }
 void setPxArticulationJoint_TargetVelocity( PxArticulationJoint* inObj, const PxVec3 & inArg){ inObj->setTargetVelocity( inArg ); }
 PxVec3 getPxArticulationJoint_TargetVelocity( const PxArticulationJoint* inObj ) { return inObj->getTargetVelocity(); }
-void setPxArticulationJoint_Spring( PxArticulationJoint* inObj, PxReal inArg){ inObj->setSpring( inArg ); }
-PxReal getPxArticulationJoint_Spring( const PxArticulationJoint* inObj ) { return inObj->getSpring(); }
+void setPxArticulationJoint_DriveType( PxArticulationJoint* inObj, PxArticulationJointDriveType::Enum inArg){ inObj->setDriveType( inArg ); }
+PxArticulationJointDriveType::Enum getPxArticulationJoint_DriveType( const PxArticulationJoint* inObj ) { return inObj->getDriveType(); }
+void setPxArticulationJoint_Stiffness( PxArticulationJoint* inObj, PxReal inArg){ inObj->setStiffness( inArg ); }
+PxReal getPxArticulationJoint_Stiffness( const PxArticulationJoint* inObj ) { return inObj->getStiffness(); }
 void setPxArticulationJoint_Damping( PxArticulationJoint* inObj, PxReal inArg){ inObj->setDamping( inArg ); }
 PxReal getPxArticulationJoint_Damping( const PxArticulationJoint* inObj ) { return inObj->getDamping(); }
 void setPxArticulationJoint_InternalCompliance( PxArticulationJoint* inObj, PxReal inArg){ inObj->setInternalCompliance( inArg ); }
@@ -241,8 +272,8 @@ void setPxArticulationJoint_ExternalCompliance( PxArticulationJoint* inObj, PxRe
 PxReal getPxArticulationJoint_ExternalCompliance( const PxArticulationJoint* inObj ) { return inObj->getExternalCompliance(); }
 void setPxArticulationJoint_SwingLimit( PxArticulationJoint* inObj, PxReal inArg0, PxReal inArg1 ) { inObj->setSwingLimit( inArg0, inArg1 ); }
 void getPxArticulationJoint_SwingLimit( const PxArticulationJoint* inObj, PxReal& inArg0, PxReal& inArg1 ) { inObj->getSwingLimit( inArg0, inArg1 ); }
-void setPxArticulationJoint_TangentialSpring( PxArticulationJoint* inObj, PxReal inArg){ inObj->setTangentialSpring( inArg ); }
-PxReal getPxArticulationJoint_TangentialSpring( const PxArticulationJoint* inObj ) { return inObj->getTangentialSpring(); }
+void setPxArticulationJoint_TangentialStiffness( PxArticulationJoint* inObj, PxReal inArg){ inObj->setTangentialStiffness( inArg ); }
+PxReal getPxArticulationJoint_TangentialStiffness( const PxArticulationJoint* inObj ) { return inObj->getTangentialStiffness(); }
 void setPxArticulationJoint_TangentialDamping( PxArticulationJoint* inObj, PxReal inArg){ inObj->setTangentialDamping( inArg ); }
 PxReal getPxArticulationJoint_TangentialDamping( const PxArticulationJoint* inObj ) { return inObj->getTangentialDamping(); }
 void setPxArticulationJoint_SwingLimitContactDistance( PxArticulationJoint* inObj, PxReal inArg){ inObj->setSwingLimitContactDistance( inArg ); }
@@ -261,12 +292,13 @@ PX_PHYSX_CORE_API PxArticulationJointGeneratedInfo::PxArticulationJointGenerated
 	, ChildPose( "ChildPose", setPxArticulationJoint_ChildPose, getPxArticulationJoint_ChildPose)
 	, TargetOrientation( "TargetOrientation", setPxArticulationJoint_TargetOrientation, getPxArticulationJoint_TargetOrientation)
 	, TargetVelocity( "TargetVelocity", setPxArticulationJoint_TargetVelocity, getPxArticulationJoint_TargetVelocity)
-	, Spring( "Spring", setPxArticulationJoint_Spring, getPxArticulationJoint_Spring)
+	, DriveType( "DriveType", setPxArticulationJoint_DriveType, getPxArticulationJoint_DriveType)
+	, Stiffness( "Stiffness", setPxArticulationJoint_Stiffness, getPxArticulationJoint_Stiffness)
 	, Damping( "Damping", setPxArticulationJoint_Damping, getPxArticulationJoint_Damping)
 	, InternalCompliance( "InternalCompliance", setPxArticulationJoint_InternalCompliance, getPxArticulationJoint_InternalCompliance)
 	, ExternalCompliance( "ExternalCompliance", setPxArticulationJoint_ExternalCompliance, getPxArticulationJoint_ExternalCompliance)
 	, SwingLimit( "SwingLimit", "yLimit", "zLimit", setPxArticulationJoint_SwingLimit, getPxArticulationJoint_SwingLimit)
-	, TangentialSpring( "TangentialSpring", setPxArticulationJoint_TangentialSpring, getPxArticulationJoint_TangentialSpring)
+	, TangentialStiffness( "TangentialStiffness", setPxArticulationJoint_TangentialStiffness, getPxArticulationJoint_TangentialStiffness)
 	, TangentialDamping( "TangentialDamping", setPxArticulationJoint_TangentialDamping, getPxArticulationJoint_TangentialDamping)
 	, SwingLimitContactDistance( "SwingLimitContactDistance", setPxArticulationJoint_SwingLimitContactDistance, getPxArticulationJoint_SwingLimitContactDistance)
 	, SwingLimitEnabled( "SwingLimitEnabled", setPxArticulationJoint_SwingLimitEnabled, getPxArticulationJoint_SwingLimitEnabled)
@@ -280,11 +312,12 @@ PX_PHYSX_CORE_API PxArticulationJointGeneratedValues::PxArticulationJointGenerat
 		,ChildPose( getPxArticulationJoint_ChildPose( inSource ) )
 		,TargetOrientation( getPxArticulationJoint_TargetOrientation( inSource ) )
 		,TargetVelocity( getPxArticulationJoint_TargetVelocity( inSource ) )
-		,Spring( getPxArticulationJoint_Spring( inSource ) )
+		,DriveType( getPxArticulationJoint_DriveType( inSource ) )
+		,Stiffness( getPxArticulationJoint_Stiffness( inSource ) )
 		,Damping( getPxArticulationJoint_Damping( inSource ) )
 		,InternalCompliance( getPxArticulationJoint_InternalCompliance( inSource ) )
 		,ExternalCompliance( getPxArticulationJoint_ExternalCompliance( inSource ) )
-		,TangentialSpring( getPxArticulationJoint_TangentialSpring( inSource ) )
+		,TangentialStiffness( getPxArticulationJoint_TangentialStiffness( inSource ) )
 		,TangentialDamping( getPxArticulationJoint_TangentialDamping( inSource ) )
 		,SwingLimitContactDistance( getPxArticulationJoint_SwingLimitContactDistance( inSource ) )
 		,SwingLimitEnabled( getPxArticulationJoint_SwingLimitEnabled( inSource ) )
@@ -292,6 +325,7 @@ PX_PHYSX_CORE_API PxArticulationJointGeneratedValues::PxArticulationJointGenerat
 		,TwistLimitContactDistance( getPxArticulationJoint_TwistLimitContactDistance( inSource ) )
 		,ConcreteTypeName( getPxArticulationJoint_ConcreteTypeName( inSource ) )
 {
+	PX_UNUSED(inSource);
 	getPxArticulationJoint_SwingLimit( inSource, SwingLimit[0], SwingLimit[1] );
 	getPxArticulationJoint_TwistLimit( inSource, TwistLimit[0], TwistLimit[1] );
 }
@@ -309,11 +343,14 @@ void getPxArticulation_SolverIterationCounts( const PxArticulation* inObj, PxU32
 _Bool getPxArticulation_IsSleeping( const PxArticulation* inObj ) { return inObj->isSleeping(); }
 void setPxArticulation_SleepThreshold( PxArticulation* inObj, PxReal inArg){ inObj->setSleepThreshold( inArg ); }
 PxReal getPxArticulation_SleepThreshold( const PxArticulation* inObj ) { return inObj->getSleepThreshold(); }
+void setPxArticulation_StabilizationThreshold( PxArticulation* inObj, PxReal inArg){ inObj->setStabilizationThreshold( inArg ); }
+PxReal getPxArticulation_StabilizationThreshold( const PxArticulation* inObj ) { return inObj->getStabilizationThreshold(); }
+void setPxArticulation_WakeCounter( PxArticulation* inObj, PxReal inArg){ inObj->setWakeCounter( inArg ); }
+PxReal getPxArticulation_WakeCounter( const PxArticulation* inObj ) { return inObj->getWakeCounter(); }
 PxU32 getPxArticulation_Links( const PxArticulation* inObj, PxArticulationLink ** outBuffer, PxU32 inBufSize ) { return inObj->getLinks( outBuffer, inBufSize ); }
 PxU32 getNbPxArticulation_Links( const PxArticulation* inObj ) { return inObj->getNbLinks(  ); }
 void setPxArticulation_Name( PxArticulation* inObj, const char * inArg){ inObj->setName( inArg ); }
 const char * getPxArticulation_Name( const PxArticulation* inObj ) { return inObj->getName(); }
-PxBounds3 getPxArticulation_WorldBounds( const PxArticulation* inObj ) { return inObj->getWorldBounds(); }
 PxAggregate * getPxArticulation_Aggregate( const PxArticulation* inObj ) { return inObj->getAggregate(); }
 const char * getPxArticulation_ConcreteTypeName( const PxArticulation* inObj ) { return inObj->getConcreteTypeName(); }
 inline void * getPxArticulationUserData( const PxArticulation* inOwner ) { return inOwner->userData; }
@@ -327,9 +364,10 @@ PX_PHYSX_CORE_API PxArticulationGeneratedInfo::PxArticulationGeneratedInfo()
 	, SolverIterationCounts( "SolverIterationCounts", "minPositionIters", "minVelocityIters", setPxArticulation_SolverIterationCounts, getPxArticulation_SolverIterationCounts)
 	, IsSleeping( "IsSleeping", getPxArticulation_IsSleeping)
 	, SleepThreshold( "SleepThreshold", setPxArticulation_SleepThreshold, getPxArticulation_SleepThreshold)
+	, StabilizationThreshold( "StabilizationThreshold", setPxArticulation_StabilizationThreshold, getPxArticulation_StabilizationThreshold)
+	, WakeCounter( "WakeCounter", setPxArticulation_WakeCounter, getPxArticulation_WakeCounter)
 	, Links( "Links", getPxArticulation_Links, getNbPxArticulation_Links )
 	, Name( "Name", setPxArticulation_Name, getPxArticulation_Name)
-	, WorldBounds( "WorldBounds", getPxArticulation_WorldBounds)
 	, Aggregate( "Aggregate", getPxArticulation_Aggregate)
 	, ConcreteTypeName( "ConcreteTypeName", getPxArticulation_ConcreteTypeName)
 	, UserData( "UserData", setPxArticulationUserData, getPxArticulationUserData )
@@ -342,12 +380,14 @@ PX_PHYSX_CORE_API PxArticulationGeneratedValues::PxArticulationGeneratedValues( 
 		,ExternalDriveIterations( getPxArticulation_ExternalDriveIterations( inSource ) )
 		,IsSleeping( getPxArticulation_IsSleeping( inSource ) )
 		,SleepThreshold( getPxArticulation_SleepThreshold( inSource ) )
+		,StabilizationThreshold( getPxArticulation_StabilizationThreshold( inSource ) )
+		,WakeCounter( getPxArticulation_WakeCounter( inSource ) )
 		,Name( getPxArticulation_Name( inSource ) )
-		,WorldBounds( getPxArticulation_WorldBounds( inSource ) )
 		,Aggregate( getPxArticulation_Aggregate( inSource ) )
 		,ConcreteTypeName( getPxArticulation_ConcreteTypeName( inSource ) )
 		,UserData( inSource->userData )
 {
+	PX_UNUSED(inSource);
 	getPxArticulation_SolverIterationCounts( inSource, SolverIterationCounts[0], SolverIterationCounts[1] );
 }
 PxU32 getPxAggregate_MaxNbActors( const PxAggregate* inObj ) { return inObj->getMaxNbActors(); }
@@ -366,12 +406,14 @@ PX_PHYSX_CORE_API PxAggregateGeneratedValues::PxAggregateGeneratedValues( const 
 		,SelfCollision( getPxAggregate_SelfCollision( inSource ) )
 		,ConcreteTypeName( getPxAggregate_ConcreteTypeName( inSource ) )
 {
+	PX_UNUSED(inSource);
 }
 PxScene * getPxConstraint_Scene( const PxConstraint* inObj ) { return inObj->getScene(); }
 void setPxConstraint_Actors( PxConstraint* inObj, PxRigidActor * inArg0, PxRigidActor * inArg1 ) { inObj->setActors( inArg0, inArg1 ); }
 void getPxConstraint_Actors( const PxConstraint* inObj, PxRigidActor *& inArg0, PxRigidActor *& inArg1 ) { inObj->getActors( inArg0, inArg1 ); }
 void setPxConstraint_Flags( PxConstraint* inObj, PxConstraintFlags inArg){ inObj->setFlags( inArg ); }
 PxConstraintFlags getPxConstraint_Flags( const PxConstraint* inObj ) { return inObj->getFlags(); }
+_Bool getPxConstraint_IsValid( const PxConstraint* inObj ) { return inObj->isValid(); }
 void setPxConstraint_BreakForce( PxConstraint* inObj, PxReal inArg0, PxReal inArg1 ) { inObj->setBreakForce( inArg0, inArg1 ); }
 void getPxConstraint_BreakForce( const PxConstraint* inObj, PxReal& inArg0, PxReal& inArg1 ) { inObj->getBreakForce( inArg0, inArg1 ); }
 const char * getPxConstraint_ConcreteTypeName( const PxConstraint* inObj ) { return inObj->getConcreteTypeName(); }
@@ -379,21 +421,23 @@ PX_PHYSX_CORE_API PxConstraintGeneratedInfo::PxConstraintGeneratedInfo()
 	: Scene( "Scene", getPxConstraint_Scene)
 	, Actors( "Actors", "actor0", "actor1", setPxConstraint_Actors, getPxConstraint_Actors)
 	, Flags( "Flags", setPxConstraint_Flags, getPxConstraint_Flags)
+	, IsValid( "IsValid", getPxConstraint_IsValid)
 	, BreakForce( "BreakForce", "linear", "angular", setPxConstraint_BreakForce, getPxConstraint_BreakForce)
 	, ConcreteTypeName( "ConcreteTypeName", getPxConstraint_ConcreteTypeName)
 {}
 PX_PHYSX_CORE_API PxConstraintGeneratedValues::PxConstraintGeneratedValues( const PxConstraint* inSource )
 		:Scene( getPxConstraint_Scene( inSource ) )
 		,Flags( getPxConstraint_Flags( inSource ) )
+		,IsValid( getPxConstraint_IsValid( inSource ) )
 		,ConcreteTypeName( getPxConstraint_ConcreteTypeName( inSource ) )
 {
+	PX_UNUSED(inSource);
 	getPxConstraint_Actors( inSource, Actors[0], Actors[1] );
 	getPxConstraint_BreakForce( inSource, BreakForce[0], BreakForce[1] );
 }
 PxGeometryType::Enum getPxShape_GeometryType( const PxShape* inObj ) { return inObj->getGeometryType(); }
 void setPxShape_Geometry( PxShape* inObj, const PxGeometry & inArg){ inObj->setGeometry( inArg ); }
 PxGeometryHolder getPxShape_Geometry( const PxShape* inObj ) { return inObj->getGeometry(); }
-PxBounds3 getPxShape_WorldBounds( const PxShape* inObj ) { return inObj->getWorldBounds(); }
 void setPxShape_LocalPose( PxShape* inObj, const PxTransform & inArg){ inObj->setLocalPose( inArg ); }
 PxTransform getPxShape_LocalPose( const PxShape* inObj ) { return inObj->getLocalPose(); }
 void setPxShape_SimulationFilterData( PxShape* inObj, const PxFilterData & inArg){ inObj->setSimulationFilterData( inArg ); }
@@ -408,6 +452,7 @@ void setPxShape_RestOffset( PxShape* inObj, PxReal inArg){ inObj->setRestOffset(
 PxReal getPxShape_RestOffset( const PxShape* inObj ) { return inObj->getRestOffset(); }
 void setPxShape_Flags( PxShape* inObj, PxShapeFlags inArg){ inObj->setFlags( inArg ); }
 PxShapeFlags getPxShape_Flags( const PxShape* inObj ) { return inObj->getFlags(); }
+_Bool getPxShape_IsExclusive( const PxShape* inObj ) { return inObj->isExclusive(); }
 void setPxShape_Name( PxShape* inObj, const char * inArg){ inObj->setName( inArg ); }
 const char * getPxShape_Name( const PxShape* inObj ) { return inObj->getName(); }
 const char * getPxShape_ConcreteTypeName( const PxShape* inObj ) { return inObj->getConcreteTypeName(); }
@@ -416,7 +461,6 @@ inline void setPxShapeUserData( PxShape* inOwner, void * inData) { inOwner->user
 PX_PHYSX_CORE_API PxShapeGeneratedInfo::PxShapeGeneratedInfo()
 	: GeometryType( "GeometryType", getPxShape_GeometryType)
 	, Geometry( "Geometry", setPxShape_Geometry, getPxShape_Geometry)
-	, WorldBounds( "WorldBounds", getPxShape_WorldBounds)
 	, LocalPose( "LocalPose", setPxShape_LocalPose, getPxShape_LocalPose)
 	, SimulationFilterData( "SimulationFilterData", setPxShape_SimulationFilterData, getPxShape_SimulationFilterData)
 	, QueryFilterData( "QueryFilterData", setPxShape_QueryFilterData, getPxShape_QueryFilterData)
@@ -424,6 +468,7 @@ PX_PHYSX_CORE_API PxShapeGeneratedInfo::PxShapeGeneratedInfo()
 	, ContactOffset( "ContactOffset", setPxShape_ContactOffset, getPxShape_ContactOffset)
 	, RestOffset( "RestOffset", setPxShape_RestOffset, getPxShape_RestOffset)
 	, Flags( "Flags", setPxShape_Flags, getPxShape_Flags)
+	, IsExclusive( "IsExclusive", getPxShape_IsExclusive)
 	, Name( "Name", setPxShape_Name, getPxShape_Name)
 	, ConcreteTypeName( "ConcreteTypeName", getPxShape_ConcreteTypeName)
 	, UserData( "UserData", setPxShapeUserData, getPxShapeUserData )
@@ -431,25 +476,24 @@ PX_PHYSX_CORE_API PxShapeGeneratedInfo::PxShapeGeneratedInfo()
 PX_PHYSX_CORE_API PxShapeGeneratedValues::PxShapeGeneratedValues( const PxShape* inSource )
 		:GeometryType( getPxShape_GeometryType( inSource ) )
 		,Geometry( getPxShape_Geometry( inSource ) )
-		,WorldBounds( getPxShape_WorldBounds( inSource ) )
 		,LocalPose( getPxShape_LocalPose( inSource ) )
 		,SimulationFilterData( getPxShape_SimulationFilterData( inSource ) )
 		,QueryFilterData( getPxShape_QueryFilterData( inSource ) )
 		,ContactOffset( getPxShape_ContactOffset( inSource ) )
 		,RestOffset( getPxShape_RestOffset( inSource ) )
 		,Flags( getPxShape_Flags( inSource ) )
+		,IsExclusive( getPxShape_IsExclusive( inSource ) )
 		,Name( getPxShape_Name( inSource ) )
 		,ConcreteTypeName( getPxShape_ConcreteTypeName( inSource ) )
 		,UserData( inSource->userData )
 {
+	PX_UNUSED(inSource);
 }
 PxU32 getPxClothFabric_NbParticles( const PxClothFabric* inObj ) { return inObj->getNbParticles(); }
-PxU32 getPxClothFabric_Phases( const PxClothFabric* inObj, PxU32* outBuffer, PxU32 inBufSize ) { return inObj->getPhases( outBuffer, inBufSize ); }
+PxU32 getPxClothFabric_Phases( const PxClothFabric* inObj, PxClothFabricPhase* outBuffer, PxU32 inBufSize ) { return inObj->getPhases( outBuffer, inBufSize ); }
 PxU32 getNbPxClothFabric_Phases( const PxClothFabric* inObj ) { return inObj->getNbPhases(  ); }
 PxU32 getPxClothFabric_Sets( const PxClothFabric* inObj, PxU32* outBuffer, PxU32 inBufSize ) { return inObj->getSets( outBuffer, inBufSize ); }
 PxU32 getNbPxClothFabric_Sets( const PxClothFabric* inObj ) { return inObj->getNbSets(  ); }
-PxU32 getPxClothFabric_Fibers( const PxClothFabric* inObj, PxU32* outBuffer, PxU32 inBufSize ) { return inObj->getFibers( outBuffer, inBufSize ); }
-PxU32 getNbPxClothFabric_Fibers( const PxClothFabric* inObj ) { return inObj->getNbFibers(  ); }
 PxU32 getPxClothFabric_ParticleIndices( const PxClothFabric* inObj, PxU32* outBuffer, PxU32 inBufSize ) { return inObj->getParticleIndices( outBuffer, inBufSize ); }
 PxU32 getNbPxClothFabric_ParticleIndices( const PxClothFabric* inObj ) { return inObj->getNbParticleIndices(  ); }
 PxU32 getPxClothFabric_Restvalues( const PxClothFabric* inObj, PxReal* outBuffer, PxU32 inBufSize ) { return inObj->getRestvalues( outBuffer, inBufSize ); }
@@ -460,7 +504,6 @@ PX_PHYSX_CORE_API PxClothFabricGeneratedInfo::PxClothFabricGeneratedInfo()
 	: NbParticles( "NbParticles", getPxClothFabric_NbParticles)
 	, Phases( "Phases", getPxClothFabric_Phases, getNbPxClothFabric_Phases )
 	, Sets( "Sets", getPxClothFabric_Sets, getNbPxClothFabric_Sets )
-	, Fibers( "Fibers", getPxClothFabric_Fibers, getNbPxClothFabric_Fibers )
 	, ParticleIndices( "ParticleIndices", getPxClothFabric_ParticleIndices, getNbPxClothFabric_ParticleIndices )
 	, Restvalues( "Restvalues", getPxClothFabric_Restvalues, getNbPxClothFabric_Restvalues )
 	, ReferenceCount( "ReferenceCount", getPxClothFabric_ReferenceCount)
@@ -471,73 +514,125 @@ PX_PHYSX_CORE_API PxClothFabricGeneratedValues::PxClothFabricGeneratedValues( co
 		,ReferenceCount( getPxClothFabric_ReferenceCount( inSource ) )
 		,ConcreteTypeName( getPxClothFabric_ConcreteTypeName( inSource ) )
 {
+	PX_UNUSED(inSource);
 }
 PxU32 getPxCloth_NbParticles( const PxCloth* inObj ) { return inObj->getNbParticles(); }
-void setPxCloth_MotionConstraintScaleBias( PxCloth* inObj, PxReal inArg0, PxReal inArg1 ) { inObj->setMotionConstraintScaleBias( inArg0, inArg1 ); }
-void getPxCloth_MotionConstraintScaleBias( const PxCloth* inObj, PxReal& inArg0, PxReal& inArg1 ) { inObj->getMotionConstraintScaleBias( inArg0, inArg1 ); }
-void setPxCloth_CollisionSpheres( PxCloth* inObj, const PxClothCollisionSphere * inArg){ inObj->setCollisionSpheres( inArg ); }
-void setPxCloth_CollisionPlanes( PxCloth* inObj, const PxClothCollisionPlane * inArg){ inObj->setCollisionPlanes( inArg ); }
+void setPxCloth_ClothFlags( PxCloth* inObj, PxClothFlags inArg){ inObj->setClothFlags( inArg ); }
+PxClothFlags getPxCloth_ClothFlags( const PxCloth* inObj ) { return inObj->getClothFlags(); }
+void setPxCloth_TargetPose( PxCloth* inObj, const PxTransform & inArg){ inObj->setTargetPose( inArg ); }
 void setPxCloth_GlobalPose( PxCloth* inObj, const PxTransform & inArg){ inObj->setGlobalPose( inArg ); }
 PxTransform getPxCloth_GlobalPose( const PxCloth* inObj ) { return inObj->getGlobalPose(); }
-void setPxCloth_TargetPose( PxCloth* inObj, const PxTransform & inArg){ inObj->setTargetPose( inArg ); }
-void setPxCloth_InertiaScale( PxCloth* inObj, PxReal inArg){ inObj->setInertiaScale( inArg ); }
-PxReal getPxCloth_InertiaScale( const PxCloth* inObj ) { return inObj->getInertiaScale(); }
-void setPxCloth_ExternalAcceleration( PxCloth* inObj, PxVec3 inArg){ inObj->setExternalAcceleration( inArg ); }
-PxVec3 getPxCloth_ExternalAcceleration( const PxCloth* inObj ) { return inObj->getExternalAcceleration(); }
-void setPxCloth_DampingCoefficient( PxCloth* inObj, PxReal inArg){ inObj->setDampingCoefficient( inArg ); }
-PxReal getPxCloth_DampingCoefficient( const PxCloth* inObj ) { return inObj->getDampingCoefficient(); }
-void setPxCloth_FrictionCoefficient( PxCloth* inObj, PxReal inArg){ inObj->setFrictionCoefficient( inArg ); }
-PxReal getPxCloth_FrictionCoefficient( const PxCloth* inObj ) { return inObj->getFrictionCoefficient(); }
-void setPxCloth_DragCoefficient( PxCloth* inObj, PxReal inArg){ inObj->setDragCoefficient( inArg ); }
-PxReal getPxCloth_DragCoefficient( const PxCloth* inObj ) { return inObj->getDragCoefficient(); }
-void setPxCloth_CollisionMassScale( PxCloth* inObj, PxReal inArg){ inObj->setCollisionMassScale( inArg ); }
-PxReal getPxCloth_CollisionMassScale( const PxCloth* inObj ) { return inObj->getCollisionMassScale(); }
 void setPxCloth_SolverFrequency( PxCloth* inObj, PxReal inArg){ inObj->setSolverFrequency( inArg ); }
 PxReal getPxCloth_SolverFrequency( const PxCloth* inObj ) { return inObj->getSolverFrequency(); }
-PxClothFlags getPxCloth_ClothFlags( const PxCloth* inObj ) { return inObj->getClothFlags(); }
-_Bool getPxCloth_IsSleeping( const PxCloth* inObj ) { return inObj->isSleeping(); }
+PxReal getPxCloth_PreviousTimeStep( const PxCloth* inObj ) { return inObj->getPreviousTimeStep(); }
+void setPxCloth_StiffnessFrequency( PxCloth* inObj, PxReal inArg){ inObj->setStiffnessFrequency( inArg ); }
+PxReal getPxCloth_StiffnessFrequency( const PxCloth* inObj ) { return inObj->getStiffnessFrequency(); }
+void setPxCloth_LinearInertiaScale( PxCloth* inObj, PxVec3 inArg){ inObj->setLinearInertiaScale( inArg ); }
+PxVec3 getPxCloth_LinearInertiaScale( const PxCloth* inObj ) { return inObj->getLinearInertiaScale(); }
+void setPxCloth_AngularInertiaScale( PxCloth* inObj, PxVec3 inArg){ inObj->setAngularInertiaScale( inArg ); }
+PxVec3 getPxCloth_AngularInertiaScale( const PxCloth* inObj ) { return inObj->getAngularInertiaScale(); }
+void setPxCloth_CentrifugalInertiaScale( PxCloth* inObj, PxVec3 inArg){ inObj->setCentrifugalInertiaScale( inArg ); }
+PxVec3 getPxCloth_CentrifugalInertiaScale( const PxCloth* inObj ) { return inObj->getCentrifugalInertiaScale(); }
+void setPxCloth_InertiaScale( PxCloth* inObj, PxReal inArg){ inObj->setInertiaScale( inArg ); }
+void setPxCloth_DampingCoefficient( PxCloth* inObj, PxVec3 inArg){ inObj->setDampingCoefficient( inArg ); }
+PxVec3 getPxCloth_DampingCoefficient( const PxCloth* inObj ) { return inObj->getDampingCoefficient(); }
+void setPxCloth_LinearDragCoefficient( PxCloth* inObj, PxVec3 inArg){ inObj->setLinearDragCoefficient( inArg ); }
+PxVec3 getPxCloth_LinearDragCoefficient( const PxCloth* inObj ) { return inObj->getLinearDragCoefficient(); }
+void setPxCloth_AngularDragCoefficient( PxCloth* inObj, PxVec3 inArg){ inObj->setAngularDragCoefficient( inArg ); }
+PxVec3 getPxCloth_AngularDragCoefficient( const PxCloth* inObj ) { return inObj->getAngularDragCoefficient(); }
+void setPxCloth_DragCoefficient( PxCloth* inObj, PxReal inArg){ inObj->setDragCoefficient( inArg ); }
+void setPxCloth_ExternalAcceleration( PxCloth* inObj, PxVec3 inArg){ inObj->setExternalAcceleration( inArg ); }
+PxVec3 getPxCloth_ExternalAcceleration( const PxCloth* inObj ) { return inObj->getExternalAcceleration(); }
+void setPxCloth_MotionConstraintConfig( PxCloth* inObj, const PxClothMotionConstraintConfig & inArg){ inObj->setMotionConstraintConfig( inArg ); }
+PxClothMotionConstraintConfig getPxCloth_MotionConstraintConfig( const PxCloth* inObj ) { return inObj->getMotionConstraintConfig(); }
+void setPxCloth_StretchConfig( PxCloth* inObj, PxClothFabricPhaseType::Enum inIndex, PxClothStretchConfig inArg ){ inObj->setStretchConfig( inIndex, inArg ); }
+PxClothStretchConfig getPxCloth_StretchConfig( const PxCloth* inObj, PxClothFabricPhaseType::Enum inIndex ) { return inObj->getStretchConfig( inIndex ); }
+void setPxCloth_TetherConfig( PxCloth* inObj, const PxClothTetherConfig & inArg){ inObj->setTetherConfig( inArg ); }
+PxClothTetherConfig getPxCloth_TetherConfig( const PxCloth* inObj ) { return inObj->getTetherConfig(); }
+void setPxCloth_FrictionCoefficient( PxCloth* inObj, PxReal inArg){ inObj->setFrictionCoefficient( inArg ); }
+PxReal getPxCloth_FrictionCoefficient( const PxCloth* inObj ) { return inObj->getFrictionCoefficient(); }
+void setPxCloth_CollisionMassScale( PxCloth* inObj, PxReal inArg){ inObj->setCollisionMassScale( inArg ); }
+PxReal getPxCloth_CollisionMassScale( const PxCloth* inObj ) { return inObj->getCollisionMassScale(); }
+void setPxCloth_SelfCollisionDistance( PxCloth* inObj, PxReal inArg){ inObj->setSelfCollisionDistance( inArg ); }
+PxReal getPxCloth_SelfCollisionDistance( const PxCloth* inObj ) { return inObj->getSelfCollisionDistance(); }
+void setPxCloth_SelfCollisionStiffness( PxCloth* inObj, PxReal inArg){ inObj->setSelfCollisionStiffness( inArg ); }
+PxReal getPxCloth_SelfCollisionStiffness( const PxCloth* inObj ) { return inObj->getSelfCollisionStiffness(); }
+void setPxCloth_SimulationFilterData( PxCloth* inObj, const PxFilterData & inArg){ inObj->setSimulationFilterData( inArg ); }
+PxFilterData getPxCloth_SimulationFilterData( const PxCloth* inObj ) { return inObj->getSimulationFilterData(); }
+void setPxCloth_ContactOffset( PxCloth* inObj, PxReal inArg){ inObj->setContactOffset( inArg ); }
+PxReal getPxCloth_ContactOffset( const PxCloth* inObj ) { return inObj->getContactOffset(); }
+void setPxCloth_RestOffset( PxCloth* inObj, PxReal inArg){ inObj->setRestOffset( inArg ); }
+PxReal getPxCloth_RestOffset( const PxCloth* inObj ) { return inObj->getRestOffset(); }
 void setPxCloth_SleepLinearVelocity( PxCloth* inObj, PxReal inArg){ inObj->setSleepLinearVelocity( inArg ); }
 PxReal getPxCloth_SleepLinearVelocity( const PxCloth* inObj ) { return inObj->getSleepLinearVelocity(); }
-PxReal getPxCloth_PreviousTimeStep( const PxCloth* inObj ) { return inObj->getPreviousTimeStep(); }
+void setPxCloth_WakeCounter( PxCloth* inObj, PxReal inArg){ inObj->setWakeCounter( inArg ); }
+PxReal getPxCloth_WakeCounter( const PxCloth* inObj ) { return inObj->getWakeCounter(); }
+_Bool getPxCloth_IsSleeping( const PxCloth* inObj ) { return inObj->isSleeping(); }
 const char * getPxCloth_ConcreteTypeName( const PxCloth* inObj ) { return inObj->getConcreteTypeName(); }
 PX_PHYSX_CORE_API PxClothGeneratedInfo::PxClothGeneratedInfo()
 	: NbParticles( "NbParticles", getPxCloth_NbParticles)
-	, MotionConstraintScaleBias( "MotionConstraintScaleBias", "scale", "bias", setPxCloth_MotionConstraintScaleBias, getPxCloth_MotionConstraintScaleBias)
-	, CollisionSpheres( "CollisionSpheres", setPxCloth_CollisionSpheres)
-	, CollisionPlanes( "CollisionPlanes", setPxCloth_CollisionPlanes)
-	, GlobalPose( "GlobalPose", setPxCloth_GlobalPose, getPxCloth_GlobalPose)
+	, ClothFlags( "ClothFlags", setPxCloth_ClothFlags, getPxCloth_ClothFlags)
 	, TargetPose( "TargetPose", setPxCloth_TargetPose)
-	, InertiaScale( "InertiaScale", setPxCloth_InertiaScale, getPxCloth_InertiaScale)
-	, ExternalAcceleration( "ExternalAcceleration", setPxCloth_ExternalAcceleration, getPxCloth_ExternalAcceleration)
-	, DampingCoefficient( "DampingCoefficient", setPxCloth_DampingCoefficient, getPxCloth_DampingCoefficient)
-	, FrictionCoefficient( "FrictionCoefficient", setPxCloth_FrictionCoefficient, getPxCloth_FrictionCoefficient)
-	, DragCoefficient( "DragCoefficient", setPxCloth_DragCoefficient, getPxCloth_DragCoefficient)
-	, CollisionMassScale( "CollisionMassScale", setPxCloth_CollisionMassScale, getPxCloth_CollisionMassScale)
+	, GlobalPose( "GlobalPose", setPxCloth_GlobalPose, getPxCloth_GlobalPose)
 	, SolverFrequency( "SolverFrequency", setPxCloth_SolverFrequency, getPxCloth_SolverFrequency)
-	, ClothFlags( "ClothFlags", getPxCloth_ClothFlags)
-	, IsSleeping( "IsSleeping", getPxCloth_IsSleeping)
-	, SleepLinearVelocity( "SleepLinearVelocity", setPxCloth_SleepLinearVelocity, getPxCloth_SleepLinearVelocity)
 	, PreviousTimeStep( "PreviousTimeStep", getPxCloth_PreviousTimeStep)
+	, StiffnessFrequency( "StiffnessFrequency", setPxCloth_StiffnessFrequency, getPxCloth_StiffnessFrequency)
+	, LinearInertiaScale( "LinearInertiaScale", setPxCloth_LinearInertiaScale, getPxCloth_LinearInertiaScale)
+	, AngularInertiaScale( "AngularInertiaScale", setPxCloth_AngularInertiaScale, getPxCloth_AngularInertiaScale)
+	, CentrifugalInertiaScale( "CentrifugalInertiaScale", setPxCloth_CentrifugalInertiaScale, getPxCloth_CentrifugalInertiaScale)
+	, InertiaScale( "InertiaScale", setPxCloth_InertiaScale)
+	, DampingCoefficient( "DampingCoefficient", setPxCloth_DampingCoefficient, getPxCloth_DampingCoefficient)
+	, LinearDragCoefficient( "LinearDragCoefficient", setPxCloth_LinearDragCoefficient, getPxCloth_LinearDragCoefficient)
+	, AngularDragCoefficient( "AngularDragCoefficient", setPxCloth_AngularDragCoefficient, getPxCloth_AngularDragCoefficient)
+	, DragCoefficient( "DragCoefficient", setPxCloth_DragCoefficient)
+	, ExternalAcceleration( "ExternalAcceleration", setPxCloth_ExternalAcceleration, getPxCloth_ExternalAcceleration)
+	, MotionConstraintConfig( "MotionConstraintConfig", setPxCloth_MotionConstraintConfig, getPxCloth_MotionConstraintConfig)
+	, StretchConfig( "StretchConfig", setPxCloth_StretchConfig, getPxCloth_StretchConfig)
+	, TetherConfig( "TetherConfig", setPxCloth_TetherConfig, getPxCloth_TetherConfig)
+	, FrictionCoefficient( "FrictionCoefficient", setPxCloth_FrictionCoefficient, getPxCloth_FrictionCoefficient)
+	, CollisionMassScale( "CollisionMassScale", setPxCloth_CollisionMassScale, getPxCloth_CollisionMassScale)
+	, SelfCollisionDistance( "SelfCollisionDistance", setPxCloth_SelfCollisionDistance, getPxCloth_SelfCollisionDistance)
+	, SelfCollisionStiffness( "SelfCollisionStiffness", setPxCloth_SelfCollisionStiffness, getPxCloth_SelfCollisionStiffness)
+	, SimulationFilterData( "SimulationFilterData", setPxCloth_SimulationFilterData, getPxCloth_SimulationFilterData)
+	, ContactOffset( "ContactOffset", setPxCloth_ContactOffset, getPxCloth_ContactOffset)
+	, RestOffset( "RestOffset", setPxCloth_RestOffset, getPxCloth_RestOffset)
+	, SleepLinearVelocity( "SleepLinearVelocity", setPxCloth_SleepLinearVelocity, getPxCloth_SleepLinearVelocity)
+	, WakeCounter( "WakeCounter", setPxCloth_WakeCounter, getPxCloth_WakeCounter)
+	, IsSleeping( "IsSleeping", getPxCloth_IsSleeping)
 	, ConcreteTypeName( "ConcreteTypeName", getPxCloth_ConcreteTypeName)
 {}
 PX_PHYSX_CORE_API PxClothGeneratedValues::PxClothGeneratedValues( const PxCloth* inSource )
 		:PxActorGeneratedValues( inSource )
 		,NbParticles( getPxCloth_NbParticles( inSource ) )
-		,GlobalPose( getPxCloth_GlobalPose( inSource ) )
-		,InertiaScale( getPxCloth_InertiaScale( inSource ) )
-		,ExternalAcceleration( getPxCloth_ExternalAcceleration( inSource ) )
-		,DampingCoefficient( getPxCloth_DampingCoefficient( inSource ) )
-		,FrictionCoefficient( getPxCloth_FrictionCoefficient( inSource ) )
-		,DragCoefficient( getPxCloth_DragCoefficient( inSource ) )
-		,CollisionMassScale( getPxCloth_CollisionMassScale( inSource ) )
-		,SolverFrequency( getPxCloth_SolverFrequency( inSource ) )
 		,ClothFlags( getPxCloth_ClothFlags( inSource ) )
-		,IsSleeping( getPxCloth_IsSleeping( inSource ) )
-		,SleepLinearVelocity( getPxCloth_SleepLinearVelocity( inSource ) )
+		,GlobalPose( getPxCloth_GlobalPose( inSource ) )
+		,SolverFrequency( getPxCloth_SolverFrequency( inSource ) )
 		,PreviousTimeStep( getPxCloth_PreviousTimeStep( inSource ) )
+		,StiffnessFrequency( getPxCloth_StiffnessFrequency( inSource ) )
+		,LinearInertiaScale( getPxCloth_LinearInertiaScale( inSource ) )
+		,AngularInertiaScale( getPxCloth_AngularInertiaScale( inSource ) )
+		,CentrifugalInertiaScale( getPxCloth_CentrifugalInertiaScale( inSource ) )
+		,DampingCoefficient( getPxCloth_DampingCoefficient( inSource ) )
+		,LinearDragCoefficient( getPxCloth_LinearDragCoefficient( inSource ) )
+		,AngularDragCoefficient( getPxCloth_AngularDragCoefficient( inSource ) )
+		,ExternalAcceleration( getPxCloth_ExternalAcceleration( inSource ) )
+		,MotionConstraintConfig( getPxCloth_MotionConstraintConfig( inSource ) )
+		,TetherConfig( getPxCloth_TetherConfig( inSource ) )
+		,FrictionCoefficient( getPxCloth_FrictionCoefficient( inSource ) )
+		,CollisionMassScale( getPxCloth_CollisionMassScale( inSource ) )
+		,SelfCollisionDistance( getPxCloth_SelfCollisionDistance( inSource ) )
+		,SelfCollisionStiffness( getPxCloth_SelfCollisionStiffness( inSource ) )
+		,SimulationFilterData( getPxCloth_SimulationFilterData( inSource ) )
+		,ContactOffset( getPxCloth_ContactOffset( inSource ) )
+		,RestOffset( getPxCloth_RestOffset( inSource ) )
+		,SleepLinearVelocity( getPxCloth_SleepLinearVelocity( inSource ) )
+		,WakeCounter( getPxCloth_WakeCounter( inSource ) )
+		,IsSleeping( getPxCloth_IsSleeping( inSource ) )
 		,ConcreteTypeName( getPxCloth_ConcreteTypeName( inSource ) )
 {
-	getPxCloth_MotionConstraintScaleBias( inSource, MotionConstraintScaleBias[0], MotionConstraintScaleBias[1] );
+	PX_UNUSED(inSource);
+		for ( PxU32 idx = 0; idx < static_cast<PxU32>( physx::PxClothFabricPhaseType::eCOUNT ); ++idx )
+		StretchConfig[idx] = getPxCloth_StretchConfig( inSource, static_cast< PxClothFabricPhaseType::Enum >( idx ) );
 }
 void setPxParticleBase_Damping( PxParticleBase* inObj, PxReal inArg){ inObj->setDamping( inArg ); }
 PxReal getPxParticleBase_Damping( const PxParticleBase* inObj ) { return inObj->getDamping(); }
@@ -597,6 +692,7 @@ PX_PHYSX_CORE_API PxParticleBaseGeneratedValues::PxParticleBaseGeneratedValues( 
 		,GridSize( getPxParticleBase_GridSize( inSource ) )
 		,ParticleReadDataFlags( getPxParticleBase_ParticleReadDataFlags( inSource ) )
 {
+	PX_UNUSED(inSource);
 	inSource->getProjectionPlane( ProjectionPlane.normal, ProjectionPlane.distance );
 }
 void setPxParticleFluid_Stiffness( PxParticleFluid* inObj, PxReal inArg){ inObj->setStiffness( inArg ); }
@@ -619,6 +715,7 @@ PX_PHYSX_CORE_API PxParticleFluidGeneratedValues::PxParticleFluidGeneratedValues
 		,RestParticleDistance( getPxParticleFluid_RestParticleDistance( inSource ) )
 		,ConcreteTypeName( getPxParticleFluid_ConcreteTypeName( inSource ) )
 {
+	PX_UNUSED(inSource);
 }
 const char * getPxParticleSystem_ConcreteTypeName( const PxParticleSystem* inObj ) { return inObj->getConcreteTypeName(); }
 PX_PHYSX_CORE_API PxParticleSystemGeneratedInfo::PxParticleSystemGeneratedInfo()
@@ -628,36 +725,41 @@ PX_PHYSX_CORE_API PxParticleSystemGeneratedValues::PxParticleSystemGeneratedValu
 		:PxParticleBaseGeneratedValues( inSource )
 		,ConcreteTypeName( getPxParticleSystem_ConcreteTypeName( inSource ) )
 {
+	PX_UNUSED(inSource);
 }
-PxU32 getPxPhysics_Scenes( const PxPhysics* inObj, PxScene ** outBuffer, PxU32 inBufSize ) { return inObj->getScenes( outBuffer, inBufSize ); }
-PxU32 getNbPxPhysics_Scenes( const PxPhysics* inObj ) { return inObj->getNbScenes(  ); }
-PxScene * createPxPhysics_Scenes( PxPhysics* inObj, const PxSceneDesc & inCreateParam ){ return inObj->createScene( inCreateParam ); }
-PxU32 getPxPhysics_Materials( const PxPhysics* inObj, PxMaterial ** outBuffer, PxU32 inBufSize ) { return inObj->getMaterials( outBuffer, inBufSize ); }
-PxU32 getNbPxPhysics_Materials( const PxPhysics* inObj ) { return inObj->getNbMaterials(  ); }
+const PxTolerancesScale & getPxPhysics_TolerancesScale( const PxPhysics* inObj ) { return inObj->getTolerancesScale(); }
 PxU32 getPxPhysics_TriangleMeshes( const PxPhysics* inObj, PxTriangleMesh ** outBuffer, PxU32 inBufSize ) { return inObj->getTriangleMeshes( outBuffer, inBufSize ); }
 PxU32 getNbPxPhysics_TriangleMeshes( const PxPhysics* inObj ) { return inObj->getNbTriangleMeshes(  ); }
 PxTriangleMesh * createPxPhysics_TriangleMeshes( PxPhysics* inObj, PxInputStream & inCreateParam ){ return inObj->createTriangleMesh( inCreateParam ); }
 PxU32 getPxPhysics_HeightFields( const PxPhysics* inObj, PxHeightField ** outBuffer, PxU32 inBufSize ) { return inObj->getHeightFields( outBuffer, inBufSize ); }
 PxU32 getNbPxPhysics_HeightFields( const PxPhysics* inObj ) { return inObj->getNbHeightFields(  ); }
-PxHeightField * createPxPhysics_HeightFields( PxPhysics* inObj, const PxHeightFieldDesc & inCreateParam ){ return inObj->createHeightField( inCreateParam ); }
+PxHeightField * createPxPhysics_HeightFields( PxPhysics* inObj, PxInputStream & inCreateParam ){ return inObj->createHeightField( inCreateParam ); }
 PxU32 getPxPhysics_ConvexMeshes( const PxPhysics* inObj, PxConvexMesh ** outBuffer, PxU32 inBufSize ) { return inObj->getConvexMeshes( outBuffer, inBufSize ); }
 PxU32 getNbPxPhysics_ConvexMeshes( const PxPhysics* inObj ) { return inObj->getNbConvexMeshes(  ); }
 PxConvexMesh * createPxPhysics_ConvexMeshes( PxPhysics* inObj, PxInputStream & inCreateParam ){ return inObj->createConvexMesh( inCreateParam ); }
 PxU32 getPxPhysics_ClothFabrics( const PxPhysics* inObj, PxClothFabric ** outBuffer, PxU32 inBufSize ) { return inObj->getClothFabrics( outBuffer, inBufSize ); }
 PxU32 getNbPxPhysics_ClothFabrics( const PxPhysics* inObj ) { return inObj->getNbClothFabrics(  ); }
-const PxTolerancesScale & getPxPhysics_TolerancesScale( const PxPhysics* inObj ) { return inObj->getTolerancesScale(); }
+PxU32 getPxPhysics_Scenes( const PxPhysics* inObj, PxScene ** outBuffer, PxU32 inBufSize ) { return inObj->getScenes( outBuffer, inBufSize ); }
+PxU32 getNbPxPhysics_Scenes( const PxPhysics* inObj ) { return inObj->getNbScenes(  ); }
+PxScene * createPxPhysics_Scenes( PxPhysics* inObj, const PxSceneDesc & inCreateParam ){ return inObj->createScene( inCreateParam ); }
+PxU32 getPxPhysics_Shapes( const PxPhysics* inObj, PxShape ** outBuffer, PxU32 inBufSize ) { return inObj->getShapes( outBuffer, inBufSize ); }
+PxU32 getNbPxPhysics_Shapes( const PxPhysics* inObj ) { return inObj->getNbShapes(  ); }
+PxU32 getPxPhysics_Materials( const PxPhysics* inObj, PxMaterial ** outBuffer, PxU32 inBufSize ) { return inObj->getMaterials( outBuffer, inBufSize ); }
+PxU32 getNbPxPhysics_Materials( const PxPhysics* inObj ) { return inObj->getNbMaterials(  ); }
 PX_PHYSX_CORE_API PxPhysicsGeneratedInfo::PxPhysicsGeneratedInfo()
-	: Scenes( "Scenes", getPxPhysics_Scenes, getNbPxPhysics_Scenes, createPxPhysics_Scenes )
-	, Materials( "Materials", getPxPhysics_Materials, getNbPxPhysics_Materials )
+	: TolerancesScale( "TolerancesScale", getPxPhysics_TolerancesScale)
 	, TriangleMeshes( "TriangleMeshes", getPxPhysics_TriangleMeshes, getNbPxPhysics_TriangleMeshes, createPxPhysics_TriangleMeshes )
 	, HeightFields( "HeightFields", getPxPhysics_HeightFields, getNbPxPhysics_HeightFields, createPxPhysics_HeightFields )
 	, ConvexMeshes( "ConvexMeshes", getPxPhysics_ConvexMeshes, getNbPxPhysics_ConvexMeshes, createPxPhysics_ConvexMeshes )
 	, ClothFabrics( "ClothFabrics", getPxPhysics_ClothFabrics, getNbPxPhysics_ClothFabrics )
-	, TolerancesScale( "TolerancesScale", getPxPhysics_TolerancesScale)
+	, Scenes( "Scenes", getPxPhysics_Scenes, getNbPxPhysics_Scenes, createPxPhysics_Scenes )
+	, Shapes( "Shapes", getPxPhysics_Shapes, getNbPxPhysics_Shapes )
+	, Materials( "Materials", getPxPhysics_Materials, getNbPxPhysics_Materials )
 {}
 PX_PHYSX_CORE_API PxPhysicsGeneratedValues::PxPhysicsGeneratedValues( const PxPhysics* inSource )
 		:TolerancesScale( getPxPhysics_TolerancesScale( inSource ) )
 {
+	PX_UNUSED(inSource);
 }
 _Bool getPxTolerancesScale_IsValid( const PxTolerancesScale* inObj ) { return inObj->isValid(); }
 inline PxReal getPxTolerancesScaleLength( const PxTolerancesScale* inOwner ) { return inOwner->length; }
@@ -678,95 +780,153 @@ PX_PHYSX_CORE_API PxTolerancesScaleGeneratedValues::PxTolerancesScaleGeneratedVa
 		,Mass( inSource->mass )
 		,Speed( inSource->speed )
 {
+	PX_UNUSED(inSource);
 }
 PxSceneFlags getPxScene_Flags( const PxScene* inObj ) { return inObj->getFlags(); }
-void setPxScene_Gravity( PxScene* inObj, const PxVec3 & inArg){ inObj->setGravity( inArg ); }
-PxVec3 getPxScene_Gravity( const PxScene* inObj ) { return inObj->getGravity(); }
+void setPxScene_Limits( PxScene* inObj, const PxSceneLimits & inArg){ inObj->setLimits( inArg ); }
+PxSceneLimits getPxScene_Limits( const PxScene* inObj ) { return inObj->getLimits(); }
 PxU32 getPxScene_Timestamp( const PxScene* inObj ) { return inObj->getTimestamp(); }
-PxU32 getPxScene_SceneQueryStaticTimestamp( const PxScene* inObj ) { return inObj->getSceneQueryStaticTimestamp(); }
-void setPxScene_BounceThresholdVelocity( PxScene* inObj, const PxReal inArg){ inObj->setBounceThresholdVelocity( inArg ); }
-PxReal getPxScene_BounceThresholdVelocity( const PxScene* inObj ) { return inObj->getBounceThresholdVelocity(); }
-PxU32 getPxScene_Aggregates( const PxScene* inObj, PxAggregate ** outBuffer, PxU32 inBufSize ) { return inObj->getAggregates( outBuffer, inBufSize ); }
-PxU32 getNbPxScene_Aggregates( const PxScene* inObj ) { return inObj->getNbAggregates(  ); }
-void addPxScene_Aggregates( PxScene* inObj, PxAggregate *& inParam ){ return inObj->addAggregate( *inParam ); }
-void removePxScene_Aggregates( PxScene* inObj, PxAggregate *& inParam ){ return inObj->removeAggregate( *inParam ); }
-PxU32 getPxScene_Actors( const PxScene* inObj, PxActorTypeSelectionFlags inFilter, PxActor ** outBuffer, PxU32 inBufSize ) { return inObj->getActors( inFilter, outBuffer, inBufSize ); }
-PxU32 getNbPxScene_Actors( const PxScene* inObj, PxActorTypeSelectionFlags inFilter ) { return inObj->getNbActors( inFilter ); }
-void addPxScene_Actors( PxScene* inObj, PxActor *& inParam ){ return inObj->addActor( *inParam ); }
-void removePxScene_Actors( PxScene* inObj, PxActor *& inParam ){ return inObj->removeActor( *inParam ); }
+PxU32 getPxScene_Actors( const PxScene* inObj, PxActorTypeFlags inFilter, PxActor ** outBuffer, PxU32 inBufSize ) { return inObj->getActors( inFilter, outBuffer, inBufSize ); }
+PxU32 getNbPxScene_Actors( const PxScene* inObj, PxActorTypeFlags inFilter ) { return inObj->getNbActors( inFilter ); }
 PxU32 getPxScene_Articulations( const PxScene* inObj, PxArticulation ** outBuffer, PxU32 inBufSize ) { return inObj->getArticulations( outBuffer, inBufSize ); }
 PxU32 getNbPxScene_Articulations( const PxScene* inObj ) { return inObj->getNbArticulations(  ); }
-void addPxScene_Articulations( PxScene* inObj, PxArticulation *& inParam ){ return inObj->addArticulation( *inParam ); }
-void removePxScene_Articulations( PxScene* inObj, PxArticulation *& inParam ){ return inObj->removeArticulation( *inParam ); }
 PxU32 getPxScene_Constraints( const PxScene* inObj, PxConstraint ** outBuffer, PxU32 inBufSize ) { return inObj->getConstraints( outBuffer, inBufSize ); }
 PxU32 getNbPxScene_Constraints( const PxScene* inObj ) { return inObj->getNbConstraints(  ); }
-void setPxScene_ClientBehaviorBits( PxScene* inObj, PxClientID inIndex, PxU32 inArg ){ inObj->setClientBehaviorBits( inIndex, inArg ); }
-PxU32 getPxScene_ClientBehaviorBits( const PxScene* inObj, PxClientID inIndex ) { return inObj->getClientBehaviorBits( inIndex ); }
+PxU32 getPxScene_Aggregates( const PxScene* inObj, PxAggregate ** outBuffer, PxU32 inBufSize ) { return inObj->getAggregates( outBuffer, inBufSize ); }
+PxU32 getNbPxScene_Aggregates( const PxScene* inObj ) { return inObj->getNbAggregates(  ); }
+PxCpuDispatcher * getPxScene_CpuDispatcher( const PxScene* inObj ) { return inObj->getCpuDispatcher(); }
+PxGpuDispatcher * getPxScene_GpuDispatcher( const PxScene* inObj ) { return inObj->getGpuDispatcher(); }
+PxSpuDispatcher * getPxScene_SpuDispatcher( const PxScene* inObj ) { return inObj->getSpuDispatcher(); }
+void setPxScene_ClothInterCollisionDistance( PxScene* inObj, PxF32 inArg){ inObj->setClothInterCollisionDistance( inArg ); }
+PxF32 getPxScene_ClothInterCollisionDistance( const PxScene* inObj ) { return inObj->getClothInterCollisionDistance(); }
+void setPxScene_ClothInterCollisionStiffness( PxScene* inObj, PxF32 inArg){ inObj->setClothInterCollisionStiffness( inArg ); }
+PxF32 getPxScene_ClothInterCollisionStiffness( const PxScene* inObj ) { return inObj->getClothInterCollisionStiffness(); }
+void setPxScene_ClothInterCollisionNbIterations( PxScene* inObj, PxU32 inArg){ inObj->setClothInterCollisionNbIterations( inArg ); }
+PxU32 getPxScene_ClothInterCollisionNbIterations( const PxScene* inObj ) { return inObj->getClothInterCollisionNbIterations(); }
 void setPxScene_ContactModifyCallback( PxScene* inObj, PxContactModifyCallback * inArg){ inObj->setContactModifyCallback( inArg ); }
 PxContactModifyCallback * getPxScene_ContactModifyCallback( const PxScene* inObj ) { return inObj->getContactModifyCallback(); }
+void setPxScene_CCDContactModifyCallback( PxScene* inObj, PxCCDContactModifyCallback * inArg){ inObj->setCCDContactModifyCallback( inArg ); }
+PxCCDContactModifyCallback * getPxScene_CCDContactModifyCallback( const PxScene* inObj ) { return inObj->getCCDContactModifyCallback(); }
 const void * getPxScene_FilterShaderData( const PxScene* inObj ) { return inObj->getFilterShaderData(); }
 PxU32 getPxScene_FilterShaderDataSize( const PxScene* inObj ) { return inObj->getFilterShaderDataSize(); }
 PxSimulationFilterShader getPxScene_FilterShader( const PxScene* inObj ) { return inObj->getFilterShader(); }
 PxSimulationFilterCallback * getPxScene_FilterCallback( const PxScene* inObj ) { return inObj->getFilterCallback(); }
-void setPxScene_DynamicTreeRebuildRateHint( PxScene* inObj, PxU32 inArg){ inObj->setDynamicTreeRebuildRateHint( inArg ); }
-PxU32 getPxScene_DynamicTreeRebuildRateHint( const PxScene* inObj ) { return inObj->getDynamicTreeRebuildRateHint(); }
+void setPxScene_Gravity( PxScene* inObj, const PxVec3 & inArg){ inObj->setGravity( inArg ); }
+PxVec3 getPxScene_Gravity( const PxScene* inObj ) { return inObj->getGravity(); }
+void setPxScene_BounceThresholdVelocity( PxScene* inObj, const PxReal inArg){ inObj->setBounceThresholdVelocity( inArg ); }
+PxReal getPxScene_BounceThresholdVelocity( const PxScene* inObj ) { return inObj->getBounceThresholdVelocity(); }
+void setPxScene_CCDMaxPasses( PxScene* inObj, PxU32 inArg){ inObj->setCCDMaxPasses( inArg ); }
+PxU32 getPxScene_CCDMaxPasses( const PxScene* inObj ) { return inObj->getCCDMaxPasses(); }
+PxReal getPxScene_ContactCorrelationDistance( const PxScene* inObj ) { return inObj->getContactCorrelationDistance(); }
+PxReal getPxScene_FrictionOffsetThreshold( const PxScene* inObj ) { return inObj->getFrictionOffsetThreshold(); }
+PxReal getPxScene_MeshContactMargin( const PxScene* inObj ) { return inObj->getMeshContactMargin(); }
+void setPxScene_FrictionType( PxScene* inObj, PxFrictionType::Enum inArg){ inObj->setFrictionType( inArg ); }
+PxFrictionType::Enum getPxScene_FrictionType( const PxScene* inObj ) { return inObj->getFrictionType(); }
 void setPxScene_VisualizationCullingBox( PxScene* inObj, const PxBounds3 & inArg){ inObj->setVisualizationCullingBox( inArg ); }
 const PxBounds3 & getPxScene_VisualizationCullingBox( const PxScene* inObj ) { return inObj->getVisualizationCullingBox(); }
-physx::pxtask::TaskManager * getPxScene_TaskManager( const PxScene* inObj ) { return inObj->getTaskManager(); }
-void setPxScene_SolverBatchSize( PxScene* inObj, PxU32 inArg){ inObj->setSolverBatchSize( inArg ); }
-PxU32 getPxScene_SolverBatchSize( const PxScene* inObj ) { return inObj->getSolverBatchSize(); }
+PxPruningStructure::Enum getPxScene_StaticStructure( const PxScene* inObj ) { return inObj->getStaticStructure(); }
+PxPruningStructure::Enum getPxScene_DynamicStructure( const PxScene* inObj ) { return inObj->getDynamicStructure(); }
+void setPxScene_DynamicTreeRebuildRateHint( PxScene* inObj, PxU32 inArg){ inObj->setDynamicTreeRebuildRateHint( inArg ); }
+PxU32 getPxScene_DynamicTreeRebuildRateHint( const PxScene* inObj ) { return inObj->getDynamicTreeRebuildRateHint(); }
+PxU32 getPxScene_SceneQueryStaticTimestamp( const PxScene* inObj ) { return inObj->getSceneQueryStaticTimestamp(); }
+PxBroadPhaseType::Enum getPxScene_BroadPhaseType( const PxScene* inObj ) { return inObj->getBroadPhaseType(); }
+PxU32 getPxScene_BroadPhaseRegions( const PxScene* inObj, PxBroadPhaseRegionInfo* outBuffer, PxU32 inBufSize ) { return inObj->getBroadPhaseRegions( outBuffer, inBufSize ); }
+PxU32 getNbPxScene_BroadPhaseRegions( const PxScene* inObj ) { return inObj->getNbBroadPhaseRegions(  ); }
+physx::PxTaskManager * getPxScene_TaskManager( const PxScene* inObj ) { return inObj->getTaskManager(); }
 void setPxScene_NbContactDataBlocks( PxScene* inObj, PxU32 inArg){ inObj->setNbContactDataBlocks( inArg ); }
 PxU32 getPxScene_MaxNbContactDataBlocksUsed( const PxScene* inObj ) { return inObj->getMaxNbContactDataBlocksUsed(); }
+PxU32 getPxScene_ContactReportStreamBufferSize( const PxScene* inObj ) { return inObj->getContactReportStreamBufferSize(); }
+void setPxScene_SolverBatchSize( PxScene* inObj, PxU32 inArg){ inObj->setSolverBatchSize( inArg ); }
+PxU32 getPxScene_SolverBatchSize( const PxScene* inObj ) { return inObj->getSolverBatchSize(); }
+PxReal getPxScene_WakeCounterResetValue( const PxScene* inObj ) { return inObj->getWakeCounterResetValue(); }
 inline void * getPxSceneUserData( const PxScene* inOwner ) { return inOwner->userData; }
 inline void setPxSceneUserData( PxScene* inOwner, void * inData) { inOwner->userData = inData; }
 PX_PHYSX_CORE_API PxSceneGeneratedInfo::PxSceneGeneratedInfo()
 	: Flags( "Flags", getPxScene_Flags)
-	, Gravity( "Gravity", setPxScene_Gravity, getPxScene_Gravity)
+	, Limits( "Limits", setPxScene_Limits, getPxScene_Limits)
 	, Timestamp( "Timestamp", getPxScene_Timestamp)
-	, SceneQueryStaticTimestamp( "SceneQueryStaticTimestamp", getPxScene_SceneQueryStaticTimestamp)
-	, BounceThresholdVelocity( "BounceThresholdVelocity", setPxScene_BounceThresholdVelocity, getPxScene_BounceThresholdVelocity)
-	, Aggregates( "Aggregates", getPxScene_Aggregates, getNbPxScene_Aggregates, addPxScene_Aggregates, removePxScene_Aggregates )
-	, Actors( "Actors", getPxScene_Actors, getNbPxScene_Actors, addPxScene_Actors, removePxScene_Actors )
-	, Articulations( "Articulations", getPxScene_Articulations, getNbPxScene_Articulations, addPxScene_Articulations, removePxScene_Articulations )
+	, Actors( "Actors", getPxScene_Actors, getNbPxScene_Actors )
+	, Articulations( "Articulations", getPxScene_Articulations, getNbPxScene_Articulations )
 	, Constraints( "Constraints", getPxScene_Constraints, getNbPxScene_Constraints )
-	, ClientBehaviorBits( "ClientBehaviorBits", setPxScene_ClientBehaviorBits, getPxScene_ClientBehaviorBits)
+	, Aggregates( "Aggregates", getPxScene_Aggregates, getNbPxScene_Aggregates )
+	, CpuDispatcher( "CpuDispatcher", getPxScene_CpuDispatcher)
+	, GpuDispatcher( "GpuDispatcher", getPxScene_GpuDispatcher)
+	, SpuDispatcher( "SpuDispatcher", getPxScene_SpuDispatcher)
+	, ClothInterCollisionDistance( "ClothInterCollisionDistance", setPxScene_ClothInterCollisionDistance, getPxScene_ClothInterCollisionDistance)
+	, ClothInterCollisionStiffness( "ClothInterCollisionStiffness", setPxScene_ClothInterCollisionStiffness, getPxScene_ClothInterCollisionStiffness)
+	, ClothInterCollisionNbIterations( "ClothInterCollisionNbIterations", setPxScene_ClothInterCollisionNbIterations, getPxScene_ClothInterCollisionNbIterations)
 	, ContactModifyCallback( "ContactModifyCallback", setPxScene_ContactModifyCallback, getPxScene_ContactModifyCallback)
+	, CCDContactModifyCallback( "CCDContactModifyCallback", setPxScene_CCDContactModifyCallback, getPxScene_CCDContactModifyCallback)
 	, FilterShaderData( "FilterShaderData", getPxScene_FilterShaderData)
 	, FilterShaderDataSize( "FilterShaderDataSize", getPxScene_FilterShaderDataSize)
 	, FilterShader( "FilterShader", getPxScene_FilterShader)
 	, FilterCallback( "FilterCallback", getPxScene_FilterCallback)
-	, DynamicTreeRebuildRateHint( "DynamicTreeRebuildRateHint", setPxScene_DynamicTreeRebuildRateHint, getPxScene_DynamicTreeRebuildRateHint)
+	, Gravity( "Gravity", setPxScene_Gravity, getPxScene_Gravity)
+	, BounceThresholdVelocity( "BounceThresholdVelocity", setPxScene_BounceThresholdVelocity, getPxScene_BounceThresholdVelocity)
+	, CCDMaxPasses( "CCDMaxPasses", setPxScene_CCDMaxPasses, getPxScene_CCDMaxPasses)
+	, ContactCorrelationDistance( "ContactCorrelationDistance", getPxScene_ContactCorrelationDistance)
+	, FrictionOffsetThreshold( "FrictionOffsetThreshold", getPxScene_FrictionOffsetThreshold)
+	, MeshContactMargin( "MeshContactMargin", getPxScene_MeshContactMargin)
+	, FrictionType( "FrictionType", setPxScene_FrictionType, getPxScene_FrictionType)
 	, VisualizationCullingBox( "VisualizationCullingBox", setPxScene_VisualizationCullingBox, getPxScene_VisualizationCullingBox)
+	, StaticStructure( "StaticStructure", getPxScene_StaticStructure)
+	, DynamicStructure( "DynamicStructure", getPxScene_DynamicStructure)
+	, DynamicTreeRebuildRateHint( "DynamicTreeRebuildRateHint", setPxScene_DynamicTreeRebuildRateHint, getPxScene_DynamicTreeRebuildRateHint)
+	, SceneQueryStaticTimestamp( "SceneQueryStaticTimestamp", getPxScene_SceneQueryStaticTimestamp)
+	, BroadPhaseType( "BroadPhaseType", getPxScene_BroadPhaseType)
+	, BroadPhaseRegions( "BroadPhaseRegions", getPxScene_BroadPhaseRegions, getNbPxScene_BroadPhaseRegions )
 	, TaskManager( "TaskManager", getPxScene_TaskManager)
-	, SolverBatchSize( "SolverBatchSize", setPxScene_SolverBatchSize, getPxScene_SolverBatchSize)
 	, NbContactDataBlocks( "NbContactDataBlocks", setPxScene_NbContactDataBlocks)
 	, MaxNbContactDataBlocksUsed( "MaxNbContactDataBlocksUsed", getPxScene_MaxNbContactDataBlocksUsed)
+	, ContactReportStreamBufferSize( "ContactReportStreamBufferSize", getPxScene_ContactReportStreamBufferSize)
+	, SolverBatchSize( "SolverBatchSize", setPxScene_SolverBatchSize, getPxScene_SolverBatchSize)
+	, WakeCounterResetValue( "WakeCounterResetValue", getPxScene_WakeCounterResetValue)
 	, UserData( "UserData", setPxSceneUserData, getPxSceneUserData )
 {}
 PX_PHYSX_CORE_API PxSceneGeneratedValues::PxSceneGeneratedValues( const PxScene* inSource )
 		:Flags( getPxScene_Flags( inSource ) )
-		,Gravity( getPxScene_Gravity( inSource ) )
+		,Limits( getPxScene_Limits( inSource ) )
 		,Timestamp( getPxScene_Timestamp( inSource ) )
-		,SceneQueryStaticTimestamp( getPxScene_SceneQueryStaticTimestamp( inSource ) )
-		,BounceThresholdVelocity( getPxScene_BounceThresholdVelocity( inSource ) )
+		,CpuDispatcher( getPxScene_CpuDispatcher( inSource ) )
+		,GpuDispatcher( getPxScene_GpuDispatcher( inSource ) )
+		,SpuDispatcher( getPxScene_SpuDispatcher( inSource ) )
+		,ClothInterCollisionDistance( getPxScene_ClothInterCollisionDistance( inSource ) )
+		,ClothInterCollisionStiffness( getPxScene_ClothInterCollisionStiffness( inSource ) )
+		,ClothInterCollisionNbIterations( getPxScene_ClothInterCollisionNbIterations( inSource ) )
 		,ContactModifyCallback( getPxScene_ContactModifyCallback( inSource ) )
+		,CCDContactModifyCallback( getPxScene_CCDContactModifyCallback( inSource ) )
 		,FilterShaderData( getPxScene_FilterShaderData( inSource ) )
 		,FilterShaderDataSize( getPxScene_FilterShaderDataSize( inSource ) )
 		,FilterShader( getPxScene_FilterShader( inSource ) )
 		,FilterCallback( getPxScene_FilterCallback( inSource ) )
-		,DynamicTreeRebuildRateHint( getPxScene_DynamicTreeRebuildRateHint( inSource ) )
+		,Gravity( getPxScene_Gravity( inSource ) )
+		,BounceThresholdVelocity( getPxScene_BounceThresholdVelocity( inSource ) )
+		,CCDMaxPasses( getPxScene_CCDMaxPasses( inSource ) )
+		,ContactCorrelationDistance( getPxScene_ContactCorrelationDistance( inSource ) )
+		,FrictionOffsetThreshold( getPxScene_FrictionOffsetThreshold( inSource ) )
+		,MeshContactMargin( getPxScene_MeshContactMargin( inSource ) )
+		,FrictionType( getPxScene_FrictionType( inSource ) )
 		,VisualizationCullingBox( getPxScene_VisualizationCullingBox( inSource ) )
+		,StaticStructure( getPxScene_StaticStructure( inSource ) )
+		,DynamicStructure( getPxScene_DynamicStructure( inSource ) )
+		,DynamicTreeRebuildRateHint( getPxScene_DynamicTreeRebuildRateHint( inSource ) )
+		,SceneQueryStaticTimestamp( getPxScene_SceneQueryStaticTimestamp( inSource ) )
+		,BroadPhaseType( getPxScene_BroadPhaseType( inSource ) )
 		,TaskManager( getPxScene_TaskManager( inSource ) )
-		,SolverBatchSize( getPxScene_SolverBatchSize( inSource ) )
 		,MaxNbContactDataBlocksUsed( getPxScene_MaxNbContactDataBlocksUsed( inSource ) )
+		,ContactReportStreamBufferSize( getPxScene_ContactReportStreamBufferSize( inSource ) )
+		,SolverBatchSize( getPxScene_SolverBatchSize( inSource ) )
+		,WakeCounterResetValue( getPxScene_WakeCounterResetValue( inSource ) )
 		,UserData( inSource->userData )
 {
+	PX_UNUSED(inSource);
 	inSource->getSimulationStatistics(SimulationStatistics);
 }
 PX_PHYSX_CORE_API PxGeometryGeneratedInfo::PxGeometryGeneratedInfo()
 {}
 PX_PHYSX_CORE_API PxGeometryGeneratedValues::PxGeometryGeneratedValues( const PxGeometry* inSource )
 {
+	PX_UNUSED(inSource);
 }
 inline PxVec3 getPxBoxGeometryHalfExtents( const PxBoxGeometry* inOwner ) { return inOwner->halfExtents; }
 inline void setPxBoxGeometryHalfExtents( PxBoxGeometry* inOwner, PxVec3 inData) { inOwner->halfExtents = inData; }
@@ -777,6 +937,7 @@ PX_PHYSX_CORE_API PxBoxGeometryGeneratedValues::PxBoxGeometryGeneratedValues( co
 		:PxGeometryGeneratedValues( inSource )
 		,HalfExtents( inSource->halfExtents )
 {
+	PX_UNUSED(inSource);
 }
 inline PxReal getPxCapsuleGeometryRadius( const PxCapsuleGeometry* inOwner ) { return inOwner->radius; }
 inline void setPxCapsuleGeometryRadius( PxCapsuleGeometry* inOwner, PxReal inData) { inOwner->radius = inData; }
@@ -791,6 +952,7 @@ PX_PHYSX_CORE_API PxCapsuleGeometryGeneratedValues::PxCapsuleGeometryGeneratedVa
 		,Radius( inSource->radius )
 		,HalfHeight( inSource->halfHeight )
 {
+	PX_UNUSED(inSource);
 }
 inline PxVec3 getPxMeshScaleScale( const PxMeshScale* inOwner ) { return inOwner->scale; }
 inline void setPxMeshScaleScale( PxMeshScale* inOwner, PxVec3 inData) { inOwner->scale = inData; }
@@ -804,6 +966,7 @@ PX_PHYSX_CORE_API PxMeshScaleGeneratedValues::PxMeshScaleGeneratedValues( const 
 		:Scale( inSource->scale )
 		,Rotation( inSource->rotation )
 {
+	PX_UNUSED(inSource);
 }
 inline PxMeshScale getPxConvexMeshGeometryScale( const PxConvexMeshGeometry* inOwner ) { return inOwner->scale; }
 inline void setPxConvexMeshGeometryScale( PxConvexMeshGeometry* inOwner, PxMeshScale inData) { inOwner->scale = inData; }
@@ -818,6 +981,7 @@ PX_PHYSX_CORE_API PxConvexMeshGeometryGeneratedValues::PxConvexMeshGeometryGener
 		,Scale( inSource->scale )
 		,ConvexMesh( inSource->convexMesh )
 {
+	PX_UNUSED(inSource);
 }
 _Bool getPxSphereGeometry_IsValid( const PxSphereGeometry* inObj ) { return inObj->isValid(); }
 inline PxReal getPxSphereGeometryRadius( const PxSphereGeometry* inOwner ) { return inOwner->radius; }
@@ -831,12 +995,14 @@ PX_PHYSX_CORE_API PxSphereGeometryGeneratedValues::PxSphereGeometryGeneratedValu
 		,IsValid( getPxSphereGeometry_IsValid( inSource ) )
 		,Radius( inSource->radius )
 {
+	PX_UNUSED(inSource);
 }
 PX_PHYSX_CORE_API PxPlaneGeometryGeneratedInfo::PxPlaneGeometryGeneratedInfo()
 {}
 PX_PHYSX_CORE_API PxPlaneGeometryGeneratedValues::PxPlaneGeometryGeneratedValues( const PxPlaneGeometry* inSource )
 		:PxGeometryGeneratedValues( inSource )
 {
+	PX_UNUSED(inSource);
 }
 inline PxMeshScale getPxTriangleMeshGeometryScale( const PxTriangleMeshGeometry* inOwner ) { return inOwner->scale; }
 inline void setPxTriangleMeshGeometryScale( PxTriangleMeshGeometry* inOwner, PxMeshScale inData) { inOwner->scale = inData; }
@@ -855,6 +1021,7 @@ PX_PHYSX_CORE_API PxTriangleMeshGeometryGeneratedValues::PxTriangleMeshGeometryG
 		,MeshFlags( inSource->meshFlags )
 		,TriangleMesh( inSource->triangleMesh )
 {
+	PX_UNUSED(inSource);
 }
 inline PxHeightField * getPxHeightFieldGeometryHeightField( const PxHeightFieldGeometry* inOwner ) { return inOwner->heightField; }
 inline void setPxHeightFieldGeometryHeightField( PxHeightFieldGeometry* inOwner, PxHeightField * inData) { inOwner->heightField = inData; }
@@ -881,6 +1048,7 @@ PX_PHYSX_CORE_API PxHeightFieldGeometryGeneratedValues::PxHeightFieldGeometryGen
 		,ColumnScale( inSource->columnScale )
 		,HeightFieldFlags( inSource->heightFieldFlags )
 {
+	PX_UNUSED(inSource);
 }
 _Bool getPxHeightFieldDesc_IsValid( const PxHeightFieldDesc* inObj ) { return inObj->isValid(); }
 inline PxU32 getPxHeightFieldDescNbRows( const PxHeightFieldDesc* inOwner ) { return inOwner->nbRows; }
@@ -917,6 +1085,7 @@ PX_PHYSX_CORE_API PxHeightFieldDescGeneratedValues::PxHeightFieldDescGeneratedVa
 		,ConvexEdgeThreshold( inSource->convexEdgeThreshold )
 		,Flags( inSource->flags )
 {
+	PX_UNUSED(inSource);
 }
 inline PxVec3 getPxClothParticlePos( const PxClothParticle* inOwner ) { return inOwner->pos; }
 inline void setPxClothParticlePos( PxClothParticle* inOwner, PxVec3 inData) { inOwner->pos = inData; }
@@ -930,6 +1099,21 @@ PX_PHYSX_CORE_API PxClothParticleGeneratedValues::PxClothParticleGeneratedValues
 		:Pos( inSource->pos )
 		,InvWeight( inSource->invWeight )
 {
+	PX_UNUSED(inSource);
+}
+inline PxClothFabricPhaseType::Enum getPxClothFabricPhasePhaseType( const PxClothFabricPhase* inOwner ) { return inOwner->phaseType; }
+inline void setPxClothFabricPhasePhaseType( PxClothFabricPhase* inOwner, PxClothFabricPhaseType::Enum inData) { inOwner->phaseType = inData; }
+inline PxU32 getPxClothFabricPhaseSetIndex( const PxClothFabricPhase* inOwner ) { return inOwner->setIndex; }
+inline void setPxClothFabricPhaseSetIndex( PxClothFabricPhase* inOwner, PxU32 inData) { inOwner->setIndex = inData; }
+PX_PHYSX_CORE_API PxClothFabricPhaseGeneratedInfo::PxClothFabricPhaseGeneratedInfo()
+	: PhaseType( "PhaseType", setPxClothFabricPhasePhaseType, getPxClothFabricPhasePhaseType )
+	, SetIndex( "SetIndex", setPxClothFabricPhaseSetIndex, getPxClothFabricPhaseSetIndex )
+{}
+PX_PHYSX_CORE_API PxClothFabricPhaseGeneratedValues::PxClothFabricPhaseGeneratedValues( const PxClothFabricPhase* inSource )
+		:PhaseType( inSource->phaseType )
+		,SetIndex( inSource->setIndex )
+{
+	PX_UNUSED(inSource);
 }
 inline PxU32 getPxSceneLimitsMaxNbActors( const PxSceneLimits* inOwner ) { return inOwner->maxNbActors; }
 inline void setPxSceneLimitsMaxNbActors( PxSceneLimits* inOwner, PxU32 inData) { inOwner->maxNbActors = inData; }
@@ -939,22 +1123,35 @@ inline PxU32 getPxSceneLimitsMaxNbStaticShapes( const PxSceneLimits* inOwner ) {
 inline void setPxSceneLimitsMaxNbStaticShapes( PxSceneLimits* inOwner, PxU32 inData) { inOwner->maxNbStaticShapes = inData; }
 inline PxU32 getPxSceneLimitsMaxNbDynamicShapes( const PxSceneLimits* inOwner ) { return inOwner->maxNbDynamicShapes; }
 inline void setPxSceneLimitsMaxNbDynamicShapes( PxSceneLimits* inOwner, PxU32 inData) { inOwner->maxNbDynamicShapes = inData; }
+inline PxU32 getPxSceneLimitsMaxNbAggregates( const PxSceneLimits* inOwner ) { return inOwner->maxNbAggregates; }
+inline void setPxSceneLimitsMaxNbAggregates( PxSceneLimits* inOwner, PxU32 inData) { inOwner->maxNbAggregates = inData; }
 inline PxU32 getPxSceneLimitsMaxNbConstraints( const PxSceneLimits* inOwner ) { return inOwner->maxNbConstraints; }
 inline void setPxSceneLimitsMaxNbConstraints( PxSceneLimits* inOwner, PxU32 inData) { inOwner->maxNbConstraints = inData; }
+inline PxU32 getPxSceneLimitsMaxNbRegions( const PxSceneLimits* inOwner ) { return inOwner->maxNbRegions; }
+inline void setPxSceneLimitsMaxNbRegions( PxSceneLimits* inOwner, PxU32 inData) { inOwner->maxNbRegions = inData; }
+inline PxU32 getPxSceneLimitsMaxNbObjectsPerRegion( const PxSceneLimits* inOwner ) { return inOwner->maxNbObjectsPerRegion; }
+inline void setPxSceneLimitsMaxNbObjectsPerRegion( PxSceneLimits* inOwner, PxU32 inData) { inOwner->maxNbObjectsPerRegion = inData; }
 PX_PHYSX_CORE_API PxSceneLimitsGeneratedInfo::PxSceneLimitsGeneratedInfo()
 	: MaxNbActors( "MaxNbActors", setPxSceneLimitsMaxNbActors, getPxSceneLimitsMaxNbActors )
 	, MaxNbBodies( "MaxNbBodies", setPxSceneLimitsMaxNbBodies, getPxSceneLimitsMaxNbBodies )
 	, MaxNbStaticShapes( "MaxNbStaticShapes", setPxSceneLimitsMaxNbStaticShapes, getPxSceneLimitsMaxNbStaticShapes )
 	, MaxNbDynamicShapes( "MaxNbDynamicShapes", setPxSceneLimitsMaxNbDynamicShapes, getPxSceneLimitsMaxNbDynamicShapes )
+	, MaxNbAggregates( "MaxNbAggregates", setPxSceneLimitsMaxNbAggregates, getPxSceneLimitsMaxNbAggregates )
 	, MaxNbConstraints( "MaxNbConstraints", setPxSceneLimitsMaxNbConstraints, getPxSceneLimitsMaxNbConstraints )
+	, MaxNbRegions( "MaxNbRegions", setPxSceneLimitsMaxNbRegions, getPxSceneLimitsMaxNbRegions )
+	, MaxNbObjectsPerRegion( "MaxNbObjectsPerRegion", setPxSceneLimitsMaxNbObjectsPerRegion, getPxSceneLimitsMaxNbObjectsPerRegion )
 {}
 PX_PHYSX_CORE_API PxSceneLimitsGeneratedValues::PxSceneLimitsGeneratedValues( const PxSceneLimits* inSource )
 		:MaxNbActors( inSource->maxNbActors )
 		,MaxNbBodies( inSource->maxNbBodies )
 		,MaxNbStaticShapes( inSource->maxNbStaticShapes )
 		,MaxNbDynamicShapes( inSource->maxNbDynamicShapes )
+		,MaxNbAggregates( inSource->maxNbAggregates )
 		,MaxNbConstraints( inSource->maxNbConstraints )
+		,MaxNbRegions( inSource->maxNbRegions )
+		,MaxNbObjectsPerRegion( inSource->maxNbObjectsPerRegion )
 {
+	PX_UNUSED(inSource);
 }
 void setPxSceneDesc_ToDefault( PxSceneDesc* inObj, const PxTolerancesScale & inArg){ inObj->setToDefault( inArg ); }
 _Bool getPxSceneDesc_IsValid( const PxSceneDesc* inObj ) { return inObj->isValid(); }
@@ -964,6 +1161,8 @@ inline PxSimulationEventCallback * getPxSceneDescSimulationEventCallback( const 
 inline void setPxSceneDescSimulationEventCallback( PxSceneDesc* inOwner, PxSimulationEventCallback * inData) { inOwner->simulationEventCallback = inData; }
 inline PxContactModifyCallback * getPxSceneDescContactModifyCallback( const PxSceneDesc* inOwner ) { return inOwner->contactModifyCallback; }
 inline void setPxSceneDescContactModifyCallback( PxSceneDesc* inOwner, PxContactModifyCallback * inData) { inOwner->contactModifyCallback = inData; }
+inline PxCCDContactModifyCallback * getPxSceneDescCcdContactModifyCallback( const PxSceneDesc* inOwner ) { return inOwner->ccdContactModifyCallback; }
+inline void setPxSceneDescCcdContactModifyCallback( PxSceneDesc* inOwner, PxCCDContactModifyCallback * inData) { inOwner->ccdContactModifyCallback = inData; }
 inline const void * getPxSceneDescFilterShaderData( const PxSceneDesc* inOwner ) { return inOwner->filterShaderData; }
 inline void setPxSceneDescFilterShaderData( PxSceneDesc* inOwner, const void * inData) { inOwner->filterShaderData = inData; }
 inline PxU32 getPxSceneDescFilterShaderDataSize( const PxSceneDesc* inOwner ) { return inOwner->filterShaderDataSize; }
@@ -972,22 +1171,30 @@ inline PxSimulationFilterShader getPxSceneDescFilterShader( const PxSceneDesc* i
 inline void setPxSceneDescFilterShader( PxSceneDesc* inOwner, PxSimulationFilterShader inData) { inOwner->filterShader = inData; }
 inline PxSimulationFilterCallback * getPxSceneDescFilterCallback( const PxSceneDesc* inOwner ) { return inOwner->filterCallback; }
 inline void setPxSceneDescFilterCallback( PxSceneDesc* inOwner, PxSimulationFilterCallback * inData) { inOwner->filterCallback = inData; }
+inline PxBroadPhaseType::Enum getPxSceneDescBroadPhaseType( const PxSceneDesc* inOwner ) { return inOwner->broadPhaseType; }
+inline void setPxSceneDescBroadPhaseType( PxSceneDesc* inOwner, PxBroadPhaseType::Enum inData) { inOwner->broadPhaseType = inData; }
+inline PxBroadPhaseCallback * getPxSceneDescBroadPhaseCallback( const PxSceneDesc* inOwner ) { return inOwner->broadPhaseCallback; }
+inline void setPxSceneDescBroadPhaseCallback( PxSceneDesc* inOwner, PxBroadPhaseCallback * inData) { inOwner->broadPhaseCallback = inData; }
 inline PxSceneLimits getPxSceneDescLimits( const PxSceneDesc* inOwner ) { return inOwner->limits; }
 inline void setPxSceneDescLimits( PxSceneDesc* inOwner, PxSceneLimits inData) { inOwner->limits = inData; }
-inline PxReal getPxSceneDescSweepEpsilonDistance( const PxSceneDesc* inOwner ) { return inOwner->sweepEpsilonDistance; }
-inline void setPxSceneDescSweepEpsilonDistance( PxSceneDesc* inOwner, PxReal inData) { inOwner->sweepEpsilonDistance = inData; }
+inline PxReal getPxSceneDescMeshContactMargin( const PxSceneDesc* inOwner ) { return inOwner->meshContactMargin; }
+inline void setPxSceneDescMeshContactMargin( PxSceneDesc* inOwner, PxReal inData) { inOwner->meshContactMargin = inData; }
+inline PxFrictionType::Enum getPxSceneDescFrictionType( const PxSceneDesc* inOwner ) { return inOwner->frictionType; }
+inline void setPxSceneDescFrictionType( PxSceneDesc* inOwner, PxFrictionType::Enum inData) { inOwner->frictionType = inData; }
 inline PxReal getPxSceneDescContactCorrelationDistance( const PxSceneDesc* inOwner ) { return inOwner->contactCorrelationDistance; }
 inline void setPxSceneDescContactCorrelationDistance( PxSceneDesc* inOwner, PxReal inData) { inOwner->contactCorrelationDistance = inData; }
 inline PxReal getPxSceneDescBounceThresholdVelocity( const PxSceneDesc* inOwner ) { return inOwner->bounceThresholdVelocity; }
 inline void setPxSceneDescBounceThresholdVelocity( PxSceneDesc* inOwner, PxReal inData) { inOwner->bounceThresholdVelocity = inData; }
+inline PxReal getPxSceneDescFrictionOffsetThreshold( const PxSceneDesc* inOwner ) { return inOwner->frictionOffsetThreshold; }
+inline void setPxSceneDescFrictionOffsetThreshold( PxSceneDesc* inOwner, PxReal inData) { inOwner->frictionOffsetThreshold = inData; }
 inline PxSceneFlags getPxSceneDescFlags( const PxSceneDesc* inOwner ) { return inOwner->flags; }
 inline void setPxSceneDescFlags( PxSceneDesc* inOwner, PxSceneFlags inData) { inOwner->flags = inData; }
-inline pxtask::CpuDispatcher * getPxSceneDescCpuDispatcher( const PxSceneDesc* inOwner ) { return inOwner->cpuDispatcher; }
-inline void setPxSceneDescCpuDispatcher( PxSceneDesc* inOwner, pxtask::CpuDispatcher * inData) { inOwner->cpuDispatcher = inData; }
-inline pxtask::GpuDispatcher * getPxSceneDescGpuDispatcher( const PxSceneDesc* inOwner ) { return inOwner->gpuDispatcher; }
-inline void setPxSceneDescGpuDispatcher( PxSceneDesc* inOwner, pxtask::GpuDispatcher * inData) { inOwner->gpuDispatcher = inData; }
-inline pxtask::SpuDispatcher * getPxSceneDescSpuDispatcher( const PxSceneDesc* inOwner ) { return inOwner->spuDispatcher; }
-inline void setPxSceneDescSpuDispatcher( PxSceneDesc* inOwner, pxtask::SpuDispatcher * inData) { inOwner->spuDispatcher = inData; }
+inline PxCpuDispatcher * getPxSceneDescCpuDispatcher( const PxSceneDesc* inOwner ) { return inOwner->cpuDispatcher; }
+inline void setPxSceneDescCpuDispatcher( PxSceneDesc* inOwner, PxCpuDispatcher * inData) { inOwner->cpuDispatcher = inData; }
+inline PxGpuDispatcher * getPxSceneDescGpuDispatcher( const PxSceneDesc* inOwner ) { return inOwner->gpuDispatcher; }
+inline void setPxSceneDescGpuDispatcher( PxSceneDesc* inOwner, PxGpuDispatcher * inData) { inOwner->gpuDispatcher = inData; }
+inline PxSpuDispatcher * getPxSceneDescSpuDispatcher( const PxSceneDesc* inOwner ) { return inOwner->spuDispatcher; }
+inline void setPxSceneDescSpuDispatcher( PxSceneDesc* inOwner, PxSpuDispatcher * inData) { inOwner->spuDispatcher = inData; }
 inline PxPruningStructure::Enum getPxSceneDescStaticStructure( const PxSceneDesc* inOwner ) { return inOwner->staticStructure; }
 inline void setPxSceneDescStaticStructure( PxSceneDesc* inOwner, PxPruningStructure::Enum inData) { inOwner->staticStructure = inData; }
 inline PxPruningStructure::Enum getPxSceneDescDynamicStructure( const PxSceneDesc* inOwner ) { return inOwner->dynamicStructure; }
@@ -998,30 +1205,39 @@ inline void * getPxSceneDescUserData( const PxSceneDesc* inOwner ) { return inOw
 inline void setPxSceneDescUserData( PxSceneDesc* inOwner, void * inData) { inOwner->userData = inData; }
 inline PxU32 getPxSceneDescSolverBatchSize( const PxSceneDesc* inOwner ) { return inOwner->solverBatchSize; }
 inline void setPxSceneDescSolverBatchSize( PxSceneDesc* inOwner, PxU32 inData) { inOwner->solverBatchSize = inData; }
-inline PxReal getPxSceneDescSweptIntegrationLinearSpeedFactor( const PxSceneDesc* inOwner ) { return inOwner->sweptIntegrationLinearSpeedFactor; }
-inline void setPxSceneDescSweptIntegrationLinearSpeedFactor( PxSceneDesc* inOwner, PxReal inData) { inOwner->sweptIntegrationLinearSpeedFactor = inData; }
-inline PxReal getPxSceneDescSweptIntegrationAngularSpeedFactor( const PxSceneDesc* inOwner ) { return inOwner->sweptIntegrationAngularSpeedFactor; }
-inline void setPxSceneDescSweptIntegrationAngularSpeedFactor( PxSceneDesc* inOwner, PxReal inData) { inOwner->sweptIntegrationAngularSpeedFactor = inData; }
 inline PxU32 getPxSceneDescNbContactDataBlocks( const PxSceneDesc* inOwner ) { return inOwner->nbContactDataBlocks; }
 inline void setPxSceneDescNbContactDataBlocks( PxSceneDesc* inOwner, PxU32 inData) { inOwner->nbContactDataBlocks = inData; }
 inline PxU32 getPxSceneDescMaxNbContactDataBlocks( const PxSceneDesc* inOwner ) { return inOwner->maxNbContactDataBlocks; }
 inline void setPxSceneDescMaxNbContactDataBlocks( PxSceneDesc* inOwner, PxU32 inData) { inOwner->maxNbContactDataBlocks = inData; }
 inline PxU32 getPxSceneDescContactReportStreamBufferSize( const PxSceneDesc* inOwner ) { return inOwner->contactReportStreamBufferSize; }
 inline void setPxSceneDescContactReportStreamBufferSize( PxSceneDesc* inOwner, PxU32 inData) { inOwner->contactReportStreamBufferSize = inData; }
+inline PxU32 getPxSceneDescCcdMaxPasses( const PxSceneDesc* inOwner ) { return inOwner->ccdMaxPasses; }
+inline void setPxSceneDescCcdMaxPasses( PxSceneDesc* inOwner, PxU32 inData) { inOwner->ccdMaxPasses = inData; }
+inline PxSimulationOrder::Enum getPxSceneDescSimulationOrder( const PxSceneDesc* inOwner ) { return inOwner->simulationOrder; }
+inline void setPxSceneDescSimulationOrder( PxSceneDesc* inOwner, PxSimulationOrder::Enum inData) { inOwner->simulationOrder = inData; }
+inline PxReal getPxSceneDescWakeCounterResetValue( const PxSceneDesc* inOwner ) { return inOwner->wakeCounterResetValue; }
+inline void setPxSceneDescWakeCounterResetValue( PxSceneDesc* inOwner, PxReal inData) { inOwner->wakeCounterResetValue = inData; }
+inline PxBounds3 getPxSceneDescSanityBounds( const PxSceneDesc* inOwner ) { return inOwner->sanityBounds; }
+inline void setPxSceneDescSanityBounds( PxSceneDesc* inOwner, PxBounds3 inData) { inOwner->sanityBounds = inData; }
 PX_PHYSX_CORE_API PxSceneDescGeneratedInfo::PxSceneDescGeneratedInfo()
 	: ToDefault( "ToDefault", setPxSceneDesc_ToDefault)
 	, IsValid( "IsValid", getPxSceneDesc_IsValid)
 	, Gravity( "Gravity", setPxSceneDescGravity, getPxSceneDescGravity )
 	, SimulationEventCallback( "SimulationEventCallback", setPxSceneDescSimulationEventCallback, getPxSceneDescSimulationEventCallback )
 	, ContactModifyCallback( "ContactModifyCallback", setPxSceneDescContactModifyCallback, getPxSceneDescContactModifyCallback )
+	, CcdContactModifyCallback( "CcdContactModifyCallback", setPxSceneDescCcdContactModifyCallback, getPxSceneDescCcdContactModifyCallback )
 	, FilterShaderData( "FilterShaderData", setPxSceneDescFilterShaderData, getPxSceneDescFilterShaderData )
 	, FilterShaderDataSize( "FilterShaderDataSize", setPxSceneDescFilterShaderDataSize, getPxSceneDescFilterShaderDataSize )
 	, FilterShader( "FilterShader", setPxSceneDescFilterShader, getPxSceneDescFilterShader )
 	, FilterCallback( "FilterCallback", setPxSceneDescFilterCallback, getPxSceneDescFilterCallback )
+	, BroadPhaseType( "BroadPhaseType", setPxSceneDescBroadPhaseType, getPxSceneDescBroadPhaseType )
+	, BroadPhaseCallback( "BroadPhaseCallback", setPxSceneDescBroadPhaseCallback, getPxSceneDescBroadPhaseCallback )
 	, Limits( "Limits", setPxSceneDescLimits, getPxSceneDescLimits )
-	, SweepEpsilonDistance( "SweepEpsilonDistance", setPxSceneDescSweepEpsilonDistance, getPxSceneDescSweepEpsilonDistance )
+	, MeshContactMargin( "MeshContactMargin", setPxSceneDescMeshContactMargin, getPxSceneDescMeshContactMargin )
+	, FrictionType( "FrictionType", setPxSceneDescFrictionType, getPxSceneDescFrictionType )
 	, ContactCorrelationDistance( "ContactCorrelationDistance", setPxSceneDescContactCorrelationDistance, getPxSceneDescContactCorrelationDistance )
 	, BounceThresholdVelocity( "BounceThresholdVelocity", setPxSceneDescBounceThresholdVelocity, getPxSceneDescBounceThresholdVelocity )
+	, FrictionOffsetThreshold( "FrictionOffsetThreshold", setPxSceneDescFrictionOffsetThreshold, getPxSceneDescFrictionOffsetThreshold )
 	, Flags( "Flags", setPxSceneDescFlags, getPxSceneDescFlags )
 	, CpuDispatcher( "CpuDispatcher", setPxSceneDescCpuDispatcher, getPxSceneDescCpuDispatcher )
 	, GpuDispatcher( "GpuDispatcher", setPxSceneDescGpuDispatcher, getPxSceneDescGpuDispatcher )
@@ -1031,25 +1247,32 @@ PX_PHYSX_CORE_API PxSceneDescGeneratedInfo::PxSceneDescGeneratedInfo()
 	, DynamicTreeRebuildRateHint( "DynamicTreeRebuildRateHint", setPxSceneDescDynamicTreeRebuildRateHint, getPxSceneDescDynamicTreeRebuildRateHint )
 	, UserData( "UserData", setPxSceneDescUserData, getPxSceneDescUserData )
 	, SolverBatchSize( "SolverBatchSize", setPxSceneDescSolverBatchSize, getPxSceneDescSolverBatchSize )
-	, SweptIntegrationLinearSpeedFactor( "SweptIntegrationLinearSpeedFactor", setPxSceneDescSweptIntegrationLinearSpeedFactor, getPxSceneDescSweptIntegrationLinearSpeedFactor )
-	, SweptIntegrationAngularSpeedFactor( "SweptIntegrationAngularSpeedFactor", setPxSceneDescSweptIntegrationAngularSpeedFactor, getPxSceneDescSweptIntegrationAngularSpeedFactor )
 	, NbContactDataBlocks( "NbContactDataBlocks", setPxSceneDescNbContactDataBlocks, getPxSceneDescNbContactDataBlocks )
 	, MaxNbContactDataBlocks( "MaxNbContactDataBlocks", setPxSceneDescMaxNbContactDataBlocks, getPxSceneDescMaxNbContactDataBlocks )
 	, ContactReportStreamBufferSize( "ContactReportStreamBufferSize", setPxSceneDescContactReportStreamBufferSize, getPxSceneDescContactReportStreamBufferSize )
+	, CcdMaxPasses( "CcdMaxPasses", setPxSceneDescCcdMaxPasses, getPxSceneDescCcdMaxPasses )
+	, SimulationOrder( "SimulationOrder", setPxSceneDescSimulationOrder, getPxSceneDescSimulationOrder )
+	, WakeCounterResetValue( "WakeCounterResetValue", setPxSceneDescWakeCounterResetValue, getPxSceneDescWakeCounterResetValue )
+	, SanityBounds( "SanityBounds", setPxSceneDescSanityBounds, getPxSceneDescSanityBounds )
 {}
 PX_PHYSX_CORE_API PxSceneDescGeneratedValues::PxSceneDescGeneratedValues( const PxSceneDesc* inSource )
 		:IsValid( getPxSceneDesc_IsValid( inSource ) )
 		,Gravity( inSource->gravity )
 		,SimulationEventCallback( inSource->simulationEventCallback )
 		,ContactModifyCallback( inSource->contactModifyCallback )
+		,CcdContactModifyCallback( inSource->ccdContactModifyCallback )
 		,FilterShaderData( inSource->filterShaderData )
 		,FilterShaderDataSize( inSource->filterShaderDataSize )
 		,FilterShader( inSource->filterShader )
 		,FilterCallback( inSource->filterCallback )
+		,BroadPhaseType( inSource->broadPhaseType )
+		,BroadPhaseCallback( inSource->broadPhaseCallback )
 		,Limits( inSource->limits )
-		,SweepEpsilonDistance( inSource->sweepEpsilonDistance )
+		,MeshContactMargin( inSource->meshContactMargin )
+		,FrictionType( inSource->frictionType )
 		,ContactCorrelationDistance( inSource->contactCorrelationDistance )
 		,BounceThresholdVelocity( inSource->bounceThresholdVelocity )
+		,FrictionOffsetThreshold( inSource->frictionOffsetThreshold )
 		,Flags( inSource->flags )
 		,CpuDispatcher( inSource->cpuDispatcher )
 		,GpuDispatcher( inSource->gpuDispatcher )
@@ -1059,56 +1282,89 @@ PX_PHYSX_CORE_API PxSceneDescGeneratedValues::PxSceneDescGeneratedValues( const 
 		,DynamicTreeRebuildRateHint( inSource->dynamicTreeRebuildRateHint )
 		,UserData( inSource->userData )
 		,SolverBatchSize( inSource->solverBatchSize )
-		,SweptIntegrationLinearSpeedFactor( inSource->sweptIntegrationLinearSpeedFactor )
-		,SweptIntegrationAngularSpeedFactor( inSource->sweptIntegrationAngularSpeedFactor )
 		,NbContactDataBlocks( inSource->nbContactDataBlocks )
 		,MaxNbContactDataBlocks( inSource->maxNbContactDataBlocks )
 		,ContactReportStreamBufferSize( inSource->contactReportStreamBufferSize )
+		,CcdMaxPasses( inSource->ccdMaxPasses )
+		,SimulationOrder( inSource->simulationOrder )
+		,WakeCounterResetValue( inSource->wakeCounterResetValue )
+		,SanityBounds( inSource->sanityBounds )
 {
+	PX_UNUSED(inSource);
 }
-inline PxU32 getPxSimulationStatisticsNumActiveConstraints( const PxSimulationStatistics* inOwner ) { return inOwner->numActiveConstraints; }
-inline void setPxSimulationStatisticsNumActiveConstraints( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->numActiveConstraints = inData; }
-inline PxU32 getPxSimulationStatisticsNumActiveDynamicBodies( const PxSimulationStatistics* inOwner ) { return inOwner->numActiveDynamicBodies; }
-inline void setPxSimulationStatisticsNumActiveDynamicBodies( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->numActiveDynamicBodies = inData; }
-inline PxU32 getPxSimulationStatisticsNumActiveKinematicBodies( const PxSimulationStatistics* inOwner ) { return inOwner->numActiveKinematicBodies; }
-inline void setPxSimulationStatisticsNumActiveKinematicBodies( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->numActiveKinematicBodies = inData; }
-inline PxU32 getPxSimulationStatisticsNumStaticBodies( const PxSimulationStatistics* inOwner ) { return inOwner->numStaticBodies; }
-inline void setPxSimulationStatisticsNumStaticBodies( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->numStaticBodies = inData; }
-inline PxU32 getPxSimulationStatisticsNumDynamicBodies( const PxSimulationStatistics* inOwner ) { return inOwner->numDynamicBodies; }
-inline void setPxSimulationStatisticsNumDynamicBodies( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->numDynamicBodies = inData; }
-inline PxU32 getPxSimulationStatisticsNumAxisSolverConstraints( const PxSimulationStatistics* inOwner ) { return inOwner->numAxisSolverConstraints; }
-inline void setPxSimulationStatisticsNumAxisSolverConstraints( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->numAxisSolverConstraints = inData; }
+inline PxU32 getPxSimulationStatisticsNbActiveConstraints( const PxSimulationStatistics* inOwner ) { return inOwner->nbActiveConstraints; }
+inline void setPxSimulationStatisticsNbActiveConstraints( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->nbActiveConstraints = inData; }
+inline PxU32 getPxSimulationStatisticsNbActiveDynamicBodies( const PxSimulationStatistics* inOwner ) { return inOwner->nbActiveDynamicBodies; }
+inline void setPxSimulationStatisticsNbActiveDynamicBodies( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->nbActiveDynamicBodies = inData; }
+inline PxU32 getPxSimulationStatisticsNbActiveKinematicBodies( const PxSimulationStatistics* inOwner ) { return inOwner->nbActiveKinematicBodies; }
+inline void setPxSimulationStatisticsNbActiveKinematicBodies( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->nbActiveKinematicBodies = inData; }
+inline PxU32 getPxSimulationStatisticsNbStaticBodies( const PxSimulationStatistics* inOwner ) { return inOwner->nbStaticBodies; }
+inline void setPxSimulationStatisticsNbStaticBodies( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->nbStaticBodies = inData; }
+inline PxU32 getPxSimulationStatisticsNbDynamicBodies( const PxSimulationStatistics* inOwner ) { return inOwner->nbDynamicBodies; }
+inline void setPxSimulationStatisticsNbDynamicBodies( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->nbDynamicBodies = inData; }
+inline PxU32 getPxSimulationStatisticsNbAxisSolverConstraints( const PxSimulationStatistics* inOwner ) { return inOwner->nbAxisSolverConstraints; }
+inline void setPxSimulationStatisticsNbAxisSolverConstraints( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->nbAxisSolverConstraints = inData; }
+inline PxU32 getPxSimulationStatisticsCompressedContactSize( const PxSimulationStatistics* inOwner ) { return inOwner->compressedContactSize; }
+inline void setPxSimulationStatisticsCompressedContactSize( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->compressedContactSize = inData; }
+inline PxU32 getPxSimulationStatisticsRequiredContactConstraintMemory( const PxSimulationStatistics* inOwner ) { return inOwner->requiredContactConstraintMemory; }
+inline void setPxSimulationStatisticsRequiredContactConstraintMemory( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->requiredContactConstraintMemory = inData; }
+inline PxU32 getPxSimulationStatisticsPeakConstraintMemory( const PxSimulationStatistics* inOwner ) { return inOwner->peakConstraintMemory; }
+inline void setPxSimulationStatisticsPeakConstraintMemory( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->peakConstraintMemory = inData; }
+inline PxU32 getPxSimulationStatisticsTotalDiscreteContactPairsAnyShape( const PxSimulationStatistics* inOwner ) { return inOwner->totalDiscreteContactPairsAnyShape; }
+inline void setPxSimulationStatisticsTotalDiscreteContactPairsAnyShape( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->totalDiscreteContactPairsAnyShape = inData; }
+inline PxU32 getPxSimulationStatisticsParticlesGpuMeshCacheSize( const PxSimulationStatistics* inOwner ) { return inOwner->particlesGpuMeshCacheSize; }
+inline void setPxSimulationStatisticsParticlesGpuMeshCacheSize( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->particlesGpuMeshCacheSize = inData; }
+inline PxU32 getPxSimulationStatisticsParticlesGpuMeshCacheUsed( const PxSimulationStatistics* inOwner ) { return inOwner->particlesGpuMeshCacheUsed; }
+inline void setPxSimulationStatisticsParticlesGpuMeshCacheUsed( PxSimulationStatistics* inOwner, PxU32 inData) { inOwner->particlesGpuMeshCacheUsed = inData; }
+inline PxReal getPxSimulationStatisticsParticlesGpuMeshCacheHitrate( const PxSimulationStatistics* inOwner ) { return inOwner->particlesGpuMeshCacheHitrate; }
+inline void setPxSimulationStatisticsParticlesGpuMeshCacheHitrate( PxSimulationStatistics* inOwner, PxReal inData) { inOwner->particlesGpuMeshCacheHitrate = inData; }
 PX_PHYSX_CORE_API PxSimulationStatisticsGeneratedInfo::PxSimulationStatisticsGeneratedInfo()
-	: NumActiveConstraints( "NumActiveConstraints", setPxSimulationStatisticsNumActiveConstraints, getPxSimulationStatisticsNumActiveConstraints )
-	, NumActiveDynamicBodies( "NumActiveDynamicBodies", setPxSimulationStatisticsNumActiveDynamicBodies, getPxSimulationStatisticsNumActiveDynamicBodies )
-	, NumActiveKinematicBodies( "NumActiveKinematicBodies", setPxSimulationStatisticsNumActiveKinematicBodies, getPxSimulationStatisticsNumActiveKinematicBodies )
-	, NumStaticBodies( "NumStaticBodies", setPxSimulationStatisticsNumStaticBodies, getPxSimulationStatisticsNumStaticBodies )
-	, NumDynamicBodies( "NumDynamicBodies", setPxSimulationStatisticsNumDynamicBodies, getPxSimulationStatisticsNumDynamicBodies )
-	, NumAxisSolverConstraints( "NumAxisSolverConstraints", setPxSimulationStatisticsNumAxisSolverConstraints, getPxSimulationStatisticsNumAxisSolverConstraints )
+	: NbActiveConstraints( "NbActiveConstraints", setPxSimulationStatisticsNbActiveConstraints, getPxSimulationStatisticsNbActiveConstraints )
+	, NbActiveDynamicBodies( "NbActiveDynamicBodies", setPxSimulationStatisticsNbActiveDynamicBodies, getPxSimulationStatisticsNbActiveDynamicBodies )
+	, NbActiveKinematicBodies( "NbActiveKinematicBodies", setPxSimulationStatisticsNbActiveKinematicBodies, getPxSimulationStatisticsNbActiveKinematicBodies )
+	, NbStaticBodies( "NbStaticBodies", setPxSimulationStatisticsNbStaticBodies, getPxSimulationStatisticsNbStaticBodies )
+	, NbDynamicBodies( "NbDynamicBodies", setPxSimulationStatisticsNbDynamicBodies, getPxSimulationStatisticsNbDynamicBodies )
+	, NbAxisSolverConstraints( "NbAxisSolverConstraints", setPxSimulationStatisticsNbAxisSolverConstraints, getPxSimulationStatisticsNbAxisSolverConstraints )
+	, CompressedContactSize( "CompressedContactSize", setPxSimulationStatisticsCompressedContactSize, getPxSimulationStatisticsCompressedContactSize )
+	, RequiredContactConstraintMemory( "RequiredContactConstraintMemory", setPxSimulationStatisticsRequiredContactConstraintMemory, getPxSimulationStatisticsRequiredContactConstraintMemory )
+	, PeakConstraintMemory( "PeakConstraintMemory", setPxSimulationStatisticsPeakConstraintMemory, getPxSimulationStatisticsPeakConstraintMemory )
+	, TotalDiscreteContactPairsAnyShape( "TotalDiscreteContactPairsAnyShape", setPxSimulationStatisticsTotalDiscreteContactPairsAnyShape, getPxSimulationStatisticsTotalDiscreteContactPairsAnyShape )
+	, ParticlesGpuMeshCacheSize( "ParticlesGpuMeshCacheSize", setPxSimulationStatisticsParticlesGpuMeshCacheSize, getPxSimulationStatisticsParticlesGpuMeshCacheSize )
+	, ParticlesGpuMeshCacheUsed( "ParticlesGpuMeshCacheUsed", setPxSimulationStatisticsParticlesGpuMeshCacheUsed, getPxSimulationStatisticsParticlesGpuMeshCacheUsed )
+	, ParticlesGpuMeshCacheHitrate( "ParticlesGpuMeshCacheHitrate", setPxSimulationStatisticsParticlesGpuMeshCacheHitrate, getPxSimulationStatisticsParticlesGpuMeshCacheHitrate )
 {}
 PX_PHYSX_CORE_API PxSimulationStatisticsGeneratedValues::PxSimulationStatisticsGeneratedValues( const PxSimulationStatistics* inSource )
-		:NumActiveConstraints( inSource->numActiveConstraints )
-		,NumActiveDynamicBodies( inSource->numActiveDynamicBodies )
-		,NumActiveKinematicBodies( inSource->numActiveKinematicBodies )
-		,NumStaticBodies( inSource->numStaticBodies )
-		,NumDynamicBodies( inSource->numDynamicBodies )
-		,NumAxisSolverConstraints( inSource->numAxisSolverConstraints )
+		:NbActiveConstraints( inSource->nbActiveConstraints )
+		,NbActiveDynamicBodies( inSource->nbActiveDynamicBodies )
+		,NbActiveKinematicBodies( inSource->nbActiveKinematicBodies )
+		,NbStaticBodies( inSource->nbStaticBodies )
+		,NbDynamicBodies( inSource->nbDynamicBodies )
+		,NbAxisSolverConstraints( inSource->nbAxisSolverConstraints )
+		,CompressedContactSize( inSource->compressedContactSize )
+		,RequiredContactConstraintMemory( inSource->requiredContactConstraintMemory )
+		,PeakConstraintMemory( inSource->peakConstraintMemory )
+		,TotalDiscreteContactPairsAnyShape( inSource->totalDiscreteContactPairsAnyShape )
+		,ParticlesGpuMeshCacheSize( inSource->particlesGpuMeshCacheSize )
+		,ParticlesGpuMeshCacheUsed( inSource->particlesGpuMeshCacheUsed )
+		,ParticlesGpuMeshCacheHitrate( inSource->particlesGpuMeshCacheHitrate )
 {
-	physx::shdfnd::memCopy( NumDiscreteContactPairs, inSource->numDiscreteContactPairs, sizeof( NumDiscreteContactPairs ) );
-	physx::shdfnd::memCopy( NumModifiedContactPairs, inSource->numModifiedContactPairs, sizeof( NumModifiedContactPairs ) );
-	physx::shdfnd::memCopy( NumSweptIntegrationPairs, inSource->numSweptIntegrationPairs, sizeof( NumSweptIntegrationPairs ) );
-	physx::shdfnd::memCopy( NumTriggerPairs, inSource->numTriggerPairs, sizeof( NumTriggerPairs ) );
-	physx::shdfnd::memCopy( NumBroadPhaseAdds, inSource->numBroadPhaseAdds, sizeof( NumBroadPhaseAdds ) );
-	physx::shdfnd::memCopy( NumBroadPhaseRemoves, inSource->numBroadPhaseRemoves, sizeof( NumBroadPhaseRemoves ) );
-	physx::shdfnd::memCopy( NumShapes, inSource->numShapes, sizeof( NumShapes ) );
+	PX_UNUSED(inSource);
+	PxMemCopy( NbDiscreteContactPairs, inSource->nbDiscreteContactPairs, sizeof( NbDiscreteContactPairs ) );
+	PxMemCopy( NbModifiedContactPairs, inSource->nbModifiedContactPairs, sizeof( NbModifiedContactPairs ) );
+	PxMemCopy( NbCCDPairs, inSource->nbCCDPairs, sizeof( NbCCDPairs ) );
+	PxMemCopy( NbTriggerPairs, inSource->nbTriggerPairs, sizeof( NbTriggerPairs ) );
+	PxMemCopy( NbBroadPhaseAdds, inSource->nbBroadPhaseAdds, sizeof( NbBroadPhaseAdds ) );
+	PxMemCopy( NbBroadPhaseRemoves, inSource->nbBroadPhaseRemoves, sizeof( NbBroadPhaseRemoves ) );
+	PxMemCopy( NbShapes, inSource->nbShapes, sizeof( NbShapes ) );
 }
 PX_PHYSX_CORE_API PxLockedDataGeneratedInfo::PxLockedDataGeneratedInfo()
 {}
 PX_PHYSX_CORE_API PxLockedDataGeneratedValues::PxLockedDataGeneratedValues( const PxLockedData* inSource )
 {
+	PX_UNUSED(inSource);
 }
-inline PxU32 getPxParticleReadDataNumValidParticles( const PxParticleReadData* inOwner ) { return inOwner->numValidParticles; }
-inline void setPxParticleReadDataNumValidParticles( PxParticleReadData* inOwner, PxU32 inData) { inOwner->numValidParticles = inData; }
+inline PxU32 getPxParticleReadDataNbValidParticles( const PxParticleReadData* inOwner ) { return inOwner->nbValidParticles; }
+inline void setPxParticleReadDataNbValidParticles( PxParticleReadData* inOwner, PxU32 inData) { inOwner->nbValidParticles = inData; }
 inline PxU32 getPxParticleReadDataValidParticleRange( const PxParticleReadData* inOwner ) { return inOwner->validParticleRange; }
 inline void setPxParticleReadDataValidParticleRange( PxParticleReadData* inOwner, PxU32 inData) { inOwner->validParticleRange = inData; }
 inline const PxU32 * getPxParticleReadDataValidParticleBitmap( const PxParticleReadData* inOwner ) { return inOwner->validParticleBitmap; }
@@ -1123,8 +1379,10 @@ inline PxStrideIterator<const PxParticleFlags> getPxParticleReadDataFlagsBuffer(
 inline void setPxParticleReadDataFlagsBuffer( PxParticleReadData* inOwner, PxStrideIterator<const PxParticleFlags> inData) { inOwner->flagsBuffer = inData; }
 inline PxStrideIterator<const PxVec3> getPxParticleReadDataCollisionNormalBuffer( const PxParticleReadData* inOwner ) { return inOwner->collisionNormalBuffer; }
 inline void setPxParticleReadDataCollisionNormalBuffer( PxParticleReadData* inOwner, PxStrideIterator<const PxVec3> inData) { inOwner->collisionNormalBuffer = inData; }
+inline PxStrideIterator<const PxVec3> getPxParticleReadDataCollisionVelocityBuffer( const PxParticleReadData* inOwner ) { return inOwner->collisionVelocityBuffer; }
+inline void setPxParticleReadDataCollisionVelocityBuffer( PxParticleReadData* inOwner, PxStrideIterator<const PxVec3> inData) { inOwner->collisionVelocityBuffer = inData; }
 PX_PHYSX_CORE_API PxParticleReadDataGeneratedInfo::PxParticleReadDataGeneratedInfo()
-	: NumValidParticles( "NumValidParticles", setPxParticleReadDataNumValidParticles, getPxParticleReadDataNumValidParticles )
+	: NbValidParticles( "NbValidParticles", setPxParticleReadDataNbValidParticles, getPxParticleReadDataNbValidParticles )
 	, ValidParticleRange( "ValidParticleRange", setPxParticleReadDataValidParticleRange, getPxParticleReadDataValidParticleRange )
 	, ValidParticleBitmap( "ValidParticleBitmap", setPxParticleReadDataValidParticleBitmap, getPxParticleReadDataValidParticleBitmap )
 	, PositionBuffer( "PositionBuffer", setPxParticleReadDataPositionBuffer, getPxParticleReadDataPositionBuffer )
@@ -1132,10 +1390,11 @@ PX_PHYSX_CORE_API PxParticleReadDataGeneratedInfo::PxParticleReadDataGeneratedIn
 	, RestOffsetBuffer( "RestOffsetBuffer", setPxParticleReadDataRestOffsetBuffer, getPxParticleReadDataRestOffsetBuffer )
 	, FlagsBuffer( "FlagsBuffer", setPxParticleReadDataFlagsBuffer, getPxParticleReadDataFlagsBuffer )
 	, CollisionNormalBuffer( "CollisionNormalBuffer", setPxParticleReadDataCollisionNormalBuffer, getPxParticleReadDataCollisionNormalBuffer )
+	, CollisionVelocityBuffer( "CollisionVelocityBuffer", setPxParticleReadDataCollisionVelocityBuffer, getPxParticleReadDataCollisionVelocityBuffer )
 {}
 PX_PHYSX_CORE_API PxParticleReadDataGeneratedValues::PxParticleReadDataGeneratedValues( const PxParticleReadData* inSource )
 		:PxLockedDataGeneratedValues( inSource )
-		,NumValidParticles( inSource->numValidParticles )
+		,NbValidParticles( inSource->nbValidParticles )
 		,ValidParticleRange( inSource->validParticleRange )
 		,ValidParticleBitmap( inSource->validParticleBitmap )
 		,PositionBuffer( inSource->positionBuffer )
@@ -1143,19 +1402,76 @@ PX_PHYSX_CORE_API PxParticleReadDataGeneratedValues::PxParticleReadDataGenerated
 		,RestOffsetBuffer( inSource->restOffsetBuffer )
 		,FlagsBuffer( inSource->flagsBuffer )
 		,CollisionNormalBuffer( inSource->collisionNormalBuffer )
+		,CollisionVelocityBuffer( inSource->collisionVelocityBuffer )
 {
+	PX_UNUSED(inSource);
 }
-inline const PxClothParticle * getPxClothReadDataParticles( const PxClothReadData* inOwner ) { return inOwner->particles; }
-inline void setPxClothReadDataParticles( PxClothReadData* inOwner, const PxClothParticle * inData) { inOwner->particles = inData; }
-inline const PxClothParticle * getPxClothReadDataPreviousParticles( const PxClothReadData* inOwner ) { return inOwner->previousParticles; }
-inline void setPxClothReadDataPreviousParticles( PxClothReadData* inOwner, const PxClothParticle * inData) { inOwner->previousParticles = inData; }
-PX_PHYSX_CORE_API PxClothReadDataGeneratedInfo::PxClothReadDataGeneratedInfo()
-	: Particles( "Particles", setPxClothReadDataParticles, getPxClothReadDataParticles )
-	, PreviousParticles( "PreviousParticles", setPxClothReadDataPreviousParticles, getPxClothReadDataPreviousParticles )
+inline PxReal getPxClothStretchConfigStiffness( const PxClothStretchConfig* inOwner ) { return inOwner->stiffness; }
+inline void setPxClothStretchConfigStiffness( PxClothStretchConfig* inOwner, PxReal inData) { inOwner->stiffness = inData; }
+inline PxReal getPxClothStretchConfigStiffnessMultiplier( const PxClothStretchConfig* inOwner ) { return inOwner->stiffnessMultiplier; }
+inline void setPxClothStretchConfigStiffnessMultiplier( PxClothStretchConfig* inOwner, PxReal inData) { inOwner->stiffnessMultiplier = inData; }
+inline PxReal getPxClothStretchConfigCompressionLimit( const PxClothStretchConfig* inOwner ) { return inOwner->compressionLimit; }
+inline void setPxClothStretchConfigCompressionLimit( PxClothStretchConfig* inOwner, PxReal inData) { inOwner->compressionLimit = inData; }
+inline PxReal getPxClothStretchConfigStretchLimit( const PxClothStretchConfig* inOwner ) { return inOwner->stretchLimit; }
+inline void setPxClothStretchConfigStretchLimit( PxClothStretchConfig* inOwner, PxReal inData) { inOwner->stretchLimit = inData; }
+PX_PHYSX_CORE_API PxClothStretchConfigGeneratedInfo::PxClothStretchConfigGeneratedInfo()
+	: Stiffness( "Stiffness", setPxClothStretchConfigStiffness, getPxClothStretchConfigStiffness )
+	, StiffnessMultiplier( "StiffnessMultiplier", setPxClothStretchConfigStiffnessMultiplier, getPxClothStretchConfigStiffnessMultiplier )
+	, CompressionLimit( "CompressionLimit", setPxClothStretchConfigCompressionLimit, getPxClothStretchConfigCompressionLimit )
+	, StretchLimit( "StretchLimit", setPxClothStretchConfigStretchLimit, getPxClothStretchConfigStretchLimit )
 {}
-PX_PHYSX_CORE_API PxClothReadDataGeneratedValues::PxClothReadDataGeneratedValues( const PxClothReadData* inSource )
+PX_PHYSX_CORE_API PxClothStretchConfigGeneratedValues::PxClothStretchConfigGeneratedValues( const PxClothStretchConfig* inSource )
+		:Stiffness( inSource->stiffness )
+		,StiffnessMultiplier( inSource->stiffnessMultiplier )
+		,CompressionLimit( inSource->compressionLimit )
+		,StretchLimit( inSource->stretchLimit )
+{
+	PX_UNUSED(inSource);
+}
+inline PxReal getPxClothTetherConfigStiffness( const PxClothTetherConfig* inOwner ) { return inOwner->stiffness; }
+inline void setPxClothTetherConfigStiffness( PxClothTetherConfig* inOwner, PxReal inData) { inOwner->stiffness = inData; }
+inline PxReal getPxClothTetherConfigStretchLimit( const PxClothTetherConfig* inOwner ) { return inOwner->stretchLimit; }
+inline void setPxClothTetherConfigStretchLimit( PxClothTetherConfig* inOwner, PxReal inData) { inOwner->stretchLimit = inData; }
+PX_PHYSX_CORE_API PxClothTetherConfigGeneratedInfo::PxClothTetherConfigGeneratedInfo()
+	: Stiffness( "Stiffness", setPxClothTetherConfigStiffness, getPxClothTetherConfigStiffness )
+	, StretchLimit( "StretchLimit", setPxClothTetherConfigStretchLimit, getPxClothTetherConfigStretchLimit )
+{}
+PX_PHYSX_CORE_API PxClothTetherConfigGeneratedValues::PxClothTetherConfigGeneratedValues( const PxClothTetherConfig* inSource )
+		:Stiffness( inSource->stiffness )
+		,StretchLimit( inSource->stretchLimit )
+{
+	PX_UNUSED(inSource);
+}
+inline PxReal getPxClothMotionConstraintConfigScale( const PxClothMotionConstraintConfig* inOwner ) { return inOwner->scale; }
+inline void setPxClothMotionConstraintConfigScale( PxClothMotionConstraintConfig* inOwner, PxReal inData) { inOwner->scale = inData; }
+inline PxReal getPxClothMotionConstraintConfigBias( const PxClothMotionConstraintConfig* inOwner ) { return inOwner->bias; }
+inline void setPxClothMotionConstraintConfigBias( PxClothMotionConstraintConfig* inOwner, PxReal inData) { inOwner->bias = inData; }
+inline PxReal getPxClothMotionConstraintConfigStiffness( const PxClothMotionConstraintConfig* inOwner ) { return inOwner->stiffness; }
+inline void setPxClothMotionConstraintConfigStiffness( PxClothMotionConstraintConfig* inOwner, PxReal inData) { inOwner->stiffness = inData; }
+PX_PHYSX_CORE_API PxClothMotionConstraintConfigGeneratedInfo::PxClothMotionConstraintConfigGeneratedInfo()
+	: Scale( "Scale", setPxClothMotionConstraintConfigScale, getPxClothMotionConstraintConfigScale )
+	, Bias( "Bias", setPxClothMotionConstraintConfigBias, getPxClothMotionConstraintConfigBias )
+	, Stiffness( "Stiffness", setPxClothMotionConstraintConfigStiffness, getPxClothMotionConstraintConfigStiffness )
+{}
+PX_PHYSX_CORE_API PxClothMotionConstraintConfigGeneratedValues::PxClothMotionConstraintConfigGeneratedValues( const PxClothMotionConstraintConfig* inSource )
+		:Scale( inSource->scale )
+		,Bias( inSource->bias )
+		,Stiffness( inSource->stiffness )
+{
+	PX_UNUSED(inSource);
+}
+inline PxClothParticle * getPxClothParticleDataParticles( const PxClothParticleData* inOwner ) { return inOwner->particles; }
+inline void setPxClothParticleDataParticles( PxClothParticleData* inOwner, PxClothParticle * inData) { inOwner->particles = inData; }
+inline PxClothParticle * getPxClothParticleDataPreviousParticles( const PxClothParticleData* inOwner ) { return inOwner->previousParticles; }
+inline void setPxClothParticleDataPreviousParticles( PxClothParticleData* inOwner, PxClothParticle * inData) { inOwner->previousParticles = inData; }
+PX_PHYSX_CORE_API PxClothParticleDataGeneratedInfo::PxClothParticleDataGeneratedInfo()
+	: Particles( "Particles", setPxClothParticleDataParticles, getPxClothParticleDataParticles )
+	, PreviousParticles( "PreviousParticles", setPxClothParticleDataPreviousParticles, getPxClothParticleDataPreviousParticles )
+{}
+PX_PHYSX_CORE_API PxClothParticleDataGeneratedValues::PxClothParticleDataGeneratedValues( const PxClothParticleData* inSource )
 		:PxLockedDataGeneratedValues( inSource )
 		,Particles( inSource->particles )
 		,PreviousParticles( inSource->previousParticles )
 {
+	PX_UNUSED(inSource);
 }

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,7 @@
 @{
 */
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "foundation/PxMat33.h"
 
 #ifndef PX_DOXYGEN
@@ -53,11 +53,24 @@ The scaling is along arbitrary axes that are specified by PxMeshScale::rotation.
 */
 class PxMeshScale
 {
+//= ATTENTION! =====================================================================================
+// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+// accordingly.
+//==================================================================================================
 public:
 	/**
 	\brief Constructor initializes to identity scale.
 	*/
-	PX_CUDA_CALLABLE PX_FORCE_INLINE PxMeshScale(): scale(PxVec3(1.0f, 1.0f, 1.0f)), rotation(PxQuat::createIdentity()) 
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxMeshScale(): scale(1.0f), rotation(PxIdentity) 
+	{
+	}
+
+	/**
+	\brief Constructor from scalar.
+	*/
+	explicit PX_CUDA_CALLABLE PX_FORCE_INLINE PxMeshScale(PxReal r): scale(r), rotation(PxIdentity) 
 	{
 	}
 
@@ -89,11 +102,12 @@ public:
 	}
 
 	/**
+	\deprecated
 	\brief Returns the identity scaling transformation.
 	*/
-	static PX_CUDA_CALLABLE PX_FORCE_INLINE PxMeshScale createIdentity()
+	PX_DEPRECATED static PX_CUDA_CALLABLE PX_FORCE_INLINE PxMeshScale createIdentity()
 	{
-		return PxMeshScale(PxVec3(1.0f, 1.0f, 1.0f),PxQuat::createIdentity());
+		return PxMeshScale(1.0f);
 	}
 
 	/**
@@ -110,8 +124,15 @@ public:
 	}
 
 
+	PxVec3		transform(const PxVec3& v) const
+	{
+		return rotation.rotateInv(scale.multiply(rotation.rotate(v)));
+	}
+
 	PxVec3		scale;		//!< A nonuniform scaling
 	PxQuat		rotation;	//!< The orientation of the scaling axes
+
+
 };
 
 #ifndef PX_DOXYGEN

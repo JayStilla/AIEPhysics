@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 
 
@@ -111,7 +111,7 @@ namespace physx { namespace debugger {
 			InternalStop = 64,
 #define DECLARE_BASE_PVD_TYPE( type ) type,
 	#include "physxvisualdebuggersdk/PvdObjectModelBaseTypeDefs.h"
-			Last,
+			Last
 #undef DECLARE_BASE_PVD_TYPE
 		};
 	};
@@ -220,7 +220,7 @@ namespace physx { namespace debugger {
 	template<> struct BaseDataTypeToTypeMap<const type&> { enum Enum { BaseTypeEnum = PvdBaseType::type }; };	\
 	template<> struct BaseTypeToDataTypeMap<PvdBaseType::type> { typedef type TDataType; };						\
 	template<> struct PvdDataTypeToNamespacedNameMap<type> { NamespacedName Name; PvdDataTypeToNamespacedNameMap<type>() : Name( "physx3", #type ) {} }; \
-	template<> struct PvdDataTypeToNamespacedNameMap<const type&> { NamespacedName Name; PvdDataTypeToNamespacedNameMap<const type&>() : Name( "physx3", #type ) {} }; 
+	template<> struct PvdDataTypeToNamespacedNameMap<const type&> { NamespacedName Name; PvdDataTypeToNamespacedNameMap<const type&>() : Name( "physx3", #type ) {} };
 
 	#include "physxvisualdebuggersdk/PvdObjectModelBaseTypeDefs.h"
 #undef DECLARE_BASE_PVD_TYPE
@@ -234,7 +234,7 @@ namespace physx { namespace debugger {
 #define DEFINE_PVD_TYPE_ALIAS( newType, oldType ) \
 	template<> struct PvdDataTypeToNamespacedNameMap<newType> { NamespacedName Name; PvdDataTypeToNamespacedNameMap<newType>() : Name( PvdDataTypeToNamespacedNameMap<oldType>().Name ) {} };
 
-DEFINE_PVD_TYPE_ALIAS( const void*, void* );
+DEFINE_PVD_TYPE_ALIAS( const void*, void* )
 
 
 	struct ArrayData
@@ -314,7 +314,7 @@ DEFINE_PVD_TYPE_ALIAS( const void*, void* );
 		{
 			Unknown = 0,
 			Scalar,
-			Array,
+			Array
 		};
 	};
 

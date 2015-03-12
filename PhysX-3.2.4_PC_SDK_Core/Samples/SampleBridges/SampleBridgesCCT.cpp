@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -55,21 +55,21 @@ void SampleBridges::collectInputEvents(std::vector<const InputEvent*>& inputEven
 	getApplication().getPlatform()->getSampleUserInput()->unregisterInputEvent(VARIABLE_TIMESTEP);
 
 	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(RETRY,			WKEY_R,	XKEY_R,	PS3KEY_R,	AKEY_UNKNOWN,	OSXKEY_R,	PSP2KEY_UNKNOWN,    IKEY_UNKNOWN,	LINUXKEY_R);
-	DIGITAL_INPUT_EVENT_DEF(TELEPORT,		WKEY_T,	XKEY_T,	PS3KEY_T,	AKEY_UNKNOWN,	OSXKEY_T,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_T);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_LINK,	WKEY_X,	XKEY_X,	PS3KEY_X,	AKEY_UNKNOWN,	OSXKEY_X,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_X);
-	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER,	WKEY_J,	XKEY_J,	PS3KEY_J,	AKEY_UNKNOWN,	OSXKEY_J,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_J);
+	DIGITAL_INPUT_EVENT_DEF(RETRY,			WKEY_R,		XKEY_R,		X1KEY_R,	PS3KEY_R,	PS4KEY_R,	AKEY_UNKNOWN,	OSXKEY_R,	PSP2KEY_UNKNOWN,    IKEY_UNKNOWN,	LINUXKEY_R,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(TELEPORT,		WKEY_T,		XKEY_T,		X1KEY_T,	PS3KEY_T,	PS4KEY_T,	AKEY_UNKNOWN,	OSXKEY_T,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_T,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_LINK,	WKEY_X,		XKEY_X,		X1KEY_X,	PS3KEY_X,	PS4KEY_X,	AKEY_UNKNOWN,	OSXKEY_X,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_X,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER,	WKEY_J,		XKEY_J,		X1KEY_J,	PS3KEY_J,	PS4KEY_J,	AKEY_UNKNOWN,	OSXKEY_J,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_J,	WIIUKEY_UNKNOWN);
 
 	// gamepad events
-	DIGITAL_INPUT_EVENT_DEF(RETRY,			GAMEPAD_DIGI_LEFT,  GAMEPAD_DIGI_LEFT,  GAMEPAD_DIGI_LEFT,  AKEY_UNKNOWN, OSXKEY_UNKNOWN, GAMEPAD_DIGI_LEFT,    IKEY_UNKNOWN, LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(TELEPORT,		GAMEPAD_DIGI_RIGHT, GAMEPAD_DIGI_RIGHT, GAMEPAD_DIGI_RIGHT, AKEY_UNKNOWN, OSXKEY_UNKNOWN, GAMEPAD_DIGI_RIGHT,   IKEY_UNKNOWN, LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_LINK,	GAMEPAD_DIGI_DOWN,  GAMEPAD_DIGI_DOWN,  GAMEPAD_DIGI_DOWN,  AKEY_UNKNOWN, OSXKEY_UNKNOWN, PSP2KEY_UNKNOWN,      IKEY_UNKNOWN, LINUXKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(RETRY,			GAMEPAD_DIGI_LEFT,  GAMEPAD_DIGI_LEFT,  GAMEPAD_DIGI_LEFT,  GAMEPAD_DIGI_LEFT,  GAMEPAD_DIGI_LEFT,  AKEY_UNKNOWN, OSXKEY_UNKNOWN, GAMEPAD_DIGI_LEFT,    IKEY_UNKNOWN, LINUXKEY_UNKNOWN, GAMEPAD_DIGI_LEFT);
+	DIGITAL_INPUT_EVENT_DEF(TELEPORT,		GAMEPAD_DIGI_RIGHT, GAMEPAD_DIGI_RIGHT, GAMEPAD_DIGI_RIGHT, GAMEPAD_DIGI_RIGHT, GAMEPAD_DIGI_RIGHT, AKEY_UNKNOWN, OSXKEY_UNKNOWN, GAMEPAD_DIGI_RIGHT,   IKEY_UNKNOWN, LINUXKEY_UNKNOWN, GAMEPAD_DIGI_RIGHT);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_LINK,	GAMEPAD_DIGI_DOWN,  GAMEPAD_DIGI_DOWN,  GAMEPAD_DIGI_DOWN,  GAMEPAD_DIGI_DOWN,  GAMEPAD_DIGI_DOWN,  AKEY_UNKNOWN, OSXKEY_UNKNOWN, PSP2KEY_UNKNOWN,      IKEY_UNKNOWN, LINUXKEY_UNKNOWN,	GAMEPAD_DIGI_DOWN);
     
     //touch events
-    TOUCH_INPUT_EVENT_DEF(RETRY,			"Retry",		ABUTTON_5,			IBUTTON_5);
-	TOUCH_INPUT_EVENT_DEF(TELEPORT,         "Teleport",		ABUTTON_6,          IBUTTON_6);
-	TOUCH_INPUT_EVENT_DEF(CAMERA_CROUCH,    "Crouch",		ABUTTON_7,          IBUTTON_7);
-    TOUCH_INPUT_EVENT_DEF(CAMERA_JUMP,      "Jump",			AQUICK_BUTTON_1,    IQUICK_BUTTON_1);
+    TOUCH_INPUT_EVENT_DEF(RETRY,			"Retry",		ABUTTON_5,			IBUTTON_5, TOUCH_BUTTON_5);
+	TOUCH_INPUT_EVENT_DEF(TELEPORT,         "Teleport",		ABUTTON_6,          IBUTTON_6, TOUCH_BUTTON_6);
+	TOUCH_INPUT_EVENT_DEF(CAMERA_CROUCH,    "Crouch",		ABUTTON_7,          IBUTTON_7, TOUCH_BUTTON_7);
+    TOUCH_INPUT_EVENT_DEF(CAMERA_JUMP,      "Jump",			AQUICK_BUTTON_1,    IQUICK_BUTTON_1, TOUCH_QUICK_BUTTON_1);
 }
 
 PxU32 SampleBridges::getDebugObjectTypes() const
@@ -77,7 +77,7 @@ PxU32 SampleBridges::getDebugObjectTypes() const
 	return DEBUG_OBJECT_BOX | DEBUG_OBJECT_SPHERE | DEBUG_OBJECT_CAPSULE | DEBUG_OBJECT_CONVEX;
 }
 
-bool SampleBridges::onDigitalInputEvent(const InputEvent& ie, bool val)
+void SampleBridges::onDigitalInputEvent(const InputEvent& ie, bool val)
 {
 	switch (ie.m_Id)
 	{
@@ -106,10 +106,11 @@ bool SampleBridges::onDigitalInputEvent(const InputEvent& ie, bool val)
 				mCurrentPlatform = 0;
 		}
 		const KinematicPlatform* platform = mPlatformManager.getPlatforms()[mCurrentPlatform];
+		const float y = 3.0f;
 	#ifdef PLATFORMS_AS_OBSTACLES
-		mActor->teleport(platform->getRenderPose().p+PxVec3(0.0f, 6.0f, 0.0f));
+		mActor->teleport(platform->getRenderPose().p+PxVec3(0.0f, y, 0.0f));
 	#else
-		mActor->teleport(platform->getPhysicsPose().p+PxVec3(0.0f, 6.0f, 0.0f));
+		mActor->teleport(platform->getPhysicsPose().p+PxVec3(0.0f, y, 0.0f));
 	#endif
 #endif
 			}
@@ -133,8 +134,6 @@ bool SampleBridges::onDigitalInputEvent(const InputEvent& ie, bool val)
 	}
 
 	PhysXSample::onDigitalInputEvent(ie,val);
-
-	return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -152,7 +151,8 @@ static PxFilterFlags SampleBridgesFilterShader(	PxFilterObjectAttributes attribu
 
 void SampleBridges::customizeSceneDesc(PxSceneDesc& sceneDesc)
 {
-	sceneDesc.filterShader				= SampleBridgesFilterShader;
+	sceneDesc.filterShader	= SampleBridgesFilterShader;
+	sceneDesc.flags			|= PxSceneFlag::eREQUIRE_RW_LOCK;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -163,9 +163,9 @@ void SampleBridges::onShapeHit(const PxControllerShapeHit& hit)
 	defaultCCTInteraction(hit);
 }
 
-PxU32 SampleBridges::getBehaviorFlags(const PxShape& shape)
+PxControllerBehaviorFlags SampleBridges::getBehaviorFlags(const PxShape& shape, const PxActor& actor)
 {
-	const char* actorName = shape.getActor().getName();
+	const char* actorName = actor.getName();
 #ifdef PLATFORMS_AS_OBSTACLES
 	PX_ASSERT(actorName!=gPlatformName);	// PT: in this mode we should have filtered out those guys already
 #endif
@@ -178,23 +178,23 @@ PxU32 SampleBridges::getBehaviorFlags(const PxShape& shape)
 	if(actorName==gPlatformName)
 		return PxControllerBehaviorFlag::eCCT_CAN_RIDE_ON_OBJECT|PxControllerBehaviorFlag::eCCT_SLIDE;
 
-	return 0;
+	return PxControllerBehaviorFlags(0);
 }
 
-PxU32 SampleBridges::getBehaviorFlags(const PxController&)
+PxControllerBehaviorFlags SampleBridges::getBehaviorFlags(const PxController&)
 {
-	return 0;
+	return PxControllerBehaviorFlags(0);
 }
 
-PxU32 SampleBridges::getBehaviorFlags(const PxObstacle&)
+PxControllerBehaviorFlags SampleBridges::getBehaviorFlags(const PxObstacle&)
 {
 	return PxControllerBehaviorFlag::eCCT_CAN_RIDE_ON_OBJECT|PxControllerBehaviorFlag::eCCT_SLIDE;
 }
 
-PxSceneQueryHitType::Enum SampleBridges::preFilter(const PxFilterData& filterData, PxShape* shape, PxSceneQueryFilterFlags& filterFlags)
+PxSceneQueryHitType::Enum SampleBridges::preFilter(const PxFilterData& filterData, const PxShape* shape, const PxRigidActor* actor, PxSceneQueryFlags& queryFlags)
 {
 #ifdef PLATFORMS_AS_OBSTACLES
-	const char* actorName = shape->getActor().getName();
+	const char* actorName = shape->getActor()->getName();
 	if(actorName==gPlatformName)
 		return PxSceneQueryHitType::eNONE;
 #endif

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -76,10 +76,11 @@ class SampleNorthPole : public PhysXSample,
 
 		// Implements SampleApplication
 		virtual	void							onInit();
+        virtual	void						    onInit(bool restart) { onInit(); }
 		virtual	void							onShutdown();
 		virtual	void							onTickPreRender(PxReal dtime);
 		virtual void							onPointerInputEvent(const SampleFramework::InputEvent& ie, physx::PxU32 x, physx::PxU32 y, physx::PxReal dx, physx::PxReal dy, bool val);
-		virtual bool							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);		
+		virtual void							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);		
 		virtual void							collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents);
 		
 		///////////////////////////////////////////////////////////////////////////////
@@ -108,9 +109,9 @@ class SampleNorthPole : public PhysXSample,
 		virtual void							onObstacleHit(const PxControllerObstacleHit& hit)	{}
 
 		// Implements PxControllerBehaviorCallback
-		virtual PxU32							getBehaviorFlags(const PxShape&)		{ return 0;	}
-		virtual PxU32							getBehaviorFlags(const PxController&)	{ return 0;	}
-		virtual PxU32							getBehaviorFlags(const PxObstacle&)		{ return 0;	}
+		virtual PxControllerBehaviorFlags		getBehaviorFlags(const PxShape&, const PxActor&)	{ return PxControllerBehaviorFlags(0);	}
+		virtual PxControllerBehaviorFlags		getBehaviorFlags(const PxController&)				{ return PxControllerBehaviorFlags(0);	}
+		virtual PxControllerBehaviorFlags		getBehaviorFlags(const PxObstacle&)					{ return PxControllerBehaviorFlags(0);	}
 
 		///////////////////////////////////////////////////////////////////////////////
 
@@ -149,7 +150,7 @@ class SampleNorthPole : public PhysXSample,
 		static	void							setDetachable(PxShape& shape);
 		static	bool							isDetachable(PxFilterData& filterData);
 		static	bool							needsContactReport(const PxFilterData& filterData0, const PxFilterData& filterData1);
-		static	void							setCCDActive(PxShape& shape);
+		static	void							setCCDActive(PxShape& shape, PxRigidBody* rigidBody);
 		static	bool							isCCDActive(PxFilterData& filterData);
 				void							detach();
 				std::vector<PxShape*>			mDetaching;

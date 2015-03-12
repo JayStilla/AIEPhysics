@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -43,10 +43,14 @@ namespace shdfnd
 	class InlineAllocator : private BaseAllocator
 	{
 	public:
-		InlineAllocator(const PxEmpty& v) : BaseAllocator(v)	{}
+		InlineAllocator(const PxEMPTY& v) : BaseAllocator(v)	{}
 
 		InlineAllocator(const BaseAllocator& alloc = BaseAllocator())
 			: BaseAllocator(alloc), mBufferUsed(false)
+		{}
+
+		InlineAllocator(const InlineAllocator& aloc)
+			: BaseAllocator(aloc), mBufferUsed(false)
 		{}
 
 		void* allocate(PxU32 size, const char* filename, int line)

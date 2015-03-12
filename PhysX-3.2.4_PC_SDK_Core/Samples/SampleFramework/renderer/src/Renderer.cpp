@@ -1,43 +1,43 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
+#include "RendererFoundation.h"
 #include <Renderer.h>
 #include <RendererDesc.h>
 #include "ogl/OGLRenderer.h"
 #include "gles2/GLES2Renderer.h"
 #include "d3d9/D3D9Renderer.h"
-#include "gxm/GXMRenderer.h"
+#if defined(RENDERER_ENABLE_LIBGNM)
+#include "ps4/GnmRenderer.h"
+#endif
+#if defined(RENDERER_ENABLE_LIBGXM)
+#include "psp2/GXMRenderer.h"
+#endif
+#include "d3d11/D3D11Renderer.h"
+#include "null/NULLRenderer.h"
 #include <RendererMesh.h>
 #include <RendererMeshContext.h>
 
@@ -59,6 +59,12 @@
 #include "PsUtilities.h"
 
 #include <algorithm>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#include "PsUtilities.h"
+#include "extensions/PxDefaultStreams.h"
 
 #if defined(RENDERER_ANDROID)
 #include <android/AndroidSampleUserInputIds.h>
@@ -90,9 +96,12 @@ using namespace SampleRenderer;
 const PxReal gControlSizeRelative = 0.16f;
 const PxReal gControlMarginRelative = 0.08f;
 const PxU8 CONTROL_COUNT = 2;
+
+const PxU8 TEXT_HEIGHT = 16;
+const PxU8 TEXT_VERTICAL_SPACING = TEXT_HEIGHT / 4;
 #endif
 
-Renderer *Renderer::createRenderer(const RendererDesc &desc, const char* assetDir)
+Renderer *Renderer::createRenderer(const RendererDesc &desc, const char* assetDir, bool enableMaterialCaching)
 {
 	Renderer *renderer = 0;
 	const bool valid = desc.isValid();
@@ -103,6 +112,8 @@ Renderer *Renderer::createRenderer(const RendererDesc &desc, const char* assetDi
 		case DRIVER_GLES2:
 #if defined(RENDERER_ENABLE_GLES2)
 			renderer = new GLES2Renderer(desc, assetDir);
+			// disable material caching, not implemented!
+			enableMaterialCaching = false;
 #endif
 			break;
 
@@ -118,27 +129,43 @@ Renderer *Renderer::createRenderer(const RendererDesc &desc, const char* assetDi
 #endif
 			break;
 
-		case DRIVER_DIRECT3D10:
-#if defined(RENDERER_ENABLE_DIRECT3D10)
-
+		case DRIVER_DIRECT3D11:
+#if defined(RENDERER_ENABLE_DIRECT3D11)
+			renderer = new D3D11Renderer(desc, assetDir);
 #endif
 			break;
 
 		case DRIVER_LIBGCM:
 #if defined(RENDERER_ENABLE_LIBGCM)
+			// not implemented, PS3 should use OpenGL
+#endif
+			break;
 
+		case DRIVER_LIBGNM:
+#if defined(RENDERER_ENABLE_LIBGNM)
+			renderer = new GnmRenderer(desc, assetDir);
+			// disable material caching, not implemented!
+			enableMaterialCaching = false;
 #endif
+			break;
+
 		case DRIVER_LIBGXM:
-			{
 #if defined(RENDERER_ENABLE_LIBGXM)
-				renderer = new GXMRenderer(desc, assetDir);
+			renderer = new GXMRenderer(desc, assetDir);
+			// disable material caching, not implemented!
+			enableMaterialCaching = false;
 #endif
-			}
+			break;
+
+		case DRIVER_NULL:
+			renderer = new NullRenderer(desc,assetDir);
 			break;
 		}
 
 		if(renderer)
-			renderer->setErrorCallback(desc.errorCallback);
+		{
+			renderer->setEnableMaterialCaching(enableMaterialCaching);
+		}
 	}
 	if(renderer && !renderer->isOk())
 	{
@@ -157,45 +184,43 @@ const char *Renderer::getDriverTypeName(DriverType type)
 	case DRIVER_OPENGL:     name = "OpenGL";			break;
 	case DRIVER_GLES2:      name = "OpenGL ES 2.0";     break;
 	case DRIVER_DIRECT3D9:  name = "Direct3D9";			break;
-	case DRIVER_DIRECT3D10: name = "Direct3D10";		break;
+	case DRIVER_DIRECT3D11: name = "Direct3D11"; break;
 	case DRIVER_LIBGCM:     name = "LibGCM";			break;
+	case DRIVER_LIBGNM:		name = "LibGNM";	 break;
 	case DRIVER_LIBGXM:		name = "LibGXM";	 break;
+	case DRIVER_NULL:		name = "NullRenderer";	 break;
 	}
 	RENDERER_ASSERT(name, "Unable to find Name String for Renderer Driver Type.");
 	return name;
 }
 
 
-Renderer::Renderer(DriverType driver, const char* assetDir) :
-	m_driver							(driver),	
+Renderer::Renderer(DriverType driver, PxErrorCallback* errorCallback, const char* assetDir) :
+	m_driver							(driver),
+	m_errorCallback						(errorCallback),
 	m_textMaterial						(NULL),
 	m_textMaterialInstance				(NULL),
 	m_screenquadOpaqueMaterial			(NULL),
 	m_screenquadOpaqueMaterialInstance	(NULL),
 	m_screenquadAlphaMaterial			(NULL),
 	m_screenquadAlphaMaterialInstance	(NULL),
-	m_deferredVBUnlock					(true),
 	m_useShadersForTextRendering		(true),
-	m_assetDir							(assetDir)
+	m_assetDir							(assetDir),
+	m_cacheDir							(NULL),
+	m_enableTessellation				(false),
+	m_enableWireframe					(false),
+	m_enableBlendingOverride			(false),
+	m_enableBlendingCull				(false),
+	mEnableMaterialCaching				(true)
 {
 	m_pixelCenterOffset = 0;
-	setAmbientColor(RendererColor(255,255,255, 255));
+	setAmbientColor(RendererColor(64,64,64, 255));
 	setFog(RendererColor(0,0,10,255), 20000.0f);
 	setClearColor(RendererColor(133,153,181,255));
 	physx::string::strncpy_s(m_deviceName, sizeof(m_deviceName), "UNKNOWN", sizeof(m_deviceName));
 #ifdef RENDERER_TABLET
 	m_buttons.reserve(16);
 #endif
-}
-
-void Renderer::setVertexBufferDeferredUnlocking( bool enabled )
-{
-	m_deferredVBUnlock = enabled;
-}
-
-bool Renderer::getVertexBufferDeferredUnlocking() const
-{
-	return m_deferredVBUnlock;
 }
 
 Renderer::~Renderer(void)
@@ -208,19 +233,29 @@ Renderer::~Renderer(void)
 	PX_ASSERT(!m_textMaterial);
 	PX_ASSERT(!m_textMaterialInstance);
 
-#if RENDERER_EXPERIMENTAL_MATERIAL_CACHING
 	for (tMaterialCache::iterator it = m_materialCache.begin(); it != m_materialCache.end(); ++it)
 	{
 		::free((void*)it->first.vertexShaderPath);
 		::free((void*)it->first.fragmentShaderPath);
+		::free((void*)it->first.geometryShaderPath);
+		::free((void*)it->first.domainShaderPath);
+		::free((void*)it->first.hullShaderPath);
+
+		PX_ASSERT(it->second == NULL);
 	}
-#endif // RENDERER_EXPERIMENTAL_MATERIAL_CACHING
 }
 
 
 void Renderer::release(void)
 {
+	closeScreenquad();
 	delete this;
+}
+
+// Create a 2D or 3D texture, depending on texture depth
+RendererTexture* SampleRenderer::Renderer::createTexture(const RendererTextureDesc &desc)
+{
+	return desc.depth > 1 ? createTexture3D(desc) : createTexture2D(desc);
 }
 
 // get the driver type for this renderer.
@@ -241,27 +276,71 @@ const char *Renderer::getDeviceName(void) const
 	return m_deviceName;
 }
 
+const char *Renderer::getAssetDir() 
+{ 
+	return m_assetDir.c_str(); 
+}
+
+void Renderer::setAssetDir(const char * assetDir) 
+{ 
+	m_assetDir = assetDir; 
+}
+
 // adds a mesh to the render queue.
 void Renderer::queueMeshForRender(RendererMeshContext &mesh)
 {
 	RENDERER_ASSERT( mesh.isValid(),  "Mesh Context is invalid.");
-	RENDERER_ASSERT(!mesh.isLocked(), "Mesh Context is already locked to a Renderer.");
-	if(mesh.isValid() && !mesh.isLocked())
+	if(mesh.isValid())
 	{
-		mesh.m_renderer = this;
 		if (mesh.screenSpace)
 		{
-			m_screenSpaceMeshes.push_back(&mesh);
+			m_screenSpaceMeshes.push_back(mesh);
 		}
-		else switch (mesh.material->getType())
+		else
 		{
-	case  RendererMaterial::TYPE_LIT:
-		m_visibleLitMeshes.push_back(&mesh);
-		break;
-	default: //case RendererMaterial::TYPE_UNLIT:
-		m_visibleUnlitMeshes.push_back(&mesh);
-		//	break;
+			switch (mesh.material->getType())
+			{
+			case  RendererMaterial::TYPE_LIT:
+				if (mesh.material->getBlending())
+					m_visibleLitTransparentMeshes.push_back(mesh);
+				else
+					m_visibleLitMeshes.push_back(mesh);
+				break;
+			default: //case RendererMaterial::TYPE_UNLIT:
+				m_visibleUnlitMeshes.push_back(mesh);
+				//	break;
+			}
 		}
+	}
+}
+
+struct RenderMeshContextHasMesh
+{
+	RenderMeshContextHasMesh(const RendererMesh* mesh) : mMesh(mesh) { }
+
+	bool operator()(const RendererMeshContext& meshContext) 
+	{
+		return meshContext.mesh == mMesh;
+	}
+
+	const RendererMesh* mMesh;
+};
+
+void SampleRenderer::Renderer::removeMeshFromRenderQueue(RendererMesh& mesh)
+{
+	MeshVector* meshContextQueues[] = { &m_visibleLitMeshes, 
+	                                    &m_visibleUnlitMeshes,
+	                                    &m_screenSpaceMeshes,
+	                                    &m_visibleLitTransparentMeshes };
+
+	// All queues must be searched, as a single mesh can be used in multiple contexts
+	for (PxU32 i = 0; i < PX_ARRAY_SIZE(meshContextQueues); ++i)
+	{
+		MeshVector& meshContextQueue = *meshContextQueues[i];
+		meshContextQueue.erase(std::remove_if(meshContextQueue.begin(), 
+		                                      meshContextQueue.end(), 
+		                                      RenderMeshContextHasMesh(&mesh)), 
+		                       meshContextQueue.end());
 	}
 }
 
@@ -276,8 +355,13 @@ void Renderer::queueLightForRender(RendererLight &light)
 	}
 }
 
+void SampleRenderer::Renderer::removeLightFromRenderQueue(RendererLight &light)
+{
+	m_visibleLights.erase(std::remove(m_visibleLights.begin(), m_visibleLights.end(), &light));
+}
+
 // renders the current scene to the offscreen buffers. empties the render queue when done.
-void Renderer::render(const physx::PxMat44 &eye, const PxMat44 &proj, RendererTarget *target, bool depthOnly)
+void Renderer::render(const physx::PxMat44 &eye, const RendererProjection &proj, RendererTarget *target, bool depthOnly)
 {
 	RENDERER_PERFZONE(Renderer_render);
 	const PxU32 numLights = (PxU32)m_visibleLights.size();
@@ -286,7 +370,8 @@ void Renderer::render(const physx::PxMat44 &eye, const PxMat44 &proj, RendererTa
 		target->bind();
 	}
 	// TODO: Sort meshes by material..
-	if(beginRender())
+	ScopedRender renderSection(*this);
+	if(renderSection)
 	{
 		if(!depthOnly)
 		{
@@ -294,11 +379,13 @@ void Renderer::render(const physx::PxMat44 &eye, const PxMat44 &proj, RendererTa
 			// TODO: Get rid of this.
 			if (m_screenSpaceMeshes.size())
 			{
-				physx::PxMat44 id = physx::PxMat44::createIdentity();
+				physx::PxMat44 id = physx::PxMat44(PxIdentity);
 				bindViewProj(id, RendererProjection(-1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f));	//TODO: pass screen space matrices
 				renderMeshes(m_screenSpaceMeshes, RendererMaterial::PASS_UNLIT);	//render screen space stuff first so stuff we occlude doesn't waste time on shading.
 			}
 		}
+
+		sortMeshes(eye);
 
 		if(depthOnly)
 		{
@@ -315,6 +402,7 @@ void Renderer::render(const physx::PxMat44 &eye, const PxMat44 &proj, RendererTa
 			bindViewProj(eye, proj);
 			renderMeshes(m_visibleLitMeshes,   RendererMaterial::PASS_UNLIT);
 			renderMeshes(m_visibleUnlitMeshes, RendererMaterial::PASS_UNLIT);
+			renderMeshes(m_visibleLitTransparentMeshes,   RendererMaterial::PASS_UNLIT);
 			renderDeferredLights();
 		}
 		else if(numLights > 0)
@@ -323,11 +411,54 @@ void Renderer::render(const physx::PxMat44 &eye, const PxMat44 &proj, RendererTa
 			bindAmbientState(m_ambientColor);
 			bindFogState(m_fogColor, m_fogDistance);
 			bindViewProj(eye, proj);
+
+#if RENDERER_ENABLE_SINGLE_PASS_LIGHTING
+			for(PxU32 i=0; i<numLights; i++)
+			{
+				m_visibleLights[i]->bind(i);
+			}
+			renderMeshes(m_visibleLitMeshes, m_visibleLights[0]->getPass());
+			for(PxU32 i=0; i<numLights; i++)
+			{
+				m_visibleLights[i]->m_renderer = NULL;
+			}
+#else
 			RendererLight &light0 = *m_visibleLights[0];
 			light0.bind();
 			renderMeshes(m_visibleLitMeshes, light0.getPass());
-			light0.m_renderer = 0;
+
+			bindAmbientState(RendererColor(0,0,0,255));
+			beginMultiPass();
+			for(PxU32 i=1; i<numLights; i++)
+			{
+				RendererLight &light = *m_visibleLights[i];
+				light.bind();
+				renderMeshes(m_visibleLitMeshes, light.getPass());
+			}
+			endMultiPass();
+#endif
 			renderMeshes(m_visibleUnlitMeshes, RendererMaterial::PASS_UNLIT);
+
+			///////////////////////////////////////////////////////////////////////////
+			if (m_visibleLitTransparentMeshes.size() > 0) 
+			{
+				light0.bind();
+				renderMeshes(m_visibleLitTransparentMeshes, light0.getPass());
+
+				bindAmbientState(RendererColor(0,0,0,255));
+				beginTransparentMultiPass();
+				for(PxU32 i=1; i<numLights; i++)
+				{
+					RendererLight &light = *m_visibleLights[i];
+					light.bind();
+					renderMeshes(m_visibleLitTransparentMeshes, light.getPass());
+				}
+				endTransparentMultiPass();
+			}
+			///////////////////////////////////////////////////////////////////////////
+
+			for (physx::PxU32 i = 0; i < numLights; ++i)
+				m_visibleLights[i]->m_renderer = 0;
 		}
 		else
 		{
@@ -336,12 +467,13 @@ void Renderer::render(const physx::PxMat44 &eye, const PxMat44 &proj, RendererTa
 			bindViewProj(eye, proj);
 			renderMeshes(m_visibleLitMeshes,   RendererMaterial::PASS_UNLIT);
 			renderMeshes(m_visibleUnlitMeshes, RendererMaterial::PASS_UNLIT);
+			renderMeshes(m_visibleLitTransparentMeshes, RendererMaterial::PASS_UNLIT);
 		}
-		endRender();
 	}
 	if(target) target->unbind();
 	m_visibleLitMeshes.clear();
 	m_visibleUnlitMeshes.clear();
+	m_visibleLitTransparentMeshes.clear();
 	m_screenSpaceMeshes.clear();
 	m_visibleLights.clear();
 }
@@ -365,7 +497,93 @@ void Renderer::setClearColor(const RendererColor &clearColor)
 	m_clearColor.a = 255;
 }
 
-void Renderer::renderMeshes(std::vector<RendererMeshContext*> & meshes, RendererMaterial::Pass pass)
+Renderer::TessellationParams::TessellationParams()
+{
+	setDefault();
+}
+
+void Renderer::TessellationParams::setDefault()
+{
+	tessFactor                = PxVec4(6.f, 6.f, 3.f, 100.f);
+	tessMinMaxDistance[0]     = 5.0f; 
+	tessMinMaxDistance[1]     = 50;
+	tessHeightScaleAndBias[0] = 1.0f;
+	tessHeightScaleAndBias[1] = 0.5f;
+	tessUVScale[0]            = 1.0f;
+	tessUVScale[1]            = 1.0f;
+}
+
+std::string SampleRenderer::Renderer::TessellationParams::toString()
+{
+	std::stringstream ss;
+	ss << "TessParams =  "      << std::endl;
+	ss << "\tTessFactor:      " << tessFactor.x << " " <<  tessFactor.y << " " << tessFactor.z << " " << tessFactor.w << std::endl;
+	ss << "\tTessMinMax:      " << tessMinMaxDistance[0] << " " << tessMinMaxDistance[1] << std::endl;
+	ss << "\tTessHeightScale: " << tessHeightScaleAndBias[0] << " " << tessHeightScaleAndBias[1] << std::endl;
+	ss << "\tTessUVScale:     " << tessUVScale[0] << " " << tessUVScale[1] << std::endl;
+	return ss.str();
+}
+
+void Renderer::setTessellationParams(const TessellationParams& params)
+{
+	m_tessellationParams = params;
+}
+
+static PX_INLINE PxU32 createPixel(PxU8 r, PxU8 g, PxU8 b)
+{
+	// G = bits 0-7
+	// B = bits 8-15
+	// R = bits 16-23
+	return (r << 16) | (g << 8) | b;
+}
+
+void Renderer::formatScreenshot(PxU32 width, PxU32 height, PxU32 sizeInBytes, int rPosition, int gPosition, int bPosition, bool bFlipY, void* screenshotData)
+{
+	if (width <= 0 || height <= 0 || sizeInBytes <= 0)
+		return;
+
+	PxU32 srcByteStride = sizeInBytes / (width * height);
+	RENDERER_ASSERT((srcByteStride > 0) && (srcByteStride <= sizeof(PxU32)), "Invalid image format.");
+	if (srcByteStride <= 0 || srcByteStride > sizeof(PxU32))
+		return;
+
+	PxU32* pSrc    = static_cast<PxU32*>(screenshotData);
+	PxU8* pSrcByte = static_cast<PxU8*>(screenshotData);
+	if (bFlipY)
+	{
+		for (PxU32 i = 0; i < height/2; ++i)
+		{
+			PxU32* pSrc2     = static_cast<PxU32*>(screenshotData) +                 width * (height - i - 1);
+			PxU8*  pSrc2Byte = static_cast<PxU8*>(screenshotData)  + srcByteStride * width * (height - i - 1);
+			for (PxU32 j = 0; j < width; ++j, pSrcByte+=srcByteStride, pSrc2Byte+=srcByteStride, ++pSrc, ++pSrc2)
+			{
+				PxU32 temp = createPixel(pSrcByte[rPosition], pSrcByte[gPosition], pSrcByte[bPosition]);
+				*pSrc      = createPixel(pSrc2Byte[rPosition], pSrc2Byte[gPosition], pSrc2Byte[bPosition]);
+				*pSrc2     = temp;
+			}
+		}
+		// Format the middle scanline
+		if (height % 2 == 1)
+		{
+			for (PxU32 j = 0; j < width; ++j, pSrcByte+=srcByteStride,++pSrc)
+			{
+				*pSrc = createPixel(pSrcByte[rPosition], pSrcByte[gPosition], pSrcByte[bPosition]);
+			}
+		}
+	}
+	else
+	{
+		for (PxU32 i = 0; i < height; ++i)
+		{
+			for (PxU32 j = 0; j < width; ++j, pSrcByte+=srcByteStride,++pSrc)
+			{
+				*pSrc = createPixel(pSrcByte[rPosition], pSrcByte[gPosition], pSrcByte[bPosition]);
+			}
+		}
+	}
+}
+
+void Renderer::renderMeshes(std::vector<RendererMeshContext>& meshes, RendererMaterial::Pass pass)
 {
 	RENDERER_PERFZONE(Renderer_renderMeshes);
 
@@ -376,11 +594,10 @@ void Renderer::renderMeshes(std::vector<RendererMeshContext*> & meshes, Renderer
 	const PxU32 numMeshes = (PxU32)meshes.size();
 	for(PxU32 i=0; i<numMeshes; i++)
 	{
-		RendererMeshContext &context = *meshes[i];
+		RendererMeshContext& context = meshes[i];
 
 		if(!context.mesh->willRender())
 		{
-			context.m_renderer = 0;
 			continue;
 		}
 
@@ -408,7 +625,7 @@ void Renderer::renderMeshes(std::vector<RendererMeshContext*> & meshes, Renderer
 			lastMaterial         = context.material;
 			lastMaterial->bind(pass, lastMaterialInstance, instanced);
 		}
-		
+
 #if defined(RENDERER_ENABLE_GLES2)
 		bindMeshContext(context);
 #endif
@@ -421,7 +638,6 @@ void Renderer::renderMeshes(std::vector<RendererMeshContext*> & meshes, Renderer
 			if(lastMesh) lastMesh->bind();
 		}
 		if(lastMesh) context.mesh->render(context.material);
-		context.m_renderer = 0;
 #ifdef RENDERER_PSP2
 		// on PSP2 we need to will the environment again
 		lastMaterial = NULL;
@@ -432,11 +648,35 @@ void Renderer::renderMeshes(std::vector<RendererMeshContext*> & meshes, Renderer
 	if(lastMaterial) lastMaterial->unbind();
 }
 
+struct CompareMeshCameraDist
+{
+	CompareMeshCameraDist(const physx::PxVec3& t_) : t(t_) { }
+	bool operator()(const RendererMeshContext& c1, const RendererMeshContext& c2) const
+	{
+		// Equivalent, return false
+		if (NULL == c1.transform && NULL == c2.transform)
+			return false;
+		// NULL transforms will be rendered first
+		if (NULL == c1.transform)
+			return true;
+		if (NULL == c2.transform)
+			return false;
+		// A larger magnitude means further away, which should be ordered first
+		// TODO: Use bones
+		return (c1.transform->getPosition() - t).magnitudeSquared() > (c2.transform->getPosition() - t).magnitudeSquared();
+	}
+	physx::PxVec3 t;
+};
+
+void Renderer::sortMeshes(const physx::PxMat44& eye)
+{
+	CompareMeshCameraDist meshComp(eye.getPosition());
+	std::sort(m_visibleLitTransparentMeshes.begin(), m_visibleLitTransparentMeshes.end(), meshComp);
+}
 
 void Renderer::renderDeferredLights(void)
 {
 	RENDERER_PERFZONE(Renderer_renderDeferredLights);
-
 	const PxU32 numLights = (PxU32)m_visibleLights.size();
 	for(PxU32 i=0; i<numLights; i++)
 	{
@@ -444,8 +684,6 @@ void Renderer::renderDeferredLights(void)
 	}
 }
 
-
-#if RENDERER_EXPERIMENTAL_MATERIAL_CACHING
 bool Renderer::CompareRenderMaterialDesc::operator()(const RendererMaterialDesc& desc1, const RendererMaterialDesc& desc2) const
 {
 	if (desc1.type != desc2.type)
@@ -471,66 +709,121 @@ bool Renderer::CompareRenderMaterialDesc::operator()(const RendererMaterialDesc&
 		return result < 0;
 
 	result = physx::string::stricmp(desc1.fragmentShaderPath, desc2.fragmentShaderPath);
+	if (result != 0)
+		return result < 0;
+
+	// Geometry, hull and domain shaders are optional, so only check when present
+	//    * stricmp only works properly for well defined pointers, so only test when both present
+	//    * if one material has a particular shader when the other material does not, the one WITH should be first
+	if (desc1.geometryShaderPath || desc2.geometryShaderPath)
+	{
+		if (desc1.geometryShaderPath && desc2.geometryShaderPath)
+			result = physx::string::stricmp(desc1.geometryShaderPath, desc2.geometryShaderPath);
+		else
+			result = desc1.geometryShaderPath ? -1 : 1;
+	}
+
+	if (0 == result && (desc1.hullShaderPath || desc2.hullShaderPath))
+	{
+		if (desc1.hullShaderPath && desc2.hullShaderPath)
+			result = physx::string::stricmp(desc1.hullShaderPath, desc2.hullShaderPath);
+		else
+			result = desc1.hullShaderPath ? -1 : 1;
+	}
+	
+	if (0 == result && (desc1.domainShaderPath || desc2.domainShaderPath))
+	{
+		if (desc1.domainShaderPath && desc2.domainShaderPath)
+			result = physx::string::stricmp(desc1.domainShaderPath, desc2.domainShaderPath);
+		else
+			result = desc1.domainShaderPath ? -1 : 1;
+	}
 
 	return result < 0;
 }
-#endif // RENDERER_EXPERIMENTAL_MATERIAL_CACHING
-
-
 
 RendererMaterial* Renderer::hasMaterialAlready(const RendererMaterialDesc& desc)
 {
-#if RENDERER_EXPERIMENTAL_MATERIAL_CACHING
-	tMaterialCache::iterator it = m_materialCache.find(desc);
-
-	if (it != m_materialCache.end())
+	if (mEnableMaterialCaching)
 	{
-		it->second->incRefCount();
-		return it->second;
+		tMaterialCache::iterator it = m_materialCache.find(desc);
+
+		if (it != m_materialCache.end())
+		{
+			PX_ASSERT(it->second != NULL);
+			it->second->incRefCount();
+			return it->second;
+		}
 	}
-#endif // RENDERER_EXPERIMENTAL_MATERIAL_CACHING
 
 	return NULL;
 }
 
 
 
+static const char* local_strdup(const char* input)
+{
+	if (input == NULL)
+	{
+		return NULL;
+	}
+
+	unsigned int strLen = (unsigned int)strlen(input) + 1;
+	char* retStr = (char*)::malloc(strLen);
+
+	PX_ASSERT(retStr);
+
+	if (NULL != retStr)
+	{
+#ifdef PX_WINDOWS
+		strcpy_s(retStr, strLen, input);
+#else
+		strncpy(retStr, input, strLen);
+#endif
+	}
+	return retStr;
+}
+
+
+
 void Renderer::registerMaterial(const RendererMaterialDesc& desc, RendererMaterial* mat)
 {
-#if RENDERER_EXPERIMENTAL_MATERIAL_CACHING
-	tMaterialCache::iterator it = m_materialCache.find(desc);
-
-	if (it == m_materialCache.end())
+	if (mEnableMaterialCaching)
 	{
-		RendererMaterialDesc descCopy = desc;
-		descCopy.vertexShaderPath = _strdup(desc.vertexShaderPath);
-		descCopy.fragmentShaderPath = _strdup(desc.fragmentShaderPath);
+		tMaterialCache::iterator it = m_materialCache.find(desc);
 
-		PX_ASSERT(mat->m_refCount == 1);
-		m_materialCache[descCopy] = mat;
+		if (it == m_materialCache.end())
+		{
+			RendererMaterialDesc descCopy = desc;
+			descCopy.vertexShaderPath = local_strdup(desc.vertexShaderPath);
+			descCopy.fragmentShaderPath = local_strdup(desc.fragmentShaderPath);
+			descCopy.geometryShaderPath = local_strdup(desc.geometryShaderPath);
+			descCopy.domainShaderPath = local_strdup(desc.domainShaderPath);
+			descCopy.hullShaderPath = local_strdup(desc.hullShaderPath);
+
+			PX_ASSERT(mat->m_refCount == 1);
+			m_materialCache[descCopy] = mat;
+		}
+		else
+		{
+			PX_ASSERT(it->second == NULL);
+			it->second = mat;
+		}
 	}
-	else
-	{
-		PX_ASSERT(it->second == NULL);
-		it->second = mat;
-	}
-#endif // RENDERER_EXPERIMENTAL_MATERIAL_CACHING
 }
 
 
 
-void Renderer::unregisterMaterial(RendererMaterial* mat)
+void Renderer::releaseAllMaterials()
 {
-#if RENDERER_EXPERIMENTAL_MATERIAL_CACHING
 	for (tMaterialCache::iterator it = m_materialCache.begin(); it != m_materialCache.end(); ++it)
 	{
-		if (it->second == mat)
-			it->second = NULL;
+		PX_ASSERT(it->second != NULL);
+		delete it->second;
+
+		it->second = NULL;
 	}
-#endif // RENDERER_EXPERIMENTAL_MATERIAL_CACHING
 }
-
-
 
 
 
@@ -560,7 +853,7 @@ public:
 	~FntData();
 
 	void			Reset();
-	PxU32			ComputeSize(const char* text, PxReal& width, PxReal& height, PxReal scale)	const;
+	PxU32			ComputeSize(const char* text, PxReal& width, PxReal& height, PxReal scale, bool forceFixWidthNumbers) const;
 
 	bool			Load(Renderer& renderer, const char* filename);
 
@@ -569,12 +862,16 @@ public:
 	PX_FORCE_INLINE	PxU32			GetMaxDx()	const	{ return mMaxDx;	}
 	PX_FORCE_INLINE	PxU32			GetMaxDy()	const	{ return mMaxDy;	}
 	PX_FORCE_INLINE	const PxU8*		GetXRef()	const	{ return mXRef;		}
+	PX_FORCE_INLINE PxU32			GetMaxDxNumbers()	const	{ return mMaxDxNumbers;	}
+	PX_FORCE_INLINE bool			IsFixWidthCharacter(unsigned char c) const { return mFixWidthCharacters[c]; }
 
 private:
 	PxU32			mNbFnts;
 	FntInfo*		mFnts;
 	PxU32			mMaxDx, mMaxDy;
 	PxU8			mXRef[256];
+	bool			mFixWidthCharacters[256];
+	PxU32			mMaxDxNumbers;
 public:
 	RendererTexture2D*			mTexture;
 };
@@ -586,6 +883,18 @@ FntData::FntData()
 	mMaxDx	= 0;
 	mMaxDy	= 0;
 	memset(mXRef, 0, 256*sizeof(PxU8));
+	memset(mFixWidthCharacters, 0, 256 * sizeof(bool));
+	for (int i = '0'; i <= '9'; i++)
+	{
+		mFixWidthCharacters[i] = true;
+	}
+	//mFixWidthCharacters[' '] = true;
+	mFixWidthCharacters['.'] = true;
+	mFixWidthCharacters['+'] = true;
+	mFixWidthCharacters['-'] = true;
+	mFixWidthCharacters['*'] = true;
+	mFixWidthCharacters['/'] = true;
+	mMaxDxNumbers = 0;
 	mTexture	= NULL;
 }
 
@@ -602,10 +911,12 @@ void FntData::Reset()
 	mMaxDx	= 0;
 	mMaxDy	= 0;
 	memset(mXRef, 0, 256*sizeof(PxU8));
+	memset(mFixWidthCharacters, 0, 256 * sizeof(bool));
+	mMaxDxNumbers = 0;
 }
 
 // Compute size of a given text
-PxU32 FntData::ComputeSize(const char* text, PxReal& width, PxReal& height, PxReal scale) const
+PxU32 FntData::ComputeSize(const char* text, PxReal& width, PxReal& height, PxReal scale, bool forceFixWidthNumbers) const
 {
 	// Get and check length
 	if(!text)	return 0;
@@ -624,10 +935,10 @@ PxU32 FntData::ComputeSize(const char* text, PxReal& width, PxReal& height, PxRe
 		if(text[j]!='\n')
 		{
 			// Catch current character index
-			const PxU32 i = mXRef[text[j]];
+			const PxU32 i = mXRef[(unsigned char)(text[j])];
 
 			// Catch size of current character
-			const PxReal sx = PxReal(mFnts[i].dx) * scale;
+			const PxReal sx = PxReal((forceFixWidthNumbers && mFixWidthCharacters[text[j]]) ? mMaxDxNumbers : mFnts[i].dx) * scale;
 			const PxReal sy = PxReal(mFnts[i].dy) * scale;
 
 			// Keep track of greatest dimensions
@@ -663,6 +974,8 @@ static const bool gFlip = true;
 static const bool gFlip = false;
 #elif defined(PX_PSP2)
 static const bool gFlip = false;
+#elif defined(PX_WIIU)
+static const bool gFlip = true;
 #else
 #error Unknown platform!
 #endif
@@ -689,10 +1002,11 @@ PX_INLINE void Flip(PxF32& v)
 	Flip((PxU32&)v);
 }
 
-static PxU32 read32(FILE* fp)
+static PxU32 read32(File* fp)
 {
 	PxU32 data;
-	fread(&data, 4, 1, fp);
+	size_t numRead = fread(&data, 1, 4, fp);
+	if(numRead != 4) { fclose(fp); return 0; }
 	if(gFlip)
 		Flip(data);
 	return data;
@@ -700,7 +1014,7 @@ static PxU32 read32(FILE* fp)
 
 bool FntData::Load(Renderer& renderer, const char* filename)
 {
-	FILE* fp = NULL;
+	File* fp = NULL;
 	Fnd::fopen_s(&fp, filename, "rb");
 	if(!fp)
 		return false;
@@ -710,7 +1024,10 @@ bool FntData::Load(Renderer& renderer, const char* filename)
 		const PxU32 width	= read32(fp);
 		const PxU32 height	= read32(fp);
 		PxU8* data = new PxU8[width*height*4];
-		fread(data, width*height*4, 1, fp);
+		const size_t size = width*height*4;
+		size_t numRead = fread(data, 1, size, fp);
+		if(numRead != size) { fclose(fp); return false; }
+		
 		/*		if(gFlip)	
 		{
 		PxU32* data32 = (PxU32*)data;
@@ -724,6 +1041,7 @@ bool FntData::Load(Renderer& renderer, const char* filename)
 		tdesc.format	= RendererTexture2D::FORMAT_B8G8R8A8;
 		tdesc.width		= width;
 		tdesc.height	= height;
+		tdesc.filter	= RendererTexture2D::FILTER_ANISOTROPIC;
 		tdesc.numLevels	= 1;
 		/*
 		tdesc.filter;
@@ -776,7 +1094,9 @@ bool FntData::Load(Renderer& renderer, const char* filename)
 	mNbFnts = read32(fp);
 
 	mFnts	= new FntInfo[mNbFnts];
-	fread(mFnts, mNbFnts*sizeof(FntInfo), 1, fp);
+	const size_t size = mNbFnts*sizeof(FntInfo);
+	size_t numRead = fread(mFnts, 1, size, fp);
+	if(numRead != size) { fclose(fp); return false; }
 	if(gFlip)
 	{
 		for(PxU32 i=0;i<mNbFnts;i++)
@@ -793,7 +1113,17 @@ bool FntData::Load(Renderer& renderer, const char* filename)
 	mMaxDx	= read32(fp);
 	mMaxDy	= read32(fp);
 
-	fread(mXRef, 256*sizeof(PxU8), 1, fp);
+	const size_t xRefSize = 256*sizeof(PxU8);
+	numRead = fread(mXRef, 1, xRefSize, fp);
+	if(numRead != xRefSize) { fclose(fp); return false; }
+
+	for (unsigned int c = 0; c < 256; c++)
+	{
+		if (mFixWidthCharacters[c])
+		{
+			mMaxDxNumbers = PxMax(mFnts[mXRef[c]].dx, mMaxDxNumbers);
+		}
+	}
 
 	fclose(fp);
 	return true;
@@ -815,7 +1145,7 @@ static bool ClipQuad(Renderer::TextVertex* /*quad*/, const ClipBox& /*clip_box*/
 
 static bool GenerateTextQuads(	const char* text, PxU32 nb_characters,
 	Renderer::TextVertex* fnt_verts, PxU16* fnt_indices, const ClipBox& clip_box, const FntData* fnt_data, PxReal& x, PxReal& y, PxReal scale_x, PxReal scale_y, PxU32 color,
-	PxReal* x_min, PxReal* y_min, PxReal* x_max, PxReal* y_max, PxU32* nb_lines, PxU32* nb_active_characters)
+	PxReal* x_min, PxReal* y_min, PxReal* x_max, PxReal* y_max, PxU32* nb_lines, PxU32* nb_active_characters, bool forceFixWidthNumbers)
 {
 	// Checkings
 	if(!text || !fnt_verts || !fnt_indices || !fnt_data)	return false;
@@ -840,20 +1170,28 @@ static bool GenerateTextQuads(	const char* text, PxU32 nb_characters,
 		if(text[j]!='\n')
 		{
 			PxU32 i = fnt_data->GetXRef()[text[j]];
+			const FntInfo character = fnt_data->GetFnts()[i];
 
 			// Character size
-			const PxReal sx = PxReal(fnt_data->GetFnts()[i].dx) * scale_x;
-			const PxReal sy = PxReal(fnt_data->GetFnts()[i].dy) * scale_y;
+			const PxReal sx = PxReal(character.dx) * scale_x;
+			const PxReal sy = PxReal(character.dy) * scale_y;
+
+			if (forceFixWidthNumbers && fnt_data->IsFixWidthCharacter(text[j]))
+			{
+				// move forward half the distance
+				x += (fnt_data->GetMaxDxNumbers() - character.dx) * scale_x * 0.5f;
+			}
 
 			if(text[j]!=' ')
 			{
 				const PxReal rhw = 1.0f;
 
-				// Initalize the vertices
-				V[0].p.x = x;    V[0].p.y = y+sy; V[0].u = fnt_data->GetFnts()[i].u0; V[0].v = fnt_data->GetFnts()[i].v1;
-				V[1].p.x = x;    V[1].p.y = y;    V[1].u = fnt_data->GetFnts()[i].u0; V[1].v = fnt_data->GetFnts()[i].v0;
-				V[2].p.x = x+sx; V[2].p.y = y+sy; V[2].u = fnt_data->GetFnts()[i].u1; V[2].v = fnt_data->GetFnts()[i].v1;
-				V[3].p.x = x+sx; V[3].p.y = y;    V[3].u = fnt_data->GetFnts()[i].u1; V[3].v = fnt_data->GetFnts()[i].v0;
+
+				// Initialize the vertices
+				V[0].p.x = x;    V[0].p.y = y+sy; V[0].u = character.u0; V[0].v = character.v1;
+				V[1].p.x = x;    V[1].p.y = y;    V[1].u = character.u0; V[1].v = character.v0;
+				V[2].p.x = x+sx; V[2].p.y = y+sy; V[2].u = character.u1; V[2].v = character.v1;
+				V[3].p.x = x+sx; V[3].p.y = y;    V[3].u = character.u1; V[3].v = character.v0;
 				V[0].rhw = V[1].rhw = V[2].rhw = V[3].rhw = rhw;
 				V[0].p.z = V[1].p.z = V[2].p.z = V[3].p.z = 0.0f;
 				V[0].color = V[1].color = V[2].color = V[3].color = color;
@@ -874,6 +1212,13 @@ static bool GenerateTextQuads(	const char* text, PxU32 nb_characters,
 					NbActiveCharacters++;
 				}
 			}
+
+			if (forceFixWidthNumbers && fnt_data->IsFixWidthCharacter(text[j]))
+			{
+				// move forward theo ther half of the distance
+				x += (fnt_data->GetMaxDxNumbers() - character.dx) * scale_x * 0.5f;
+			}
+
 			//
 			if((x+sx)>XMax)	XMax = x+sx;	if(x<XMin)	XMin = x;
 			if((y+sy)>YMax)	YMax = y+sy;	if(y<YMin)	YMin = y;
@@ -906,6 +1251,27 @@ enum RenderTextQuadFlag_
 	RTQF_ALIGN_RIGHT	= (1<<1),
 };
 
+struct RenderTextData
+{
+	RenderTextData(Renderer::TextVertex* pFntVerts,  PxU16* pFntIndices) 
+		: mpFntVerts(pFntVerts), mpFntIndices(pFntIndices) { }
+
+	~RenderTextData()
+	{
+		DELETEARRAY(mpFntVerts);
+		DELETEARRAY(mpFntIndices);
+	}
+
+	Renderer::TextVertex* mpFntVerts;
+	PxU16*                mpFntIndices;
+
+private:
+	// Disable default, copy and assign
+	RenderTextData();
+	RenderTextData(const RenderTextData&);
+	void operator=(const RenderTextData&);
+};
+
 static void RenderTextQuads(Renderer* textRender,
 	const FntData* fnts,
 	const char* text, PxReal x, PxReal y, PxU32 text_color, PxU32 shadow_color,
@@ -916,6 +1282,7 @@ static void RenderTextQuads(Renderer* textRender,
 	const ClipBox* clip_box,
 	PxReal text_y_offset,
 	bool use_max_dy,
+	bool forceFixWidthNumbers,
 	RendererMaterial* material
 	)
 {
@@ -925,7 +1292,7 @@ static void RenderTextQuads(Renderer* textRender,
 
 	// Compute text size
 	PxReal Width, Height;
-	const PxU32 NbCharacters = fnts->ComputeSize(text, Width, Height, 1.0f);
+	const PxU32 NbCharacters = fnts->ComputeSize(text, Width, Height, 1.0f, forceFixWidthNumbers);
 
 	// Prepare clip box
 	ClipBox CB;
@@ -946,16 +1313,15 @@ static void RenderTextQuads(Renderer* textRender,
 	}
 
 	// Allocate space for vertices
-	Renderer::TextVertex*	FntVerts	= new Renderer::TextVertex[NbCharacters*4];
-	PxU16*					FntIndices	= new PxU16[NbCharacters*6];
+	RenderTextData FntData(new Renderer::TextVertex[NbCharacters*4], new PxU16[NbCharacters*6]);
 
 	// Generate quads
 	PxReal XMin, YMin, XMax, YMax;
 	PxU32 NbLines, NbActiveCharacters;
-	GenerateTextQuads(text, NbCharacters, FntVerts, FntIndices, CB, fnts, x, y, scale_x, scale_y, text_color, &XMin, &YMin, &XMax, &YMax, &NbLines, &NbActiveCharacters);
+	GenerateTextQuads(text, NbCharacters, FntData.mpFntVerts, FntData.mpFntIndices, CB, fnts, x, y, scale_x, scale_y, text_color, &XMin, &YMin, &XMax, &YMax, &NbLines, &NbActiveCharacters, forceFixWidthNumbers);
 
 	for(PxU32 i=0;i<NbActiveCharacters*4;i++)
-		FntVerts[i].p.y += text_y_offset;
+		FntData.mpFntVerts[i].p.y += text_y_offset;
 
 	if(use_max_dy)
 		YMax = YMin + (PxReal)fnts->GetMaxDy();
@@ -967,11 +1333,11 @@ static void RenderTextQuads(Renderer* textRender,
 	{
 		const PxReal L = XMax - XMin;
 		XMax = XMin + max_length;
-		const PxReal Offset = centered ? (-FntVerts[0].p.x + XMin + (max_length - L)*0.5f) :
-			(-FntVerts[0].p.x + XMax - L);
+		const PxReal Offset = centered ? (-FntData.mpFntVerts[0].p.x + XMin + (max_length - L)*0.5f) :
+			(-FntData.mpFntVerts[0].p.x + XMax - L);
 		//										(-FntVerts[0].p.x + XMin + (max_length - L));
 		for(PxU32 i=0;i<NbActiveCharacters*4;i++)
-			FntVerts[i].p.x += Offset;
+			FntData.mpFntVerts[i].p.x += Offset;
 	}
 
 	textRender->setupTextRenderStates();
@@ -980,41 +1346,34 @@ static void RenderTextQuads(Renderer* textRender,
 	if(shadow_offset!=0.0f)
 	{
 		// Allocate space for vertices
-		Renderer::TextVertex*	SFntVerts	= new Renderer::TextVertex[NbCharacters*4];
-		PxU16*					SFntIndices	= new PxU16[NbCharacters*6];
+		RenderTextData SFntData(new Renderer::TextVertex[NbCharacters*4], new PxU16[NbCharacters*6]);
 
 		// Generate quads
 		PxReal SXMin, SYMin, SXMax, SYMax;
 		PxU32 SNbLines, SNbActiveCharacters;
 		PxReal ShX = text_x + shadow_offset;
 		PxReal ShY = text_y + shadow_offset;
-		GenerateTextQuads(text, NbCharacters, SFntVerts, SFntIndices, CB, fnts, ShX, ShY, scale_x, scale_y, shadow_color, &SXMin, &SYMin, &SXMax, &SYMax, &SNbLines, &SNbActiveCharacters);
+		GenerateTextQuads(text, NbCharacters, SFntData.mpFntVerts, SFntData.mpFntIndices, CB, fnts, ShX, ShY, scale_x, scale_y, shadow_color, &SXMin, &SYMin, &SXMax, &SYMax, &SNbLines, &SNbActiveCharacters, forceFixWidthNumbers);
 
 		for(PxU32 i=0;i<SNbActiveCharacters*4;i++)
-			SFntVerts[i].p.y += text_y_offset;
+			SFntData.mpFntVerts[i].p.y += text_y_offset;
 
 		if(centered || align_right)
 		{
 			const PxReal L = SXMax - SXMin;
 			SXMax = SXMin + max_length;
-			const PxReal Offset = centered ? (-SFntVerts[0].p.x + SXMin + (max_length - L)*0.5f) : 
-				(-SFntVerts[0].p.x + SXMax - L);
+			const PxReal Offset = centered ? (-SFntData.mpFntVerts[0].p.x + SXMin + (max_length - L)*0.5f) : 
+				(-SFntData.mpFntVerts[0].p.x + SXMax - L);
 			for(PxU32 i=0;i<SNbActiveCharacters*4;i++)
-				SFntVerts[i].p.x += Offset;
+				SFntData.mpFntVerts[i].p.x += Offset;
 		}
 
-		textRender->renderTextBuffer(SFntVerts, 4*SNbActiveCharacters, SFntIndices, 6*SNbActiveCharacters, material);
-
-		DELETEARRAY(SFntIndices);
-		DELETEARRAY(SFntVerts);
+		textRender->renderTextBuffer(SFntData.mpFntVerts, 4*SNbActiveCharacters, SFntData.mpFntIndices, 6*SNbActiveCharacters, material);
 	}
 
-	textRender->renderTextBuffer(FntVerts, 4*NbActiveCharacters, FntIndices, 6*NbActiveCharacters, material);
+	textRender->renderTextBuffer(FntData.mpFntVerts, 4*NbActiveCharacters, FntData.mpFntIndices, 6*NbActiveCharacters, material);
 
 	textRender->resetTextRenderStates();
-
-	DELETEARRAY(FntIndices);
-	DELETEARRAY(FntVerts);
 }
 
 
@@ -1043,10 +1402,8 @@ bool Renderer::initTexter()
 		matDesc.alphaTestRef		= 0.0f;
 		matDesc.type				= RendererMaterial::TYPE_UNLIT;
 		matDesc.blending			= true;
-		//matDesc.srcBlendFunc		= RendererMaterial::BLEND_ONE;
-		//matDesc.dstBlendFunc		= RendererMaterial::BLEND_ONE;
-		matDesc.srcBlendFunc	= RendererMaterial::BLEND_SRC_ALPHA;
-		matDesc.dstBlendFunc	= RendererMaterial::BLEND_ONE_MINUS_SRC_ALPHA;
+		matDesc.srcBlendFunc	    = RendererMaterial::BLEND_SRC_ALPHA;
+		matDesc.dstBlendFunc	    = RendererMaterial::BLEND_ONE_MINUS_SRC_ALPHA;
 		matDesc.geometryShaderPath	= NULL;
 		matDesc.vertexShaderPath	= "vertex/text.cg";
 		matDesc.fragmentShaderPath	= "fragment/text.cg";
@@ -1085,55 +1442,120 @@ void Renderer::closeTexter()
 	DELETESINGLE(gFntData);
 }
 
-void Renderer::print(PxU32 x, PxU32 y, const char* text, PxReal scale, PxReal shadowOffset, RendererColor textColor)
-{
-	if(!gFntData || !gFntData->mTexture || !m_textMaterial || !m_textMaterialInstance || !text || '\0' == *text)
-		return;
-
-	m_textMaterial->bind(RendererMaterial::PASS_UNLIT, m_textMaterialInstance, false);
-
-	if(!m_useShadersForTextRendering)
-	{
-		m_textMaterial->unbind();
-		gFntData->mTexture->select(0);
-	}
-
-	const PxU32 alignFlags = 0;
-	const float maxLength = 0.0f;
-	float* nx = NULL;
-	float* ny = NULL;
-	const ClipBox* clipBox = NULL;
-	const float textYOffset = 0.0f;
-	const bool useMaxDy = false;
-
-
-	const PxU32 color = convertColor(textColor);
-	const PxU32 shadowColor = convertColor(RendererColor(0,0,0,textColor.a));
-
+// splits string by delimeter
 #if defined(RENDERER_TABLET)
-	shadowOffset = 0.0f;
-#endif
-
-	RenderTextQuads(this,
-		gFntData,
-		text,
-		PxReal(x), PxReal(y),
-		color, shadowColor,
-		scale, scale,
-		alignFlags,
-		maxLength,
-		shadowOffset * scale,
-		nx, ny,
-		clipBox,
-		textYOffset,
-		useMaxDy,
-		m_textMaterial
-		);
-
-	if(m_useShadersForTextRendering)
-		m_textMaterial->unbind();
+static std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
+    std::stringstream ss(s);
+    std::string item;
+    while(std::getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+    return elems;
 }
 
+static std::vector<std::string> split(const std::string &s, char delim) {
+    std::vector<std::string> elems;
+    return split(s, delim, elems);
+}
+#endif
+
+void SampleRenderer::Renderer::print(PxU32* x, PxU32* y, const char** text, PxU32 textCount, PxReal scale, PxReal shadowOffset, RendererColor* textColors, bool forceFixWidthNumbers)
+{
+	// we split string containing '\n' in a vector of strings. This prevents from need to have a really big vertex/index buffer for text in GLES2 renderer
+#if defined(RENDERER_TABLET)
+	if(std::string(*text).find('\n') != std::string::npos) {
+		std::vector<std::string> strings = split(*text, '\n');
+		PxU32 nx = *x, ny = *y;
+		for(PxU32 i = 0; i < strings.size(); ++i)
+		{
+			const char* sptr = strings[i].c_str();
+			print(&nx, &ny, &sptr, 1, scale, shadowOffset, textColors, forceFixWidthNumbers);
+			ny += TEXT_HEIGHT + TEXT_VERTICAL_SPACING;
+		}
+		return;
+	}
+#endif
+
+	if(!gFntData || !gFntData->mTexture || !m_textMaterial || !m_textMaterialInstance || 0==textCount || NULL==x || NULL==y || NULL==text || 0 == *text || (*text)[0] == '\0')
+		return;
+
+	ScopedRender renderSection(*this);
+	if (renderSection)
+	{
+		m_textMaterial->bind(RendererMaterial::PASS_UNLIT, m_textMaterialInstance, false);
+
+		if(!m_useShadersForTextRendering)
+		{
+			m_textMaterial->unbind();
+			gFntData->mTexture->select(0);
+		}
+
+		const PxU32 alignFlags  = 0;
+		const float maxLength   = 0.0f;
+		float* nx               = NULL;
+		float* ny               = NULL;
+		const ClipBox* clipBox  = NULL;
+		const float textYOffset = 0.0f;
+		const bool useMaxDy     = false;
+		const RendererColor defaultColor(255, 255, 255, 255);
+
+#if defined(RENDERER_TABLET)
+		shadowOffset = 0.0f;
+#endif	
+
+		for (PxU32 i = 0; i < textCount; ++i)
+		{
+			const PxU32 color       = convertColor(textColors ? textColors[i] : defaultColor);
+			const PxU32 shadowColor = convertColor(textColors ? RendererColor(0,0,0,textColors[i].a) : RendererColor(0,0,0,defaultColor.a));
+
+			RenderTextQuads(this,
+				gFntData,
+				text[i],
+				PxReal(x[i]), PxReal(y[i]),
+				color, shadowColor,
+				scale, scale,
+				alignFlags,
+				maxLength,
+				shadowOffset * scale,
+				nx, ny,
+				clipBox,
+				textYOffset,
+				useMaxDy,
+				forceFixWidthNumbers,
+				m_textMaterial
+				);
+		}
+
+		if(m_useShadersForTextRendering)
+			m_textMaterial->unbind();
+	}
+}
+
+bool SampleRenderer::Renderer::captureScreen(const char* filename)
+{
+	if(!filename)
+		return false;
+
+	physx::PxU32 width, height, sizeInBytes;
+	const void* data = NULL;
+	if (captureScreen(width, height, sizeInBytes, data) && sizeInBytes > 0)
+	{
+		PxDefaultFileOutputStream fileBuffer(filename);
+		return fileBuffer.write(data, sizeInBytes) > 0;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+
+void Renderer::print(PxU32 x, PxU32 y, const char* text, PxReal scale, PxReal shadowOffset, RendererColor textColor, bool forceFixWidthNumbers)
+{
+	if (NULL == text || strlen(text) <= 0)
+		return;
+	print(&x, &y, &text, 1, scale, shadowOffset, &textColor, forceFixWidthNumbers);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1278,7 +1700,7 @@ bool Renderer::initControls(RendererMaterial* controlMaterial, RendererMaterialI
 	m_controlCenteredPos[1].y = -controlCenterOffset.y;
 	m_controlPos[0] = m_controlCenteredPos[0];
 	m_controlPos[1] = m_controlCenteredPos[1];
-	
+
 	PxReal controlVertices[] = {  
 		-m_controlHalfSize.x, -m_controlHalfSize.y, 0.0f,
 		-m_controlHalfSize.x,  m_controlHalfSize.y, 0.0f,
@@ -1354,9 +1776,9 @@ RendererMesh* Renderer::initControl(PxReal* controlVertices, PxReal* controlTexc
 Renderer::TabletButton::TabletButton() :
 	pressedCount(0),
 	emulatedKeyCode(0), 
-	callback(NULL), 
 	defaultColor(PxVec4(1.0f, 1.0f, 1.0f, 0.4f)), 
-	pressedColor(PxVec4(1.0f, 0.0f, 0.0f, 0.4f))
+	pressedColor(PxVec4(1.0f, 0.0f, 0.0f, 0.4f)),
+	callback(NULL)
 {
 }
 
@@ -1468,8 +1890,8 @@ bool Renderer::drawScreenQuad(const ScreenQuad& screenQuad)
 	if(!m_useShadersForTextRendering)
 		screenquadMaterial->unbind();
 
-
-	if(beginRender())
+	ScopedRender renderSection(*this);
+	if(renderSection)
 	{
 		setupScreenquadRenderStates();
 
@@ -1503,13 +1925,10 @@ bool Renderer::drawScreenQuad(const ScreenQuad& screenQuad)
 		Verts[1].p	= PxVec3(x0, y0, z);		Verts[1].rhw	= rhw;		Verts[1].color	= convertColor(leftUpColor);
 		Verts[2].p	= PxVec3(sx, sy, z);		Verts[2].rhw	= rhw;		Verts[2].color	= convertColor(rightDownColor);
 		Verts[3].p	= PxVec3(sx, y0, z);		Verts[3].rhw	= rhw;		Verts[3].color	= convertColor(rightUpColor);
-
-//#ifndef RENDERER_TABLET
+#if !(defined(RENDERER_WINMODERN) && defined(RENDERER_TABLET))
 		renderTextBuffer(Verts, 4, Indices, 6, screenquadMaterial);	
-//#endif	
+#endif
 		resetScreenquadRenderStates();
-
-		endRender();
 	}
 
 	if(m_useShadersForTextRendering)
@@ -1518,36 +1937,57 @@ bool Renderer::drawScreenQuad(const ScreenQuad& screenQuad)
 	return true;
 }
 
-bool Renderer::drawScreenControls(const ScreenQuad& screenQuad)
+bool Renderer::drawTouchControls()
 {
 #if defined(RENDERER_TABLET)
-	renderControls(screenQuad);
-	renderButtons(screenQuad);	
+	renderControls();
+	renderButtons();	
 #endif	
-
-    return true;
+	return true;
 }
 
 #ifdef RENDERER_TABLET
-void Renderer::renderControls(const ScreenQuad& screenQuad)
-{
-	
+void Renderer::renderControls()
+{	
+#ifdef RENDERER_WINMODERN	
+	for(int i = 0; i < PX_ARRAY_SIZE(m_controlMesh); ++i) 
+	{		
+		m_controlMaterial->bind(RendererMaterial::PASS_UNLIT, m_controlMaterialInstance, false);
+		RendererMeshContext ctx;
+		PxReal zero = 0;
+		physx::PxMat44 ctrl_transform(PxVec4(m_controlPos[i].x, zero, zero, zero), 
+			PxVec4(m_controlPos[i].y, zero, zero, zero),
+			PxVec4(zero, zero, zero, zero),
+			PxVec4(zero, zero, zero, zero));
+		ctx.cullMode = RendererMeshContext::NONE;
+		ctx.transform = &ctrl_transform;		
+		bindMeshContext(ctx);
+		m_controlMaterial->bindMeshState(false);
+		m_controlMesh[i]->bind();
+		m_controlMesh[i]->render(m_controlMaterial);
+		m_controlMesh[i]->unbind();		
+		m_controlMaterial->unbind();
+	}	
+
+#else
 	m_controlMaterial->bind(RendererMaterial::PASS_UNLIT, m_controlMaterialInstance, false);
 	for(int i = 0; i < PX_ARRAY_SIZE(m_controlMesh); ++i) 
 	{
 		RendererMeshContext ctx;
-		PxF32 shaderData[16] = { m_controlPos[i].x, m_controlPos[i].y, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-	
-		ctx.transform = NULL;
-		ctx.shaderData = shaderData;
+		PxReal zero = 0;
+		physx::PxMat44 ctrl_transform(PxVec4(m_controlPos[i].x, zero, zero, zero), 
+									PxVec4(m_controlPos[i].y, zero, zero, zero),
+									PxVec4(m_controlPos[i].x, zero, zero, zero),
+									PxVec4(zero, zero, zero, zero));
 		ctx.cullMode = RendererMeshContext::NONE;
-		
+		ctx.transform = &ctrl_transform;
 		bindMeshContext(ctx);
 		m_controlMesh[i]->bind();
 		m_controlMesh[i]->render(m_controlMaterial);
 		m_controlMesh[i]->unbind();
 	}
 	m_controlMaterial->unbind();
+#endif
 }
 
 std::vector<Renderer::TabletButton>& Renderer::screenButtons()
@@ -1555,11 +1995,11 @@ std::vector<Renderer::TabletButton>& Renderer::screenButtons()
 	return m_buttons;
 }
 
-void Renderer::renderButtons(const ScreenQuad& screenQuad)
+void Renderer::renderButtons()
 {
 	if(m_buttons.size())
 	{
-		for(int i = 0; i < m_buttons.size(); ++i) 
+		for(PxU32 i = 0; i < m_buttons.size(); ++i) 
 		{
 			// if the button is not used do not draw it
 			if(m_buttons[i].emulatedKeyCode == 0)
@@ -1575,11 +2015,9 @@ void Renderer::renderButtons(const ScreenQuad& screenQuad)
 
 			m_buttons[i].material->bind(RendererMaterial::PASS_UNLIT, m_buttons[i].materialInstance, false);
 			RendererMeshContext ctx;
-			PxF32 shaderData[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-			
-			ctx.transform = NULL;
-			ctx.shaderData = shaderData;
+			physx::PxMat44 ctrl_transform(PxVec4(0.0f));
 			ctx.cullMode = RendererMeshContext::NONE;
+			ctx.transform = &ctrl_transform;
 			
 			bindMeshContext(ctx);
 
@@ -1588,7 +2026,7 @@ void Renderer::renderButtons(const ScreenQuad& screenQuad)
 			m_buttons[i].mesh->unbind();
 			m_buttons[i].material->unbind();
 		}
-		for(int i = 0; i < m_buttons.size(); ++i) 
+		for(PxU32 i = 0; i < m_buttons.size(); ++i) 
 		{
 			if(m_buttons[i].emulatedKeyCode == 0)
 				continue;
@@ -1596,7 +2034,7 @@ void Renderer::renderButtons(const ScreenQuad& screenQuad)
 			/* TODO: It seems that characters has variable width, so this code is not entirely valid, 
 				even though it makes it look better than just printing text starting from 
 				the center of the button */
-			const RendererColor textColor(255, 255, 255, 255.0f);
+			const RendererColor textColor(255, 255, 255, 255);
 			const PxReal TEXT_CHARACTER_WIDTH = 12.0f;
 			const PxReal TEXT_CHARACTER_HEIGHT = 12.0f;
 			/* Convert relative buttons coordinates to the absolute screen coordinates */
@@ -1609,7 +2047,7 @@ void Renderer::renderButtons(const ScreenQuad& screenQuad)
 			PxReal absoluteWidth = absoluteRightTop.x - absoluteLeftBottom.x;
 			
 			/* Leave empty space for half character near edges of the button */
-			PxU8 characterToFit = absoluteWidth / TEXT_CHARACTER_WIDTH - 1;
+			PxU8 characterToFit = (PxU8) (absoluteWidth / TEXT_CHARACTER_WIDTH - 1);
 			
 			std::string text;
 			PxVec2 textPos;
@@ -1627,13 +2065,11 @@ void Renderer::renderButtons(const ScreenQuad& screenQuad)
 			textPos.y = absoluteCenter.y - TEXT_CHARACTER_HEIGHT / 2.0f;
 			
 			
-			print(textPos.x, textPos.y, text.c_str(), 0.5f, 6.0f, textColor);
+			print((PxU32) textPos.x,(PxU32) textPos.y, text.c_str(), 0.5f, 6.0f, textColor, true);
 		}
 	}
 }
 #endif
-
-// PT: TODO: refactor both drawLines2D functions
 
 bool Renderer::drawLines2D(PxU32 nbVerts, const PxReal* vertices, const RendererColor& color)
 {

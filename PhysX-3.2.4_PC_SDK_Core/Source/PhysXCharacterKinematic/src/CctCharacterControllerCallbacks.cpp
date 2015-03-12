@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -39,11 +39,10 @@
 #include "PxConvexMeshGeometry.h"
 #include "PxHeightFieldGeometry.h"
 #include "CmRenderOutput.h"
-#include "GuGeomUtilsInternal.h"
-#include "PxCoreUtilities.h"
 #include "GuIntersectionTriangleBox.h"
+#include "PsMathUtils.h"
 
-static const bool gVisualizeTouchedTris = false;
+static const bool gVisualizeTouchedTris = true;
 static const float gDebugVisOffset = 0.01f;
 
 using namespace physx;
@@ -68,7 +67,7 @@ static void visualizeTouchedTriangles(PxU32 nbTrisToRender, PxU32 startIndex, co
 //			<< PxDebugColor::eARGB_GREEN << Cm::RenderOutput::TRIANGLES
 //			<< currentTriangle.verts[0]+yy << currentTriangle.verts[1]+yy << currentTriangle.verts[2]+yy;
 		Cm::RenderOutput(*renderBuffer)
-			<< PxDebugColor::eARGB_GREEN << Cm::RenderOutput::LINES
+			<< PxU32(PxDebugColor::eARGB_GREEN) << Cm::RenderOutput::LINES
 			<< currentTriangle.verts[0]+yy << currentTriangle.verts[1]+yy
 			<< currentTriangle.verts[1]+yy << currentTriangle.verts[2]+yy
 			<< currentTriangle.verts[2]+yy << currentTriangle.verts[0]+yy;
@@ -77,92 +76,121 @@ static void visualizeTouchedTriangles(PxU32 nbTrisToRender, PxU32 startIndex, co
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void tessellateTriangle(PxU32& nbNewTris, const PxTriangle& tr, PxU32 index, TriArray& worldTriangles, IntArray& triIndicesArray, const PxBounds3& cullingBox, const CCTParams& params)
+struct TessParams
 {
-	{
-		const PxVec3 boxCenter = cullingBox.getCenter();
-		const PxVec3 boxExtents = cullingBox.getExtents();
-		if(!Gu::intersectTriangleBox(boxCenter, boxExtents, tr.verts[0], tr.verts[1], tr.verts[2]))
-			return;
-	}
+	PxU32		nbNewTris;
+	PxU32		index;
+	TriArray*	worldTriangles;
+	IntArray*	triIndicesArray;
+	PxVec3		cullingBoxCenter;
+	PxVec3		cullingBoxExtents;
+	PxF32		maxEdgeLength2;
+	PxU16		nbTessellation;
+};
+
+static void tessellateTriangle(TessParams* tp, const PxVec3& v0, const PxVec3& v1, const PxVec3& v2)
+{
+	tp->nbTessellation++;
+
+	if(!Gu::intersectTriangleBox(tp->cullingBoxCenter, tp->cullingBoxExtents, v0, v1, v2))
+		return;
 
 	PxU32 code;
 	{
-		const PxVec3 edge0 = tr.verts[0] - tr.verts[1];
-		const PxVec3 edge1 = tr.verts[1] - tr.verts[2];
-		const PxVec3 edge2 = tr.verts[2] - tr.verts[0];
-		const bool split0 = edge0.magnitudeSquared()>params.mMaxEdgeLength2;
-		const bool split1 = edge1.magnitudeSquared()>params.mMaxEdgeLength2;
-		const bool split2 = edge2.magnitudeSquared()>params.mMaxEdgeLength2;
+		const PxVec3 edge0 = v0 - v1;
+		const PxVec3 edge1 = v1 - v2;
+		const PxVec3 edge2 = v2 - v0;
+		const float maxEdgeLength2 = tp->maxEdgeLength2;
+		const bool split0 = edge0.magnitudeSquared()>maxEdgeLength2;
+		const bool split1 = edge1.magnitudeSquared()>maxEdgeLength2;
+		const bool split2 = edge2.magnitudeSquared()>maxEdgeLength2;
 		code = (PxU32(split2)<<2)|(PxU32(split1)<<1)|PxU32(split0);
 	}
 
-	const PxVec3 m0 = (tr.verts[0] + tr.verts[1])*0.5f;
-	const PxVec3 m1 = (tr.verts[1] + tr.verts[2])*0.5f;
-	const PxVec3 m2 = (tr.verts[2] + tr.verts[0])*0.5f;
+	const PxVec3 m0 = (v0 + v1)*0.5f;
+	const PxVec3 m1 = (v1 + v2)*0.5f;
+	const PxVec3 m2 = (v2 + v0)*0.5f;
 
 	switch(code)
 	{
 		case 0:     // 000: no split
 		{
-			worldTriangles.pushBack(tr);
-			triIndicesArray.pushBack(index);
-			nbNewTris += 1;
+			tp->worldTriangles->pushBack(PxTriangle(v0, v1, v2));
+			tp->triIndicesArray->pushBack(tp->index);
+			tp->nbNewTris++;
 		}
 		break;
 		case 1:     // 001: split edge0
 		{
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[0], m0, tr.verts[2]),	index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(m0, tr.verts[1], tr.verts[2]),	index, worldTriangles, triIndicesArray, cullingBox, params);
+			tessellateTriangle(tp, v0, m0, v2);
+			tessellateTriangle(tp, m0, v1, v2);
 		}
 		break;
 		case 2:     // 010: split edge1
 		{
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[0], tr.verts[1], m1),	index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[0], m1, tr.verts[2]),	index, worldTriangles, triIndicesArray, cullingBox, params);
+			tessellateTriangle(tp, v0, v1, m1);
+			tessellateTriangle(tp, v0, m1, v2);
 		}
 		break;
 		case 3:     // 011: split edge0/edge1
 		{
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[0], m0, m1),			index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[0], m1, tr.verts[2]),	index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(m0, tr.verts[1], m1),			index, worldTriangles, triIndicesArray, cullingBox, params);
+			tessellateTriangle(tp, v0, m0, m1);
+			tessellateTriangle(tp, v0, m1, v2);
+			tessellateTriangle(tp, m0, v1, m1);
 		}
 		break;
 		case 4:     // 100: split edge2
 		{
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[0], tr.verts[1], m2),	index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[1], tr.verts[2], m2),	index, worldTriangles, triIndicesArray, cullingBox, params);
+			tessellateTriangle(tp, v0, v1, m2);
+			tessellateTriangle(tp, v1, v2, m2);
 		}
 		break;
 		case 5:     // 101: split edge0/edge2
 		{
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[0], m0, m2),			index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(m0, tr.verts[1], m2),			index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(m2, tr.verts[1], tr.verts[2]),	index, worldTriangles, triIndicesArray, cullingBox, params);
+			tessellateTriangle(tp, v0, m0, m2);
+			tessellateTriangle(tp, m0, v1, m2);
+			tessellateTriangle(tp, m2, v1, v2);
 		}
 		break;
 		case 6:     // 110: split edge1/edge2
 		{
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[0], tr.verts[1], m1),	index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[0], m1, m2),			index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(m2, m1, tr.verts[2]),			index, worldTriangles, triIndicesArray, cullingBox, params);
+			tessellateTriangle(tp, v0, v1, m1);
+			tessellateTriangle(tp, v0, m1, m2);
+			tessellateTriangle(tp, m2, m1, v2);
 		}
 		break;
 		case 7:     // 111: split edge0/edge1/edge2
 		{
-			tessellateTriangle(nbNewTris, PxTriangle(tr.verts[0], m0, m2),			index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(m0, tr.verts[1], m1),			index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(m2, m1, tr.verts[2]),			index, worldTriangles, triIndicesArray, cullingBox, params);
-			tessellateTriangle(nbNewTris, PxTriangle(m0, m1, m2),					index, worldTriangles, triIndicesArray, cullingBox, params);
+			tessellateTriangle(tp, v0, m0, m2);
+			tessellateTriangle(tp, m0, v1, m1);
+			tessellateTriangle(tp, m2, m1, v2);
+			tessellateTriangle(tp, m0, m1, m2);
 		}
 		break;
 	};
 }
 
+static void tessellateTriangle(PxU32& nbNewTris, const PxTriangle& tr, PxU32 index, TriArray& worldTriangles, IntArray& triIndicesArray, const PxBounds3& cullingBox, const CCTParams& params, PxU16& nbTessellation)
+{
+	TessParams tp;
+	tp.nbNewTris			= 0;
+	tp.index				= index;
+	tp.worldTriangles		= &worldTriangles;
+	tp.triIndicesArray		= &triIndicesArray;
+	tp.cullingBoxCenter		= cullingBox.getCenter();
+	tp.cullingBoxExtents	= cullingBox.getExtents();
+	tp.maxEdgeLength2		= params.mMaxEdgeLength2;
+	tp.nbTessellation		= 0;
+	tessellateTriangle(&tp, tr.verts[0], tr.verts[1], tr.verts[2]);
+
+	nbNewTris += tp.nbNewTris;
+	nbTessellation += tp.nbTessellation;
+//	nbTessellation += PxU16(tp.nbNewTris);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void outputPlaneToStream(PxShape* planeShape, const PxTransform& globalPose, IntArray& geomStream, TriArray& worldTriangles, IntArray& triIndicesArray,
+static void outputPlaneToStream(PxShape* planeShape, const PxRigidActor* actor, const PxTransform& globalPose, IntArray& geomStream, TriArray& worldTriangles, IntArray& triIndicesArray,
 								const PxExtendedVec3& origin, const PxBounds3& tmpBounds, const CCTParams& params, Cm::RenderBuffer* renderBuffer)
 {
 	PX_ASSERT(planeShape->getGeometryType() == PxGeometryType::ePLANE);
@@ -173,7 +201,7 @@ static void outputPlaneToStream(PxShape* planeShape, const PxTransform& globalPo
 	const PxPlane plane = PxPlaneEquationFromTransform(globalPose);
 
 	PxVec3 right, up;
-	Gu::computeBasis(plane.n, right, up);
+	Ps::computeBasis(plane.n, right, up);
 	right *= length;
 	up *= length;
 
@@ -189,7 +217,8 @@ static void outputPlaneToStream(PxShape* planeShape, const PxTransform& globalPo
 
 	TouchedMesh* touchedMesh			= (TouchedMesh*)reserve(geomStream, sizeof(TouchedMesh)/sizeof(PxU32));
 	touchedMesh->mType					= TouchedGeomType::eMESH;
-	touchedMesh->mUserData				= planeShape;
+	touchedMesh->mTGUserData			= planeShape;
+	touchedMesh->mActor					= actor;
 	touchedMesh->mOffset				= origin;
 	touchedMesh->mNbTris				= nbTouchedTris;
 	touchedMesh->mIndexWorldTriangles	= worldTriangles.size();
@@ -212,7 +241,7 @@ static void outputPlaneToStream(PxShape* planeShape, const PxTransform& globalPo
 		visualizeTouchedTriangles(touchedMesh->mNbTris, touchedMesh->mIndexWorldTriangles, &worldTriangles[0], renderBuffer, offset, params.mUpDirection);
 }
 
-static void outputSphereToStream(PxShape* sphereShape, const PxTransform& globalPose, IntArray& geomStream, const PxExtendedVec3& origin)
+static void outputSphereToStream(PxShape* sphereShape, const PxRigidActor* actor, const PxTransform& globalPose, IntArray& geomStream, const PxExtendedVec3& origin)
 {
 	PX_ASSERT(sphereShape->getGeometryType() == PxGeometryType::eSPHERE);
 	PxExtendedSphere WorldSphere;
@@ -226,9 +255,10 @@ static void outputSphereToStream(PxShape* sphereShape, const PxTransform& global
 		WorldSphere.center.z = globalPose.p.z;
 	}
 
-	TouchedSphere* PX_RESTRICT touchedSphere = (TouchedSphere* PX_RESTRICT)reserve(geomStream, sizeof(TouchedSphere)/sizeof(PxU32));
+	TouchedSphere* PX_RESTRICT touchedSphere = (TouchedSphere*)reserve(geomStream, sizeof(TouchedSphere)/sizeof(PxU32));
 	touchedSphere->mType		= TouchedGeomType::eSPHERE;
-	touchedSphere->mUserData	= sphereShape;
+	touchedSphere->mTGUserData	= sphereShape;
+	touchedSphere->mActor		= actor;
 	touchedSphere->mOffset		= origin;
 	touchedSphere->mRadius		= WorldSphere.radius;
 	touchedSphere->mCenter.x	= float(WorldSphere.center.x - origin.x);
@@ -238,7 +268,7 @@ static void outputSphereToStream(PxShape* sphereShape, const PxTransform& global
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void outputCapsuleToStream(PxShape* capsuleShape, const PxTransform& globalPose, IntArray& geomStream, const PxExtendedVec3& origin)
+static void outputCapsuleToStream(PxShape* capsuleShape, const PxRigidActor* actor, const PxTransform& globalPose, IntArray& geomStream, const PxExtendedVec3& origin)
 {
 	PX_ASSERT(capsuleShape->getGeometryType() == PxGeometryType::eCAPSULE);
 	PxExtendedCapsule WorldCapsule;
@@ -260,9 +290,10 @@ static void outputCapsuleToStream(PxShape* capsuleShape, const PxTransform& glob
 		WorldCapsule.p1.z	= p1.z;
 	}
 
-	TouchedCapsule* PX_RESTRICT touchedCapsule = (TouchedCapsule* PX_RESTRICT)reserve(geomStream, sizeof(TouchedCapsule)/sizeof(PxU32));
+	TouchedCapsule* PX_RESTRICT touchedCapsule = (TouchedCapsule*)reserve(geomStream, sizeof(TouchedCapsule)/sizeof(PxU32));
 	touchedCapsule->mType		= TouchedGeomType::eCAPSULE;
-	touchedCapsule->mUserData	= capsuleShape;
+	touchedCapsule->mTGUserData	= capsuleShape;
+	touchedCapsule->mActor		= actor;
 	touchedCapsule->mOffset		= origin;
 	touchedCapsule->mRadius		= WorldCapsule.radius;
 	touchedCapsule->mP0.x		= float(WorldCapsule.p0.x - origin.x);
@@ -275,8 +306,8 @@ static void outputCapsuleToStream(PxShape* capsuleShape, const PxTransform& glob
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void outputBoxToStream(	PxShape* boxShape, const PxTransform& globalPose, IntArray& geomStream, TriArray& worldTriangles, IntArray& triIndicesArray,
-								const PxExtendedVec3& origin, const PxBounds3& tmpBounds, const CCTParams& params)
+static void outputBoxToStream(	PxShape* boxShape, const PxRigidActor* actor, const PxTransform& globalPose, IntArray& geomStream, TriArray& worldTriangles, IntArray& triIndicesArray,
+								const PxExtendedVec3& origin, const PxBounds3& tmpBounds, const CCTParams& params, PxU16& nbTessellation)
 {
 	PX_ASSERT(boxShape->getGeometryType() == PxGeometryType::eBOX);
 	PxBoxGeometry bg;
@@ -328,7 +359,8 @@ static void outputBoxToStream(	PxShape* boxShape, const PxTransform& globalPose,
 
 	TouchedMesh* touchedMesh			= (TouchedMesh*)reserve(geomStream, sizeof(TouchedMesh)/sizeof(PxU32));
 	touchedMesh->mType					= TouchedGeomType::eMESH;
-	touchedMesh->mUserData				= boxShape;
+	touchedMesh->mTGUserData			= boxShape;
+	touchedMesh->mActor					= actor;
 	touchedMesh->mOffset				= origin;
 	touchedMesh->mIndexWorldTriangles	= worldTriangles.size();
 
@@ -345,7 +377,7 @@ static void outputBoxToStream(	PxShape* boxShape, const PxTransform& globalPose,
 			const PxTriangle currentTriangle(boxVerts[boxTris[i][0]], boxVerts[boxTris[i][1]], boxVerts[boxTris[i][2]]);
 
 			PxU32 nbNewTris = 0;
-			tessellateTriangle(nbNewTris, currentTriangle, PX_INVALID_U32, worldTriangles, triIndicesArray, cullingBox, params);
+			tessellateTriangle(nbNewTris, currentTriangle, PX_INVALID_U32, worldTriangles, triIndicesArray, cullingBox, params, nbTessellation);
 			nbCreatedTris += nbNewTris;
 		}
 		touchedMesh->mNbTris = nbCreatedTris;
@@ -443,8 +475,8 @@ static PxU32 createInvisibleWalls(const CCTParams& params, const PxTriangle& cur
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void outputMeshToStream(	PxShape* meshShape, const PxTransform& meshPose, IntArray& geomStream, TriArray& worldTriangles, IntArray& triIndicesArray,
-								const PxExtendedVec3& origin, const PxBounds3& tmpBounds, const CCTParams& params, Cm::RenderBuffer* renderBuffer)
+static void outputMeshToStream(	PxShape* meshShape, const PxRigidActor* actor, const PxTransform& meshPose, IntArray& geomStream, TriArray& worldTriangles, IntArray& triIndicesArray,
+								const PxExtendedVec3& origin, const PxBounds3& tmpBounds, const CCTParams& params, Cm::RenderBuffer* renderBuffer, PxU16& nbTessellation)
 {
 	PX_ASSERT(meshShape->getGeometryType() == PxGeometryType::eTRIANGLEMESH);
 	// Do AABB-mesh query
@@ -453,17 +485,18 @@ static void outputMeshToStream(	PxShape* meshShape, const PxTransform& meshPose,
 	meshShape->getTriangleMeshGeometry(triGeom);
 
 	const PxBoxGeometry boxGeom(tmpBounds.getExtents());
-	const PxTransform boxPose(tmpBounds.getCenter(), PxQuat::createIdentity());
+	const PxTransform boxPose(tmpBounds.getCenter(), PxQuat(PxIdentity));
 
 	// Collide AABB against current mesh
-	PxFindOverlapTriangleMeshUtil overlapUtil;
+	PxMeshOverlapUtil overlapUtil;
 	const PxU32 nbTouchedTris = overlapUtil.findOverlap(boxGeom, boxPose, triGeom, meshPose);
 
 	const PxVec3 offset(float(-origin.x), float(-origin.y), float(-origin.z));
 
 	TouchedMesh* touchedMesh			= (TouchedMesh*)reserve(geomStream, sizeof(TouchedMesh)/sizeof(PxU32));
 	touchedMesh->mType					= TouchedGeomType::eMESH;
-	touchedMesh->mUserData				= meshShape;
+	touchedMesh->mTGUserData			= meshShape;
+	touchedMesh->mActor					= actor;
 	touchedMesh->mOffset				= origin;
 	touchedMesh->mNbTris				= nbTouchedTris;
 	touchedMesh->mIndexWorldTriangles	= worldTriangles.size();
@@ -523,7 +556,8 @@ static void outputMeshToStream(	PxShape* meshShape, const PxTransform& meshPose,
 /*					worldTriangles.pushBack(currentTriangle);
 					triIndicesArray.pushBack(triangleIndex);
 					nbCreatedTris++;*/
-					tessellateTriangle(nbNewTris, currentTriangle, triangleIndex, worldTriangles, triIndicesArray, cullingBox, params);
+
+					tessellateTriangle(nbNewTris, currentTriangle, triangleIndex, worldTriangles, triIndicesArray, cullingBox, params, nbTessellation);
 					nbCreatedTris += nbNewTris;
 //					printf("Tesselate: %d new tris\n", nbNewTris);
 				}
@@ -571,7 +605,7 @@ static void outputMeshToStream(	PxShape* meshShape, const PxTransform& meshPose,
 				currentTriangle.verts[2] += offset;
 
 				PxU32 nbNewTris = 0;
-				tessellateTriangle(nbNewTris, currentTriangle, triangleIndex, worldTriangles, triIndicesArray, cullingBox, params);
+				tessellateTriangle(nbNewTris, currentTriangle, triangleIndex, worldTriangles, triIndicesArray, cullingBox, params, nbTessellation);
 //				printf("Tesselate: %d new tris\n", nbNewTris);
 				nbCreatedTris += nbNewTris;
 			}
@@ -585,8 +619,8 @@ static void outputMeshToStream(	PxShape* meshShape, const PxTransform& meshPose,
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void outputHeightFieldToStream(	PxShape* hfShape, const PxTransform& heightfieldPose, IntArray& geomStream, TriArray& worldTriangles, IntArray& triIndicesArray,
-										const PxExtendedVec3& origin, const PxBounds3& tmpBounds, const CCTParams& params, Cm::RenderBuffer* renderBuffer)
+static void outputHeightFieldToStream(	PxShape* hfShape, const PxRigidActor* actor, const PxTransform& heightfieldPose, IntArray& geomStream, TriArray& worldTriangles, IntArray& triIndicesArray,
+										const PxExtendedVec3& origin, const PxBounds3& tmpBounds, const CCTParams& params, Cm::RenderBuffer* renderBuffer, PxU16& nbTessellation)
 {
 	PX_ASSERT(hfShape->getGeometryType() == PxGeometryType::eHEIGHTFIELD);
 	// Do AABB-mesh query
@@ -595,17 +629,18 @@ static void outputHeightFieldToStream(	PxShape* hfShape, const PxTransform& heig
 	hfShape->getHeightFieldGeometry(hfGeom);
 
 	const PxBoxGeometry boxGeom(tmpBounds.getExtents());
-	const PxTransform boxPose(tmpBounds.getCenter(), PxQuat::createIdentity());
+	const PxTransform boxPose(tmpBounds.getCenter(), PxQuat(PxIdentity));
 
 	// Collide AABB against current heightfield
-	PxFindOverlapTriangleMeshUtil overlapUtil;
+	PxMeshOverlapUtil overlapUtil;
 	const PxU32 nbTouchedTris = overlapUtil.findOverlap(boxGeom, boxPose, hfGeom, heightfieldPose);
 
 	const PxVec3 offset(float(-origin.x), float(-origin.y), float(-origin.z));
 
 	TouchedMesh* touchedMesh			= (TouchedMesh*)reserve(geomStream, sizeof(TouchedMesh)/sizeof(PxU32));
 	touchedMesh->mType					= TouchedGeomType::eMESH; // ptchernev: seems to work
-	touchedMesh->mUserData				= hfShape;
+	touchedMesh->mTGUserData			= hfShape;
+	touchedMesh->mActor					= actor;
 	touchedMesh->mOffset				= origin;
 	touchedMesh->mNbTris				= nbTouchedTris;
 	touchedMesh->mIndexWorldTriangles	= worldTriangles.size();
@@ -662,7 +697,7 @@ static void outputHeightFieldToStream(	PxShape* hfShape, const PxTransform& heig
 				nbCreatedTris += nbNewTris;
 				if(!nbNewTris)
 				{
-					tessellateTriangle(nbNewTris, currentTriangle, triangleIndex, worldTriangles, triIndicesArray, cullingBox, params);
+					tessellateTriangle(nbNewTris, currentTriangle, triangleIndex, worldTriangles, triIndicesArray, cullingBox, params, nbTessellation);
 					nbCreatedTris += nbNewTris;
 //					printf("Tesselate: %d new tris\n", nbNewTris);
 				}
@@ -710,7 +745,7 @@ static void outputHeightFieldToStream(	PxShape* hfShape, const PxTransform& heig
 				currentTriangle.verts[2] += offset;
 
 				PxU32 nbNewTris = 0;
-				tessellateTriangle(nbNewTris, currentTriangle, triangleIndex, worldTriangles, triIndicesArray, cullingBox, params);
+				tessellateTriangle(nbNewTris, currentTriangle, triangleIndex, worldTriangles, triIndicesArray, cullingBox, params, nbTessellation);
 //				printf("Tesselate: %d new tris\n", nbNewTris);
 				nbCreatedTris += nbNewTris;
 			}
@@ -724,8 +759,8 @@ static void outputHeightFieldToStream(	PxShape* hfShape, const PxTransform& heig
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-static void outputConvexToStream(PxShape* convexShape, const PxTransform& absPose_, IntArray& geomStream, TriArray& worldTriangles, IntArray& triIndicesArray,
-								 const PxExtendedVec3& origin, const PxBounds3& tmpBounds, const CCTParams& params, Cm::RenderBuffer* renderBuffer)
+static void outputConvexToStream(PxShape* convexShape, const PxRigidActor* actor, const PxTransform& absPose_, IntArray& geomStream, TriArray& worldTriangles, IntArray& triIndicesArray,
+								 const PxExtendedVec3& origin, const PxBounds3& tmpBounds, const CCTParams& params, Cm::RenderBuffer* renderBuffer, PxU16& nbTessellation)
 {
 	PX_ASSERT(convexShape->getGeometryType() == PxGeometryType::eCONVEXMESH);
 	PxConvexMeshGeometry cg;
@@ -790,7 +825,8 @@ static void outputConvexToStream(PxShape* convexShape, const PxTransform& absPos
 
 	TouchedMesh* touchedMesh			= (TouchedMesh*)reserve(geomStream, sizeof(TouchedMesh)/sizeof(PxU32));
 	touchedMesh->mType					= TouchedGeomType::eMESH;
-	touchedMesh->mUserData				= convexShape;
+	touchedMesh->mTGUserData			= convexShape;
+	touchedMesh->mActor					= actor;
 	touchedMesh->mOffset				= origin;
 	touchedMesh->mIndexWorldTriangles	= worldTriangles.size();
 
@@ -816,7 +852,7 @@ static void outputConvexToStream(PxShape* convexShape, const PxTransform& absPos
 			currentTriangle.verts[2] = MeshOffset + absPose.rotate(verts[vref2]);
 
 			PxU32 nbNewTris = 0;
-			tessellateTriangle(nbNewTris, currentTriangle, PX_INVALID_U32, worldTriangles, triIndicesArray, cullingBox, params);
+			tessellateTriangle(nbNewTris, currentTriangle, PX_INVALID_U32, worldTriangles, triIndicesArray, cullingBox, params, nbTessellation);
 			nbCreatedTris += nbNewTris;
 		}
 		touchedMesh->mNbTris = nbCreatedTris;
@@ -868,7 +904,8 @@ void Cct::findTouchedGeometry(
 	IntArray& geomStream,
 
 	const CCTFilter& filter,
-	const CCTParams& params)
+	const CCTParams& params,
+	PxU16& nbTessellation)
 {
 	PX_ASSERT(userData);
 	
@@ -882,15 +919,15 @@ void Cct::findTouchedGeometry(
 	// Find touched *boxes* i.e. touched objects' AABBs in the world
 	// We collide against dynamic shapes too, to get back dynamic boxes/etc
 	// TODO: add active groups in interface!
-	PxSceneQueryFilterFlags sqFilterFlags;
-	if(filter.mStaticShapes)	sqFilterFlags |= PxSceneQueryFilterFlag::eSTATIC;
-	if(filter.mDynamicShapes)	sqFilterFlags |= PxSceneQueryFilterFlag::eDYNAMIC;
+	PxQueryFlags sqFilterFlags;
+	if(filter.mStaticShapes)	sqFilterFlags |= PxQueryFlag::eSTATIC;
+	if(filter.mDynamicShapes)	sqFilterFlags |= PxQueryFlag::eDYNAMIC;
 	if(filter.mFilterCallback)
 	{
 		if(filter.mPreFilter)
-			sqFilterFlags |= PxSceneQueryFilterFlag::ePREFILTER;
+			sqFilterFlags |= PxQueryFlag::ePREFILTER;
 		if(filter.mPostFilter)
-			sqFilterFlags |= PxSceneQueryFilterFlag::ePOSTFILTER;
+			sqFilterFlags |= PxQueryFlag::ePOSTFILTER;
 	}
 
 	// ### this one is dangerous
@@ -900,16 +937,20 @@ void Cct::findTouchedGeometry(
 	PxVec3 center = tmpBounds.getCenter(), extents = tmpBounds.getExtents();
 
 	const PxU32 size = 100;
-	PxShape* hits[size];
+	PxOverlapHit hits[size];
 
-	const PxSceneQueryFilterData sceneQueryFilterData = filter.mFilterData ? PxSceneQueryFilterData(*filter.mFilterData, sqFilterFlags) : PxSceneQueryFilterData(sqFilterFlags);
+	PxQueryFilterData sceneQueryFilterData = filter.mFilterData ? PxQueryFilterData(*filter.mFilterData, sqFilterFlags) : PxQueryFilterData(sqFilterFlags);
 
-	PxI32 numberHits = scene->overlapMultiple(PxBoxGeometry(extents), PxTransform(center), hits, size, sceneQueryFilterData, filter.mFilterCallback);
-	
-	for(PxI32 i = 0; i < numberHits; i++)
+	PxOverlapBuffer hitBuffer(hits, size);
+	sceneQueryFilterData.flags |= PxQueryFlag::eNO_BLOCK; // fix for DE8255
+	scene->overlap(PxBoxGeometry(extents), PxTransform(center), hitBuffer, sceneQueryFilterData, filter.mFilterCallback);
+	PxU32 numberHits = hitBuffer.getNbAnyHits();
+	for(PxU32 i = 0; i < numberHits; i++)
 	{
-		PxShape* shape = hits[i];
-		if(shape == NULL)
+		const PxOverlapHit& hit = hitBuffer.getAnyHit(i);
+		PxShape* shape = hit.shape;
+		PxRigidActor* actor = hit.actor;
+		if(!shape || !actor)
 			continue;
 
 		// Filtering
@@ -926,16 +967,16 @@ void Cct::findTouchedGeometry(
 		// PT: here you might want to disable kinematic objects.
 
 		// Output shape to stream
-		const PxTransform globalPose = getShapeGlobalPose(*shape);
+		const PxTransform globalPose = getShapeGlobalPose(*shape, *actor);
 
 		const PxGeometryType::Enum type = shape->getGeometryType();	// ### VIRTUAL!
-		if(type==PxGeometryType::eSPHERE)				outputSphereToStream		(shape, globalPose, geomStream, Origin);
-		else	if(type==PxGeometryType::eCAPSULE)		outputCapsuleToStream		(shape, globalPose, geomStream, Origin);
-		else	if(type==PxGeometryType::eBOX)			outputBoxToStream			(shape, globalPose, geomStream, worldTriangles, triIndicesArray, Origin, tmpBounds, params);
-		else	if(type==PxGeometryType::eTRIANGLEMESH)	outputMeshToStream			(shape, globalPose, geomStream, worldTriangles, triIndicesArray, Origin, tmpBounds, params, renderBuffer);
-		else	if(type==PxGeometryType::eHEIGHTFIELD)	outputHeightFieldToStream	(shape, globalPose, geomStream, worldTriangles, triIndicesArray, Origin, tmpBounds, params, renderBuffer);
-		else	if(type==PxGeometryType::eCONVEXMESH)	outputConvexToStream		(shape, globalPose, geomStream, worldTriangles, triIndicesArray, Origin, tmpBounds, params, renderBuffer);
-		else	if(type==PxGeometryType::ePLANE)		outputPlaneToStream			(shape, globalPose, geomStream, worldTriangles, triIndicesArray, Origin, tmpBounds, params, renderBuffer);
+		if(type==PxGeometryType::eSPHERE)				outputSphereToStream		(shape, actor, globalPose, geomStream, Origin);
+		else	if(type==PxGeometryType::eCAPSULE)		outputCapsuleToStream		(shape, actor, globalPose, geomStream, Origin);
+		else	if(type==PxGeometryType::eBOX)			outputBoxToStream			(shape, actor, globalPose, geomStream, worldTriangles, triIndicesArray, Origin, tmpBounds, params, nbTessellation);
+		else	if(type==PxGeometryType::eTRIANGLEMESH)	outputMeshToStream			(shape, actor, globalPose, geomStream, worldTriangles, triIndicesArray, Origin, tmpBounds, params, renderBuffer, nbTessellation);
+		else	if(type==PxGeometryType::eHEIGHTFIELD)	outputHeightFieldToStream	(shape, actor, globalPose, geomStream, worldTriangles, triIndicesArray, Origin, tmpBounds, params, renderBuffer, nbTessellation);
+		else	if(type==PxGeometryType::eCONVEXMESH)	outputConvexToStream		(shape, actor, globalPose, geomStream, worldTriangles, triIndicesArray, Origin, tmpBounds, params, renderBuffer, nbTessellation);
+		else	if(type==PxGeometryType::ePLANE)		outputPlaneToStream			(shape, actor, globalPose, geomStream, worldTriangles, triIndicesArray, Origin, tmpBounds, params, renderBuffer);
 	}
 }
 
@@ -948,7 +989,7 @@ void Cct::findTouchedGeometry(
 // #### hmmm, in the down case, isn't reported length too big ? It contains our artificial up component,
 // that might confuse the user
 
-static void fillCCTHit(PxCCTHit& hit, const SweptContact& contact, const PxVec3& dir, float length, Controller* controller)
+static void fillCCTHit(PxControllerHit& hit, const SweptContact& contact, const PxVec3& dir, float length, Controller* controller)
 {
 	hit.controller		= controller->getPxController();
 	hit.worldPos		= contact.mWorldPos;
@@ -966,14 +1007,15 @@ PxU32 Cct::shapeHitCallback(const InternalCBData_OnHit* userData, const SweptCon
 	PxControllerShapeHit hit;
 	fillCCTHit(hit, contact, dir, length, controller);
 
-	hit.shape			= (PxShape*)contact.mGeom->mUserData;
+	hit.shape			= (PxShape*)contact.mGeom->mTGUserData;
+	hit.actor			= const_cast<PxRigidActor*>(contact.mGeom->mActor);
 	hit.triangleIndex	= contact.mTriangleIndex;
 
-	if(controller->mCallback)
-		controller->mCallback->onShapeHit(hit);
+	if(controller->mReportCallback)
+		controller->mReportCallback->onShapeHit(hit);
 
 	PxControllerBehaviorCallback* behaviorCB = controller->mBehaviorCallback;
-	return behaviorCB ? behaviorCB->getBehaviorFlags(*hit.shape) : defaultBehaviorFlags;
+	return behaviorCB ? behaviorCB->getBehaviorFlags(*hit.shape, *hit.actor) : defaultBehaviorFlags;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -984,8 +1026,8 @@ static PX_FORCE_INLINE PxU32 handleObstacleHit(const PxObstacle& touchedObstacle
 	const_cast<PxInternalCBData_OnHit*>(internalData)->touchedObstacle = &touchedObstacle;	// (*) PT: TODO: revisit
 	const_cast<PxInternalCBData_OnHit*>(internalData)->touchedObstacleHandle = obstacleHandle;
 
-	if(controller->mCallback)
-		controller->mCallback->onObstacleHit(hit);
+	if(controller->mReportCallback)
+		controller->mReportCallback->onObstacleHit(hit);
 
 	PxControllerBehaviorCallback* behaviorCB = controller->mBehaviorCallback;
 	return behaviorCB ? behaviorCB->getBehaviorFlags(touchedObstacle) : defaultBehaviorFlags;
@@ -996,7 +1038,7 @@ PxU32 Cct::userHitCallback(const InternalCBData_OnHit* userData, const SweptCont
 	const PxInternalCBData_OnHit* internalData = static_cast<const PxInternalCBData_OnHit*>(userData);
 	Controller* controller = internalData->controller;
 
-	const PxU32 objectCode = (PxU32)(size_t)contact.mGeom->mUserData;
+	const PxU32 objectCode = (PxU32)(size_t)contact.mGeom->mTGUserData;
 	const UserObjectType type = decodeType(objectCode);
 	const PxU32 index = decodeIndex(objectCode);
 
@@ -1011,8 +1053,8 @@ PxU32 Cct::userHitCallback(const InternalCBData_OnHit* userData, const SweptCont
 
 		hit.other = other->getPxController();
 
-		if(controller->mCallback)
-			controller->mCallback->onControllerHit(hit);
+		if(controller->mReportCallback)
+			controller->mReportCallback->onControllerHit(hit);
 
 		PxControllerBehaviorCallback* behaviorCB = controller->mBehaviorCallback;
 		return behaviorCB ? behaviorCB->getBehaviorFlags(*hit.other) : defaultBehaviorFlags;
@@ -1025,8 +1067,9 @@ PxU32 Cct::userHitCallback(const InternalCBData_OnHit* userData, const SweptCont
 		PxControllerObstacleHit hit;
 		fillCCTHit(hit, contact, dir, length, controller);
 
-		const PxBoxObstacle& touchedObstacle = internalData->obstacles->mBoxObstacles[index];		
-		return handleObstacleHit(touchedObstacle, ObstacleContext::encodeHandle(index,PxGeometryType::eBOX) , hit, internalData, controller);
+		const ObstacleContext::InternalBoxObstacle& obstacle = internalData->obstacles->mBoxObstacles[index];
+		const PxBoxObstacle& touchedObstacle = obstacle.mData;
+		return handleObstacleHit(touchedObstacle, obstacle.mHandle , hit, internalData, controller);
 	}
 	else if(type==USER_OBJECT_CAPSULE_OBSTACLE)
 	{
@@ -1036,8 +1079,9 @@ PxU32 Cct::userHitCallback(const InternalCBData_OnHit* userData, const SweptCont
 		PxControllerObstacleHit hit;
 		fillCCTHit(hit, contact, dir, length, controller);
 
-		const PxCapsuleObstacle& touchedObstacle = internalData->obstacles->mCapsuleObstacles[index];
-		return handleObstacleHit(touchedObstacle, ObstacleContext::encodeHandle(index,PxGeometryType::eCAPSULE), hit, internalData, controller);
+		const ObstacleContext::InternalCapsuleObstacle& obstacle = internalData->obstacles->mCapsuleObstacles[index];
+		const PxCapsuleObstacle& touchedObstacle = obstacle.mData;
+		return handleObstacleHit(touchedObstacle, obstacle.mHandle, hit, internalData, controller);
 	}
 	else PX_ASSERT(0);
 

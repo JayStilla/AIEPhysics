@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,11 +32,11 @@
 #define PX_PHYSX_PROFILE_MEMORY_BUFFER_H
 #include "PxProfileBase.h"
 #include "PsAllocator.h"
-#include "PsIntrinsics.h"
+#include "PxMemory.h"
 
 namespace physx { namespace profile {
 
-	template<typename TAllocator = typename AllocatorTraits<PxU8>::Type >
+	template<typename TAllocator = typename shdfnd::AllocatorTraits<PxU8>::Type >
 	class MemoryBuffer : public TAllocator
 	{
 		PxU8* mBegin;
@@ -80,7 +80,7 @@ namespace physx { namespace profile {
 			{
 				PxU32 writeSize = inLength * sizeof( TDataType );
 				growBuf( writeSize );
-				memCopy( mBegin + size(), inValue, writeSize );
+				PxMemCopy( mBegin + size(), inValue, writeSize );
 				mEnd += writeSize;
 			}
 		}
@@ -95,7 +95,7 @@ namespace physx { namespace profile {
 				growBuf( writeSize );
 				PxU8* __restrict writePtr = mBegin + size();
 				for ( PxU32 idx =0; idx < inLength; ++idx, writePtr += inItemSize, inData += inStride )
-					memCopy( writePtr, inData, inItemSize );
+					PxMemCopy( writePtr, inData, inItemSize );
 				mEnd += writeSize;
 			}
 		}
@@ -117,7 +117,7 @@ namespace physx { namespace profile {
 				PxU8* newData = static_cast<PxU8*>( TAllocator::allocate( newSize * 2, __FILE__, __LINE__ ) );
 				if ( mBegin )
 				{
-					memCopy( newData, mBegin, currentSize );
+					PxMemCopy( newData, mBegin, currentSize );
 					TAllocator::deallocate( mBegin );
 				}
 				mBegin = newData;

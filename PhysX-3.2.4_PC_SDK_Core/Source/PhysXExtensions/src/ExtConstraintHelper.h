@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -132,9 +132,9 @@ namespace Ext
 			const PxVec3 c = vb*wa + va*wb;
 			const PxReal d = wa*wb - va.dot(vb);
 
-			row[0] = va * vb.x + vb * va.x + PxVec3(d,     c.z, -c.y);
-			row[1] = va * vb.y + vb * va.y + PxVec3(-c.z,  d,    c.x);
-			row[2] = va * vb.z + vb * va.z + PxVec3(c.y,   -c.x,   d);
+			row[0] = (va * vb.x + vb * va.x + PxVec3(d,     c.z, -c.y)) * 0.5f;
+			row[1] = (va * vb.y + vb * va.y + PxVec3(-c.z,  d,    c.x)) * 0.5f;
+			row[2] = (va * vb.z + vb * va.z + PxVec3(c.y,   -c.x,   d)) * 0.5f;
 		}
 
 		class ConstraintHelper
@@ -147,72 +147,82 @@ namespace Ext
 			ConstraintHelper(Px1DConstraint* c, const PxVec3& ra, const PxVec3& rb)
 				: mConstraints(c), mCurrent(c), mRa(ra), mRb(rb)	{}
 
+
 			// hard linear & angular
-			void linear(const PxVec3& axis, PxReal posErr)
+			PX_FORCE_INLINE void linearHard(const PxVec3& axis, PxReal posErr)
 			{
-				Px1DConstraint *c = linear(axis, posErr, 256);
+				Px1DConstraint *c = linear(axis, posErr, PxConstraintSolveHint::eEQUALITY);
 				c->flags |= Px1DConstraintFlag::eOUTPUT_FORCE;
 			}
 
-			void angular(const PxVec3& axis, PxReal posErr)
+			PX_FORCE_INLINE void angularHard(const PxVec3& axis, PxReal posErr)
 			{
-				Px1DConstraint *c = angular(axis, posErr, 256);
+				Px1DConstraint *c = angular(axis, posErr, PxConstraintSolveHint::eEQUALITY);
 				c->flags |= Px1DConstraintFlag::eOUTPUT_FORCE;
 			}
 
 			// limited linear & angular
-			void linear(const PxVec3& axis, PxReal error, const PxJointLimitParameters& limit)
+			PX_FORCE_INLINE void linearLimit(const PxVec3& axis, PxReal ordinate, PxReal limitValue, const PxJointLimitParameters& limit)
 			{
-				addLimit(linear(axis,error, 0),limit);
+				PxReal pad = limit.isSoft() ? 0 : limit.contactDistance;
+
+				if(ordinate + pad > limitValue)
+					addLimit(linear(axis,limitValue - ordinate, PxConstraintSolveHint::eNONE),limit);
 			}
 
-			void angular(const PxVec3& axis, PxReal error, const PxJointLimitParameters& limit)
+			PX_FORCE_INLINE void angularLimit(const PxVec3& axis, PxReal ordinate, PxReal limitValue, PxReal pad, const PxJointLimitParameters& limit)
 			{
-				addLimit(angular(axis,error, 0),limit);
+				if(limit.isSoft())
+					pad = 0;
+
+				if(ordinate + pad > limitValue)
+					addLimit(angular(axis,limitValue - ordinate, PxConstraintSolveHint::eNONE),limit);
+			}
+
+
+			PX_FORCE_INLINE void angularLimit(const PxVec3& axis, PxReal error, const PxJointLimitParameters& limit)
+			{
+				addLimit(angular(axis,error, PxConstraintSolveHint::eNONE),limit);
+			}
+
+			PX_FORCE_INLINE void halfAnglePair(PxReal halfAngle, PxReal lower, PxReal upper, PxReal pad, const PxVec3& axis, const PxJointLimitParameters& limit)
+			{
+				PX_ASSERT(lower<upper);
+				if(limit.isSoft())
+					pad = 0;
+
+				if(halfAngle < lower+pad)
+					angularLimit(-axis, -(lower - halfAngle)*2,limit);
+				if(halfAngle > upper-pad)
+					angularLimit(axis, (upper - halfAngle)*2, limit);
+			}
+
+			PX_FORCE_INLINE void quarterAnglePair(PxReal quarterAngle, PxReal lower, PxReal upper, PxReal pad, const PxVec3& axis, const PxJointLimitParameters& limit)
+			{
+				if(limit.isSoft())
+					pad = 0;
+
+				PX_ASSERT(lower<upper);
+				if(quarterAngle < lower+pad)
+					angularLimit(-axis, -(lower - quarterAngle)*4,limit);
+				if(quarterAngle > upper-pad)
+					angularLimit(axis, (upper - quarterAngle)*4, limit);
 			}
 
 			// driven linear & angular
 
-			void linear(const PxVec3& axis, PxReal velTarget, PxReal error, const PxD6JointDrive& drive)
+			PX_FORCE_INLINE void linear(const PxVec3& axis, PxReal velTarget, PxReal error, const PxD6JointDrive& drive)
 			{
-				addDrive(linear(axis,error,0),velTarget,drive);
+				addDrive(linear(axis,error,PxConstraintSolveHint::eNONE),velTarget,drive);
 			}
 
-			void angular(const PxVec3& axis, PxReal velTarget, PxReal error, const PxD6JointDrive& drive)
+			PX_FORCE_INLINE void angular(const PxVec3& axis, PxReal velTarget, PxReal error, const PxD6JointDrive& drive, PxConstraintSolveHint::Enum hint = PxConstraintSolveHint::eNONE)
 			{
-				addDrive(angular(axis,error,0),velTarget,drive);
-			}
-
-			void linearLimitPair(PxReal ordinate, PxReal lower, PxReal upper, PxReal pad, const PxVec3& axis, const PxJointLimitParameters& limit)
-			{
-				if(ordinate < lower + pad)
-					linear(-axis,-(lower - ordinate), limit);
-				
-				if(ordinate > upper - pad)
-					linear(axis, (upper - ordinate), limit);
+				addDrive(angular(axis,error,hint),velTarget,drive);
 			}
 
 
-			void halfAnglePair(PxReal halfAngle, PxReal lower, PxReal upper, PxReal pad, const PxVec3& axis, const PxJointLimitParameters& limit)
-			{
-				PX_ASSERT(lower<upper);
-				if(halfAngle < lower+pad)
-					angular(-axis, -(lower - halfAngle)*2,limit);
-				if(halfAngle > upper-pad)
-					angular(axis, (upper - halfAngle)*2, limit);
-			}
-
-			void quarterAnglePair(PxReal quarterAngle, PxReal lower, PxReal upper, PxReal pad, const PxVec3& axis, const PxJointLimitParameters& limit)
-			{
-				PX_ASSERT(lower<upper);
-				if(quarterAngle < lower+pad)
-					angular(-axis, -(lower - quarterAngle)*4,limit);
-				if(quarterAngle > upper-pad)
-					angular(axis, (upper - quarterAngle)*4, limit);
-			}
-
-
-			PxU32 getCount() { return PxU32(mCurrent - mConstraints); }
+			PX_FORCE_INLINE PxU32 getCount() { return PxU32(mCurrent - mConstraints); }
 
 			void prepareLockedAxes(const PxQuat& qA, const PxQuat& qB, const PxVec3& cB2cAp, PxU32 lin, PxU32 ang)
 			{
@@ -226,21 +236,23 @@ namespace Ext
 					PxVec3 row[3];
 					computeJacobianAxes(row, qA, qB);
 					PxVec3 imp = qB2qA.getImaginaryPart();
-					if(ang&1) angular(row[0], -2.0f*imp.x);
-					if(ang&2) angular(row[1], -2.0f*imp.y);
-					if(ang&4) angular(row[2], -2.0f*imp.z);
+					if(ang&1) angular(row[0], -imp.x, PxConstraintSolveHint::eEQUALITY, current++);
+					if(ang&2) angular(row[1], -imp.y, PxConstraintSolveHint::eEQUALITY, current++);
+					if(ang&4) angular(row[2], -imp.z, PxConstraintSolveHint::eEQUALITY, current++);
 				}
 
 				if(lin)
 				{
 					PxMat33 axes(qA);
-					if(lin&1) linear(axes[0], -cB2cAp[0]);
-					if(lin&2) linear(axes[1], -cB2cAp[1]);
-					if(lin&4) linear(axes[2], -cB2cAp[2]);
+					if(lin&1) linear(axes[0], -cB2cAp[0], PxConstraintSolveHint::eEQUALITY, current++);
+					if(lin&2) linear(axes[1], -cB2cAp[1], PxConstraintSolveHint::eEQUALITY, current++);
+					if(lin&4) linear(axes[2], -cB2cAp[2], PxConstraintSolveHint::eEQUALITY, current++);
 				}
 
-				for(;current < mCurrent; current++)
-					current->solveGroup = 256;
+				for(Px1DConstraint* front = mCurrent; front < current; front++)
+					front->flags = Px1DConstraintFlag::eOUTPUT_FORCE;
+
+				mCurrent = current;
 			}
 
 			Px1DConstraint *getConstraintRow()
@@ -249,67 +261,98 @@ namespace Ext
 			}
 
 		private:
-			Px1DConstraint* linear(const PxVec3& axis, PxReal posErr, PxU32 group)
+			PX_FORCE_INLINE Px1DConstraint* linear(const PxVec3& axis, PxReal posErr, PxConstraintSolveHint::Enum hint)
 			{
 				Px1DConstraint* c = mCurrent++;
 
-				c->linear0 = axis;					c->angular0	= mRa.cross(c->linear0);
-				c->linear1 = axis;					c->angular1 = mRb.cross(c->linear1);
+				c->solveHint		= PxU16(hint);
+				c->linear0 = axis;					c->angular0	= mRa.cross(axis);
+				c->linear1 = axis;					c->angular1 = mRb.cross(axis);
 				PX_ASSERT(c->linear0.isFinite());
 				PX_ASSERT(c->linear1.isFinite());
 				PX_ASSERT(c->angular0.isFinite());
 				PX_ASSERT(c->angular1.isFinite());
 
 				c->geometricError	= posErr;		
-				c->solveGroup		= group;
 
 				return c;
 			}
 
-			Px1DConstraint* angular(const PxVec3& axis, PxReal posErr, PxU32 group)
+			PX_FORCE_INLINE Px1DConstraint* angular(const PxVec3& axis, PxReal posErr, PxConstraintSolveHint::Enum hint)
 			{
 				Px1DConstraint* c = mCurrent++;
 
+				c->solveHint		= PxU16(hint);
 				c->linear0 = PxVec3(0);		c->angular0			= axis;
 				c->linear1 = PxVec3(0);		c->angular1			= axis;
 
 				c->geometricError	= posErr;
-				c->solveGroup		= group;
+				return c;
+			}
+
+			PX_FORCE_INLINE Px1DConstraint* linear(const PxVec3& axis, PxReal posErr, PxConstraintSolveHint::Enum hint, Px1DConstraint* c)
+			{
+				c->solveHint		= PxU16(hint);
+				c->linear0 = axis;					c->angular0	= mRa.cross(axis);
+				c->linear1 = axis;					c->angular1 = mRb.cross(axis);
+				PX_ASSERT(c->linear0.isFinite());
+				PX_ASSERT(c->linear1.isFinite());
+				PX_ASSERT(c->angular0.isFinite());
+				PX_ASSERT(c->angular1.isFinite());
+
+				c->geometricError	= posErr;		
+				
+
+				return c;
+			}
+
+			PX_FORCE_INLINE Px1DConstraint* angular(const PxVec3& axis, PxReal posErr, PxConstraintSolveHint::Enum hint, Px1DConstraint* c)
+			{
+				c->solveHint		= PxU16(hint);
+				c->linear0 = PxVec3(0.f);		c->angular0			= axis;
+				c->linear1 = PxVec3(0.f);		c->angular1			= axis;
+
+				c->geometricError	= posErr;
 
 				return c;
 			}
 
 			void addLimit(Px1DConstraint* c, const PxJointLimitParameters& limit)
 			{
-				c->minImpulse = 0;
-				c->flags |= Px1DConstraintFlag::eOUTPUT_FORCE;
+				PxU16 flags = PxU16(c->flags | Px1DConstraintFlag::eOUTPUT_FORCE);
 
-				c->restitution = limit.restitution;
-				if(c->restitution>0)
-					c->flags |= Px1DConstraintFlag::eRESTITUTION;
-
-				c->spring = limit.spring;
-				c->damping = limit.damping;
-
-				if(c->spring>0 || c->damping>0) 
-					c->flags |= Px1DConstraintFlag::eSPRING;
+				if(limit.isSoft())
+				{
+					flags |= Px1DConstraintFlag::eSPRING;
+					c->mods.spring.stiffness = limit.stiffness;
+					c->mods.spring.damping = limit.damping;
+				}
 				else
-					c->solveGroup = 257;
+				{
+					c->solveHint = PxConstraintSolveHint::eINEQUALITY;
+					c->mods.bounce.restitution = limit.restitution;
+					c->mods.bounce.velocityThreshold = limit.bounceThreshold;
+					if(c->geometricError>0)
+						flags |= Px1DConstraintFlag::eKEEPBIAS;
+					if(limit.restitution>0)
+						flags |= Px1DConstraintFlag::eRESTITUTION;
+				}
 
-				if(c->geometricError>0)
-					c->flags |= Px1DConstraintFlag::eKEEPBIAS;
+				c->flags = flags;
+				c->minImpulse = 0;
 			}
 
 			void addDrive(Px1DConstraint* c, PxReal velTarget, const PxD6JointDrive& drive)
 			{
 				c->velocityTarget = velTarget;
 
-				c->flags |= Px1DConstraintFlag::eSPRING;
-				c->spring = drive.spring;
-				c->damping = drive.damping;
+				PxU16 flags = PxU16(c->flags | Px1DConstraintFlag::eSPRING | Px1DConstraintFlag::eHAS_DRIVE_LIMIT);
 				if(drive.flags & PxD6JointDriveFlag::eACCELERATION)
-					c->flags |= Px1DConstraintFlag::eACCELERATION_SPRING;
-
+					flags |= Px1DConstraintFlag::eACCELERATION_SPRING;
+				c->flags = flags;
+				c->mods.spring.stiffness = drive.stiffness;
+				c->mods.spring.damping = drive.damping;
+				
 				c->minImpulse = -drive.forceLimit;
 				c->maxImpulse = drive.forceLimit;
 

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -37,7 +37,8 @@
 #include "SampleArray.h"
 
 #include "cloth/PxCloth.h"
-#include "cooking/PxClothMeshDesc.h"
+#include "extensions/PxClothMeshDesc.h"
+#include "RenderMaterial.h"
 
 namespace SampleRenderer
 {
@@ -46,25 +47,33 @@ namespace SampleRenderer
 }
 
 class RenderCapsuleActor;
+class RenderSphereActor;
+class RenderMeshActor;
 
 class RenderClothActor : public RenderBaseActor
 {
 public:
-	RenderClothActor(SampleRenderer::Renderer& renderer, const PxCloth& cloth, const PxClothMeshDesc &desc, const PxReal* uvs = NULL, const PxVec3 &color = PxVec3(0.5f, 0.5f, 0.5f), PxReal capsuleScale = 1.0f);
+	RenderClothActor( SampleRenderer::Renderer& renderer, const PxCloth& cloth, const PxClothMeshDesc &desc, const PxVec2* uvs = NULL, PxReal capsuleScale = 1.0f);
 
 	virtual								~RenderClothActor();
 
 	virtual void						update(float deltaTime);
+	virtual	void						render(SampleRenderer::Renderer& renderer, RenderMaterial* material, bool wireFrame);
+	void								setConvexMaterial(RenderMaterial* material);
 
-	typedef shdfnd::Array<RenderCapsuleActor*> CollisionActorArray;
-
-	const CollisionActorArray&			getSphereActors() { return mSphereActors; }
-	const CollisionActorArray&			getCapsuleActors() { return mCapsuleActors; }
+	virtual SampleRenderer::RendererClothShape*	getRenderClothShape() const { return mClothRenderShape; }
+	virtual const PxCloth*				getCloth() const { return &mCloth; }
 
 private:
 	void								updateRenderShape();
 
 private:
+
+	RenderClothActor& operator=(const RenderClothActor&);
+
+	void								freeCollisionRenderSpheres();
+	void								freeCollisionRenderCapsules();
+
 	SampleRenderer::Renderer&			mRenderer;
 	const PxCloth&                      mCloth; 
 
@@ -74,10 +83,11 @@ private:
 
 	// collision data used for debug rendering
 	PxClothCollisionSphere*             mSpheres;
-	PxU32*                              mIndexPairs;
+	PxU32*                              mCapsules;
 	PxClothCollisionPlane*				mPlanes;
-	PxU32*								mConvexMasks;
-	PxU32                               mNumPlanes, mNumConvexes;
+	PxU32*								mConvexes;
+	PxClothCollisionTriangle*			mTriangles;
+	PxU32                               mNumSpheres, mNumCapsules, mNumPlanes, mNumConvexes, mNumTriangles;
 
 	// texture uv (used only for render)
 	PxReal*								mUV;
@@ -86,10 +96,22 @@ private:
 	PxReal                              mCapsuleScale;
 
     SampleRenderer::RendererClothShape* mClothRenderShape;
+	RenderMaterial*						mConvexMaterial;
 
 	// collision shapes render actors
-	CollisionActorArray mSphereActors;
-	CollisionActorArray mCapsuleActors;
+	shdfnd::Array<RenderSphereActor*>	mSphereActors;
+	shdfnd::Array<RenderCapsuleActor*>	mCapsuleActors;
+
+	RenderMeshActor*					mMeshActor;
+	shdfnd::Array<PxU16>				mMeshIndices;
+
+	RenderMeshActor*					mConvexActor;
+	shdfnd::Array<PxVec3>				mConvexVertices;
+	shdfnd::Array<PxU16>				mConvexIndices;
+
+	shdfnd::Array<PxVec3>				mClothVertices;
+	shdfnd::Array<PxVec3>				mClothNormals;
+
 };
 
 #endif

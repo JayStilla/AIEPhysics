@@ -23,14 +23,14 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #ifndef PX_TOOLKIT_RANDOM_H
 #define PX_TOOLKIT_RANDOM_H
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #define TEST_MAX_RAND 0xffff
 
 namespace PxToolkit
@@ -81,9 +81,14 @@ namespace PxToolkit
 										return rand32()/((float)0xffffffff) - 0.5f;
 									}
 
-						void		unitRandomPt(PxVec3& v);
-						void		unitRandomQuat(PxQuat& v);
-		private:
+						PxF32		randomFloat32(PxReal a, PxReal b) { return rand32()/PxF32(0xffffffff)*(b-a)+a; }
+						void		unitRandomPt(physx::PxVec3& v);	
+						void		unitRandomQuat(physx::PxQuat& v);
+
+						PxVec3		unitRandomPt();
+						PxQuat		unitRandomQuat();
+
+	private:
 						PxU32		mRnd;
 	};
 

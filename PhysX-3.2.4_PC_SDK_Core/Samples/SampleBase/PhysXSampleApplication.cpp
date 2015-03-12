@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -58,7 +58,6 @@
 #include "PxPhysicsAPI.h"
 #include "extensions/PxExtensionsAPI.h"
 #include "PsFile.h"
-#include "PsShare.h"
 #include "pxtask/PxTask.h"
 #include "PxToolkit.h"
 #include "extensions/PxDefaultSimulationFilterShader.h"
@@ -75,6 +74,8 @@
 
 #include <SampleUserInputIds.h>
 #include "SampleUserInputDefines.h"
+
+#include "InputEventBuffer.h"
 
 #ifdef PX_PS3
 #include "extensions/ps3/PxPS3Extension.h"
@@ -93,14 +94,9 @@ using namespace PxToolkit;
 #define	CAMERA_NEAR		0.1f
 #define	CAMERA_FAR		10000.0f
 
-
-#ifdef SN_TARGET_PSP2
-#include <stdlib.h>
-// User main thread parameters
-extern const char			sceUserMainThreadName[]		= "physx_sample_main_thr";
-
-// Libc parameters
-unsigned int	sceLibcHeapSize	= 100*1024*1024;
+#ifdef PX_PS4
+unsigned int sceLibcHeapExtendedAlloc = 1;  /* Switch to dynamic allocation */
+size_t       sceLibcHeapSize = SCE_LIBC_HEAP_SIZE_EXTENDED_ALLOC_NO_LIMIT; /* no upper limit for heap area */
 #endif
 
 #define SAMPLE_FRAMEWORK_MEDIA_DIR	"media"
@@ -110,7 +106,6 @@ static char gSampleMediaFolder[512];
 ///////////////////////////////////////////////////////////////////////////////
 
 static PhysXSampleApplication* gBase = NULL;
-
 static void gNearPlane(Console* console, const char* text, void* userData)
 {
 	if(!text)
@@ -162,6 +157,7 @@ PhysXSampleApplication::PhysXSampleApplication(const SampleCommandLine& cmdline)
 	mDebugRenderer						(NULL),
 	mPause								(false),
 	mOneFrameUpdate						(false),
+	mSwitchSample						(false),
 	mShowHelp							(false),
 	mShowDescription					(false),
 	mShowExtendedHelp					(false),
@@ -174,6 +170,7 @@ PhysXSampleApplication::PhysXSampleApplication(const SampleCommandLine& cmdline)
 	mDefaultSamplePath					(NULL)
 {
 	mConsole = SAMPLE_NEW(Console)(getPlatform());
+	mInputEventBuffer = SAMPLE_NEW(InputEventBuffer)(*this);
 	if(mConsole)
 	{
 		gBase = this;
@@ -236,18 +233,64 @@ PhysXSampleApplication::PhysXSampleApplication(const SampleCommandLine& cmdline)
 	MENU_PUSHV(eCOLLISION_STATIC,		"Static pruning structure"	);
 	MENU_PUSHV(eCOLLISION_DYNAMIC,		"Dynamic pruning structure"	);
 	MENU_PUSHV(eCOLLISION_COMPOUNDS,	"Compounds"					);
+	//
+	MENU_PUSHV(eCLOTH_VERTICAL,			"Cloth Vertical Phases"		);
+	MENU_PUSHV(eCLOTH_HORIZONTAL,		"Cloth Horizontal Phases"	);
+	MENU_PUSHV(eCLOTH_BENDING,			"Cloth Bending Phases"		);
+	MENU_PUSHV(eCLOTH_SHEARING,			"Cloth Shearing Phases"		);
+	MENU_PUSHV(eCLOTH_VIRTUAL_PARTICLES, "Cloth Virtual Particles"  );
 
     mSelected = getSampleTreeRoot().getFirstTest();
+
+    setPvdParams(cmdline);
 }
 
 PhysXSampleApplication::~PhysXSampleApplication()
 {
 	DELETESINGLE(mConsole);
+	DELETESINGLE(mInputEventBuffer);
 
 	PX_ASSERT(!mLights.size());
 }
 
-const char* PhysXSampleApplication::inputInfoMsg(const char* firstPart,const char* secondPart, physx::PxI32 inputEventId1, physx::PxI32 inputEventId2)
+void PhysXSampleApplication::execute()
+{
+	if(isOpen())
+        onOpen();
+	while(!quitIsSignalled())
+	{
+		if(isOpen() && !isCloseRequested())
+		{
+			updateEngine();
+		}
+		else 
+			break;
+#if defined(RENDERER_ANDROID)
+		if(!SamplePlatform::platform()->isOpen())
+			break;
+#endif
+	}
+
+	mInputMutex.lock();
+	if (isOpen() || isCloseRequested())
+	{
+		close();
+	}
+	mInputMutex.unlock();
+
+	quit();
+}
+
+void PhysXSampleApplication::updateEngine()
+{
+	if(mInputEventBuffer)
+		mInputEventBuffer->flush();
+	if(mSwitchSample)
+		switchSample();
+	onDraw();
+}
+
+const char* PhysXSampleApplication::inputInfoMsg(const char* firstPart,const char* secondPart, PxI32 inputEventId1, PxI32 inputEventId2)
 {
 	const char* keyNames1[5];
 
@@ -319,7 +362,7 @@ const char* PhysXSampleApplication::inputInfoMsg(const char* firstPart,const cha
 	return m_Msg;
 }
 
-const char* PhysXSampleApplication::inputInfoMsg_Aor_BandC(const char* firstPart,const char* secondPart, physx::PxI32 inputEventIdA, physx::PxI32 inputEventIdB, physx::PxI32 inputEventIdC)
+const char* PhysXSampleApplication::inputInfoMsg_Aor_BandC(const char* firstPart,const char* secondPart, PxI32 inputEventIdA, PxI32 inputEventIdB, PxI32 inputEventIdC)
 {
 	PxU32 inputMask = TOUCH_PAD_INPUT | MOUSE_INPUT;
 	if(m_platform->getSampleUserInput()->gamepadSupported())
@@ -336,7 +379,7 @@ const char* PhysXSampleApplication::inputInfoMsg_Aor_BandC(const char* firstPart
 	const char* keyNamesC[5];
 	PxU16 numNamesC = getPlatform()->getSampleUserInput()->getUserInputKeys(inputEventIdC,keyNamesC,5,inputMask);
 
-	PX_ASSERT(numNamesB!=0 == numNamesC!=0);
+	PX_ASSERT((numNamesB!=0) == (numNamesC!=0));
 
 	strcpy(m_Msg, firstPart);
 	{
@@ -378,7 +421,7 @@ const char* PhysXSampleApplication::inputInfoMsg_Aor_BandC(const char* firstPart
 }
 
 
-const char* PhysXSampleApplication::inputMoveInfoMsg(const char* firstPart,const char* secondPart, physx::PxI32 inputEventId1, physx::PxI32 inputEventId2,physx::PxI32 inputEventId3,physx::PxI32 inputEventId4)
+const char* PhysXSampleApplication::inputMoveInfoMsg(const char* firstPart,const char* secondPart, PxI32 inputEventId1, PxI32 inputEventId2,PxI32 inputEventId3,PxI32 inputEventId4)
 {
 	const char* keyNames1[5];
 	const char* keyNames2[5];
@@ -475,40 +518,40 @@ const char* PhysXSampleApplication::inputMoveInfoMsg(const char* firstPart,const
 void PhysXSampleApplication::collectInputEvents(std::vector<const InputEvent*>& inputEvents)
 {	
 	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(MENU_SAMPLES,			WKEY_RETURN,	XKEY_RETURN,	PS3KEY_RETURN,	AKEY_UNKNOWN,	OSXKEY_RETURN,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_RETURN);
-	DIGITAL_INPUT_EVENT_DEF(MENU_QUICK_UP,			WKEY_UP,		XKEY_UP,		PS3KEY_UP,		AKEY_UNKNOWN,	OSXKEY_UP,		PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_UP);
-	DIGITAL_INPUT_EVENT_DEF(MENU_QUICK_DOWN,		WKEY_DOWN,		XKEY_DOWN,		PS3KEY_DOWN,	AKEY_UNKNOWN,	OSXKEY_DOWN,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_DOWN);
-	DIGITAL_INPUT_EVENT_DEF(MENU_QUICK_LEFT,		WKEY_LEFT,		XKEY_LEFT,		PS3KEY_LEFT,	AKEY_UNKNOWN,	OSXKEY_LEFT,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_LEFT);
-	DIGITAL_INPUT_EVENT_DEF(MENU_QUICK_RIGHT,		WKEY_RIGHT,		XKEY_RIGHT,		PS3KEY_RIGHT,	AKEY_UNKNOWN,	OSXKEY_RIGHT,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_RIGHT);
-	DIGITAL_INPUT_EVENT_DEF(MENU_SELECT,			WKEY_RETURN,	XKEY_RETURN,	PS3KEY_RETURN,	AKEY_UNKNOWN,	OSXKEY_RETURN,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_RETURN);
-	DIGITAL_INPUT_EVENT_DEF(MENU_ESCAPE,			WKEY_ESCAPE,	XKEY_ESCAPE,	PS3KEY_ESCAPE,	AKEY_UNKNOWN,	OSXKEY_ESCAPE,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_ESCAPE);
-	DIGITAL_INPUT_EVENT_DEF(QUIT,					WKEY_ESCAPE,	XKEY_ESCAPE,	PS3KEY_ESCAPE,	AKEY_UNKNOWN,	OSXKEY_ESCAPE,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_ESCAPE);
-	DIGITAL_INPUT_EVENT_DEF(SHOW_EXTENDED_HELP,		WKEY_F1,		XKEY_F1,		PS3KEY_F1,		AKEY_UNKNOWN,	OSXKEY_F1,		PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_F1);
+	DIGITAL_INPUT_EVENT_DEF(MENU_SAMPLES,			WKEY_RETURN,	XKEY_RETURN,	X1KEY_RETURN,	PS3KEY_RETURN,	PS4KEY_RETURN,	AKEY_UNKNOWN,	OSXKEY_RETURN,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_RETURN,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(MENU_QUICK_UP,			WKEY_UP,		XKEY_UP,		X1KEY_UP,		PS3KEY_UP,		PS4KEY_UP,		AKEY_UNKNOWN,	OSXKEY_UP,		PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_UP,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(MENU_QUICK_DOWN,		WKEY_DOWN,		XKEY_DOWN,		X1KEY_DOWN,		PS3KEY_DOWN,	PS4KEY_DOWN,	AKEY_UNKNOWN,	OSXKEY_DOWN,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_DOWN,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(MENU_QUICK_LEFT,		WKEY_LEFT,		XKEY_LEFT,		X1KEY_LEFT,		PS3KEY_LEFT,	PS4KEY_LEFT,	AKEY_UNKNOWN,	OSXKEY_LEFT,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_LEFT,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(MENU_QUICK_RIGHT,		WKEY_RIGHT,		XKEY_RIGHT,		X1KEY_RIGHT,	PS3KEY_RIGHT,	PS4KEY_RIGHT,	AKEY_UNKNOWN,	OSXKEY_RIGHT,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_RIGHT,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(MENU_SELECT,			WKEY_RETURN,	XKEY_RETURN,	X1KEY_RETURN,	PS3KEY_RETURN,	PS4KEY_RETURN,	AKEY_UNKNOWN,	OSXKEY_RETURN,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_RETURN,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(MENU_ESCAPE,			WKEY_ESCAPE,	XKEY_ESCAPE,	X1KEY_ESCAPE,	PS3KEY_ESCAPE,	PS4KEY_ESCAPE,	AKEY_UNKNOWN,	OSXKEY_ESCAPE,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_ESCAPE,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(QUIT,					WKEY_ESCAPE,	XKEY_ESCAPE,	X1KEY_ESCAPE,	PS3KEY_ESCAPE,	PS4KEY_ESCAPE,	AKEY_UNKNOWN,	OSXKEY_ESCAPE,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_ESCAPE,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(SHOW_EXTENDED_HELP,		WKEY_F1,		XKEY_F1,		X1KEY_F1,		PS3KEY_F1,		PS4KEY_F1,		AKEY_UNKNOWN,	OSXKEY_F1,		PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_F1,		WIIUKEY_UNKNOWN);
 #if PX_SUPPORT_GPU_PHYSX
-	DIGITAL_INPUT_EVENT_DEF(TOGGLE_CPU_GPU,			WKEY_F2,		XKEY_UNKNOWN,	PS3KEY_UNKNOWN,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(TOGGLE_CPU_GPU,			WKEY_F2,		XKEY_UNKNOWN,	X1KEY_UNKNOWN,		PS3KEY_UNKNOWN,	PS4KEY_UNKNOWN, AKEY_UNKNOWN,	OSXKEY_UNKNOWN,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	WIIUKEY_UNKNOWN);
 #endif
-	DIGITAL_INPUT_EVENT_DEF(MENU_VISUALIZATIONS,	WKEY_F3,		XKEY_F3,		PS3KEY_F3,		AKEY_UNKNOWN,	OSXKEY_F3,		PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_F3);
+	DIGITAL_INPUT_EVENT_DEF(MENU_VISUALIZATIONS,	WKEY_F3,		XKEY_F3,		X1KEY_F3,		PS3KEY_F3,		PS4KEY_F3, AKEY_UNKNOWN,	OSXKEY_F3,		PSP2KEY_UNKNOWN, IKEY_UNKNOWN,	LINUXKEY_F3,	WIIUKEY_UNKNOWN);
 	
 	//digital mouse events
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_MOVE_BUTTON, MOUSE_BUTTON_LEFT, XKEY_UNKNOWN, PS3KEY_UNKNOWN, AKEY_UNKNOWN, MOUSE_BUTTON_LEFT, PSP2KEY_UNKNOWN, IKEY_UNKNOWN, MOUSE_BUTTON_LEFT);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_MOVE_BUTTON, MOUSE_BUTTON_LEFT, XKEY_UNKNOWN,	X1KEY_UNKNOWN,	PS3KEY_UNKNOWN, PS4KEY_UNKNOWN, AKEY_UNKNOWN, MOUSE_BUTTON_LEFT, PSP2KEY_UNKNOWN, IKEY_UNKNOWN, MOUSE_BUTTON_LEFT,	WIIUKEY_UNKNOWN);
 
 	//digital gamepad events
-	DIGITAL_INPUT_EVENT_DEF(MENU_SAMPLES,	GAMEPAD_START,		GAMEPAD_START,		GAMEPAD_START,		AKEY_UNKNOWN,	GAMEPAD_START,		GAMEPAD_START,		IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(MENU_UP,		GAMEPAD_DIGI_UP,	GAMEPAD_DIGI_UP,	GAMEPAD_DIGI_UP,	AKEY_UNKNOWN,	GAMEPAD_DIGI_UP,	GAMEPAD_DIGI_UP,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(MENU_DOWN,		GAMEPAD_DIGI_DOWN,	GAMEPAD_DIGI_DOWN,	GAMEPAD_DIGI_DOWN,	AKEY_UNKNOWN,	GAMEPAD_DIGI_DOWN,	GAMEPAD_DIGI_DOWN,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(MENU_LEFT,		GAMEPAD_DIGI_LEFT,	GAMEPAD_DIGI_LEFT,	GAMEPAD_DIGI_LEFT,	AKEY_UNKNOWN,	GAMEPAD_DIGI_LEFT,	GAMEPAD_DIGI_LEFT,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);	
-	DIGITAL_INPUT_EVENT_DEF(MENU_RIGHT,		GAMEPAD_DIGI_RIGHT,	GAMEPAD_DIGI_RIGHT,	GAMEPAD_DIGI_RIGHT,	AKEY_UNKNOWN,	GAMEPAD_DIGI_RIGHT,	GAMEPAD_DIGI_RIGHT,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(MENU_SELECT,	GAMEPAD_SOUTH,		GAMEPAD_SOUTH,		GAMEPAD_SOUTH,		AKEY_UNKNOWN,	GAMEPAD_SOUTH,		GAMEPAD_SOUTH,		IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(MENU_ESCAPE,	GAMEPAD_EAST,		GAMEPAD_EAST,		GAMEPAD_EAST,		AKEY_UNKNOWN,	GAMEPAD_EAST,		GAMEPAD_EAST,		IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(MENU_SAMPLES,	GAMEPAD_START,		GAMEPAD_START,		GAMEPAD_START,		GAMEPAD_START,		GAMEPAD_START,		AKEY_UNKNOWN,	GAMEPAD_START,		GAMEPAD_START,		IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_START);
+	DIGITAL_INPUT_EVENT_DEF(MENU_UP,		GAMEPAD_DIGI_UP,	GAMEPAD_DIGI_UP,	GAMEPAD_DIGI_UP,	GAMEPAD_DIGI_UP,	GAMEPAD_DIGI_UP,	AKEY_UNKNOWN,	GAMEPAD_DIGI_UP,	GAMEPAD_DIGI_UP,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_DIGI_UP);
+	DIGITAL_INPUT_EVENT_DEF(MENU_DOWN,		GAMEPAD_DIGI_DOWN,	GAMEPAD_DIGI_DOWN,	GAMEPAD_DIGI_DOWN,	GAMEPAD_DIGI_DOWN,	GAMEPAD_DIGI_DOWN,	AKEY_UNKNOWN,	GAMEPAD_DIGI_DOWN,	GAMEPAD_DIGI_DOWN,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_DIGI_DOWN);
+	DIGITAL_INPUT_EVENT_DEF(MENU_LEFT,		GAMEPAD_DIGI_LEFT,	GAMEPAD_DIGI_LEFT,	GAMEPAD_DIGI_LEFT,	GAMEPAD_DIGI_LEFT,	GAMEPAD_DIGI_LEFT,	AKEY_UNKNOWN,	GAMEPAD_DIGI_LEFT,	GAMEPAD_DIGI_LEFT,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_DIGI_LEFT);	
+	DIGITAL_INPUT_EVENT_DEF(MENU_RIGHT,		GAMEPAD_DIGI_RIGHT,	GAMEPAD_DIGI_RIGHT,	GAMEPAD_DIGI_RIGHT,	GAMEPAD_DIGI_RIGHT,	GAMEPAD_DIGI_RIGHT,	AKEY_UNKNOWN,	GAMEPAD_DIGI_RIGHT,	GAMEPAD_DIGI_RIGHT,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_DIGI_RIGHT);
+	DIGITAL_INPUT_EVENT_DEF(MENU_SELECT,	GAMEPAD_SOUTH,		GAMEPAD_SOUTH,		GAMEPAD_SOUTH,		GAMEPAD_SOUTH,		GAMEPAD_SOUTH,		AKEY_UNKNOWN,	GAMEPAD_SOUTH,		GAMEPAD_SOUTH,		IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_SOUTH);
+	DIGITAL_INPUT_EVENT_DEF(MENU_ESCAPE,	GAMEPAD_EAST,		GAMEPAD_EAST,		GAMEPAD_EAST,		GAMEPAD_EAST,		GAMEPAD_EAST,		AKEY_UNKNOWN,	GAMEPAD_EAST,		GAMEPAD_EAST,		IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_EAST);
 
 	//analog mouse events
-	ANALOG_INPUT_EVENT_DEF(CAMERA_MOUSE_LOOK,GAMEPAD_DEFAULT_SENSITIVITY, MOUSE_MOVE, XKEY_UNKNOWN, PS3KEY_UNKNOWN, AKEY_UNKNOWN, MOUSE_MOVE, PSP2KEY_UNKNOWN, IKEY_UNKNOWN, MOUSE_MOVE);
+	ANALOG_INPUT_EVENT_DEF(CAMERA_MOUSE_LOOK,GAMEPAD_DEFAULT_SENSITIVITY, MOUSE_MOVE, XKEY_UNKNOWN, X1KEY_UNKNOWN,	PS3KEY_UNKNOWN, PS4KEY_UNKNOWN, AKEY_UNKNOWN, MOUSE_MOVE, PSP2KEY_UNKNOWN, IKEY_UNKNOWN, MOUSE_MOVE, WIIUKEY_UNKNOWN);
 
 	// touchscreen events for sampleall
 	if(mRunning->getParent()->numChildren() > 1)
 	{
-		TOUCH_INPUT_EVENT_DEF(RUN_NEXT_SAMPLE,		">>",  ASELECTOR_BUTTON2,	ISELECTOR_BUTTON2);
-		TOUCH_INPUT_EVENT_DEF(RUN_PREVIOUS_SAMPLE,	"<<",  ASELECTOR_BUTTON1,	ISELECTOR_BUTTON1);
+		TOUCH_INPUT_EVENT_DEF(RUN_NEXT_SAMPLE,		">>",  ASELECTOR_BUTTON2,	ISELECTOR_BUTTON2, TOUCH_SELECTOR_BUTTON2);
+		TOUCH_INPUT_EVENT_DEF(RUN_PREVIOUS_SAMPLE,	"<<",  ASELECTOR_BUTTON1,	ISELECTOR_BUTTON1, TOUCH_SELECTOR_BUTTON1);
 	}
 
 	if(mCurrentCameraController)
@@ -533,7 +576,7 @@ void PhysXSampleApplication::refreshVisualizationMenuState(PxVisualizationParame
 	
 	for(PxU32 i=0; i < mMenuVisualizations.size(); i++)
 	{
-		if(mMenuVisualizations[i].toggleCommand == p)
+		if(mMenuVisualizations[i].toggleCommand == (PxU32)p)
 		{
 			mMenuVisualizations[i].toggleState = !!scene.getVisualizationParameter(p);
 			break;
@@ -605,7 +648,7 @@ float PhysXSampleApplication::tweakElapsedTime(float dtime)
 
 void PhysXSampleApplication::baseResize(PxU32 width, PxU32 height)
 {
-//	printf("Resize: %d | %d\n", width, height);
+//	shdfnd::printFormatted("Resize: %d | %d\n", width, height);
 
 	SampleApplication::onResize(width, height);
 
@@ -614,8 +657,6 @@ void PhysXSampleApplication::baseResize(PxU32 width, PxU32 height)
 
 void PhysXSampleApplication::updateCameraViewport(PxU32 clientWidth, PxU32 clientHeight)
 {
-	Renderer* renderer = getRenderer();
-
 //	PxU32 clientWidth, clientHeight;
 //	renderer->getWindowSize(clientWidth, clientHeight);
 
@@ -628,6 +669,35 @@ void PhysXSampleApplication::updateCameraViewport(PxU32 clientWidth, PxU32 clien
 #else
 	mCamera.setScreenSize(clientWidth, clientHeight, clientWidth, clientHeight);
 #endif
+}
+
+void PhysXSampleApplication::setPvdParams(const SampleCommandLine& cmdLine)
+{
+	if (cmdLine.hasSwitch("nonVizPvd"))
+	{
+		mPvdParams.useFullPvdConnection = false;
+	}
+
+	if (cmdLine.hasSwitch("pvdhost"))
+	{
+		const char* ipStr = cmdLine.getValue("pvdhost");
+		if (ipStr)
+			PxStrcpy(mPvdParams.ip, 256, ipStr);
+	}
+
+	if (cmdLine.hasSwitch("pvdport"))
+	{	
+		const char* portStr = cmdLine.getValue("pvdport");
+		if (portStr)
+			mPvdParams.port = atoi(portStr);	
+	}
+
+	if (cmdLine.hasSwitch("pvdtimeout"))
+	{	
+		const char* timeoutStr = cmdLine.getValue("pvdtimeout");
+		if (timeoutStr)
+			mPvdParams.timeout = atoi(timeoutStr);	
+	}
 }
 
 void PhysXSampleApplication::onRender()
@@ -649,7 +719,7 @@ void PhysXSampleApplication::onRender()
 		}
 #endif
 		renderer->clearBuffers();
-        
+
 		if(mDrawScreenQuad)
 		{
 			ScreenQuad sq;
@@ -674,11 +744,25 @@ void PhysXSampleApplication::onRender()
 			mSample->getPhysics().getPvdConnectionManager()->setCamera( "SampleCamera", camPos, camUp, camTarget );
 		}
 
+		// main scene render
+		{
+			mSample->render();
+			renderer->render(mCamera.getViewMatrix(), mCamera.getProjMatrix());
+		}
 
-		mSample->render();
+		// render debug lines and points with a small depth bias to avoid z-fighting
+		{
+			mSample->getDebugRenderer()->queueForRenderLine();
+			mSample->getDebugRenderer()->queueForRenderPoint();
 
-		renderer->render(mCamera.getViewMatrix(), mCamera.getProjMatrix());
-
+			// modify entry(3,3) of the projection matrix according to 
+			// http://www.terathon.com/gdc07_lengyel.pdf
+			// this applies a small constant depth bias in NDC
+			SampleRenderer::RendererProjection proj = mCamera.getProjMatrix();
+			proj.getPxMat44()(3,3) += 4.8e-3f;
+			
+			renderer->render(mCamera.getViewMatrix(), proj);
+		}
 	{
 		const PxReal scale = 0.5f;
 		const PxReal shadowOffset = 6.0f;
@@ -788,7 +872,14 @@ void PhysXSampleApplication::onRender()
 				{
 					const RendererColor highlightTextColor(255, 255, 0, 255);
 					mRunning->getPathName(strbuf, sizeof strbuf - 1, true);
-					if (mPause) strncat(strbuf, "  <PAUSED>", 10);
+
+					PVD::PvdConnectionManager* connMgr = mSample->getPhysics().getPvdConnectionManager();
+					if (connMgr && connMgr->isConnected())
+						strncat(strbuf, "  <PVD>", 7);
+
+					if (mPause) 
+						strncat(strbuf, "  <PAUSED>", 10);
+
 					renderer->print(x, y += yInc, strbuf, scale, shadowOffset, highlightTextColor);
 					y += yInc;
 
@@ -833,26 +924,14 @@ void PhysXSampleApplication::onRender()
 		// PT: "customizeRender" is NOT just for text render, it's a generic render callback that should be called all the time,
 		// not just when "mTextAlpha" isn't 0.0
 		mSample->customizeRender();
-
-		if(mDrawScreenQuad)
-		{
-			ScreenQuad sq;
-			sq.mLeftUpColor		= mScreenQuadTopColor;
-			sq.mRightUpColor	= mScreenQuadTopColor;
-			sq.mLeftDownColor	= mScreenQuadBottomColor;
-			sq.mRightDownColor	= mScreenQuadBottomColor;
-
-			renderer->drawScreenControls(sq);
-		}
-
 	}
+
+	renderer->drawTouchControls();
 
 	mSample->displayFPS();
 
 	if(isConsoleActive())
 		mConsole->render(getRenderer());
-        
-    getRenderer()->finalizeTextRender();
 	}
 }
 /*
@@ -940,16 +1019,13 @@ void PhysXSampleApplication::onTickPreRender(float dtime)
 			mTextAlphaDesc = 1.0f;
 	}
 
-
-	if(mHideMouseCursor)
-	{
-		if(hasFocus())
-			showCursor(false);
-		else
-			showCursor(true);
-	}
-
 	if (mSample) mSample->onTickPreRender(dtime);
+}
+
+void PhysXSampleApplication::handleMouseVisualization()
+{
+    // hide cursor if mHideMouseCursor is set and the window has focus.
+    showCursor(!mHideMouseCursor || !hasFocus());
 }
 
 void PhysXSampleApplication::onShutdown()
@@ -979,18 +1055,30 @@ void PhysXSampleApplication::onShutdown()
 	mLights.clear();
 	for(PxU32 i=0;i<MATERIAL_COUNT;i++)
 	{
-		mManagedMaterials[i]->release();
+		if(mManagedMaterials[i])
+			mManagedMaterials[i]->release();
 		mManagedMaterials[i] = NULL;
 	}
 	
 	DELETESINGLE(mDebugRenderer);
+
+#ifdef PX_WIIU
+	PxWiiUCloseSystemLibraries();
+#endif
 }
 
 void PhysXSampleApplication::onInit()
 {
+#ifdef PX_WIIU
+	PxWiiUInitSystemLibraries();
+#endif
+
+	MutexT<RawAllocator>::ScopedLock lock(mInputMutex);
+
 	Renderer* renderer = getRenderer();
 
-	getPlatform()->getSampleUserInput()->registerInputEventListerner(this);
+	getPlatform()->getSampleUserInput()->setRenderer(renderer);
+	getPlatform()->getSampleUserInput()->registerInputEventListerner(mInputEventBuffer);
 
 	PxU32 clientWidth, clientHeight;
 	renderer->getWindowSize(clientWidth, clientHeight);
@@ -1007,8 +1095,9 @@ void PhysXSampleApplication::onInit()
 
 	renderer->initTexter();	
 	renderer->initScreenquad();
-
+	
 	mDebugRenderer = SAMPLE_NEW(RenderPhysX3Debug)(*renderer, *getAssetManager());
+	
 	// Create managed materials
 	{
 		const PxReal c = 0.75f;
@@ -1049,7 +1138,6 @@ void PhysXSampleApplication::setMouseCursorHiding(bool hide)
 	if(hide != mHideMouseCursor)
 	{
 		mHideMouseCursor = hide;
-		showCursor(!hide);
 	}						
 }
 
@@ -1059,7 +1147,7 @@ void PhysXSampleApplication::setMouseCursorRecentering(bool recenter)
 	SamplePlatform::platform()->setMouseCursorRecentering(recenter);
 }
 
-void PhysXSampleApplication::onPointerInputEvent(const InputEvent& ie, physx::PxU32 x, physx::PxU32 y, physx::PxReal dx, physx::PxReal dy, bool val)
+void PhysXSampleApplication::onPointerInputEvent(const InputEvent& ie, PxU32 x, PxU32 y, PxReal dx, PxReal dy, bool val)
 {
 	SampleApplication::onPointerInputEvent(ie,x,y,dx,dy,val);
 
@@ -1074,23 +1162,14 @@ void PhysXSampleApplication::onPointerInputEvent(const InputEvent& ie, physx::Px
 	}
 }
 
-void PhysXSampleApplication::onKeyDownEx(SampleFramework::SampleUserInput::KeyCode keyCode, physx::PxU32 wParam)
+void PhysXSampleApplication::onKeyDownEx(SampleFramework::SampleUserInput::KeyCode keyCode, PxU32 wParam)
 { 
 	if(mSample) 
 		mSample->onKeyDownEx(keyCode, wParam);
 
-	if(!mConsole)
-		return;
-
-	if(mConsole->mIsActive)
-	{
+	if(mConsole)
 		mConsole->onKeyDown(keyCode, wParam);
-	}
-	else
-	{
-		if(keyCode == SampleFramework::SampleUserInput::KEY_TAB)
-			mConsole->mIsActive = true;
-	}
+
 }
 
 void PhysXSampleApplication::onResize(PxU32 width, PxU32 height)										
@@ -1100,7 +1179,7 @@ void PhysXSampleApplication::onResize(PxU32 width, PxU32 height)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-bool PhysXSampleApplication::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
+void PhysXSampleApplication::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
 { 
 	if(mCurrentCameraController)
 	{
@@ -1109,9 +1188,11 @@ bool PhysXSampleApplication::onDigitalInputEvent(const SampleFramework::InputEve
 
 	SampleApplication::onDigitalInputEvent(ie,val);
 
-	if (isConsoleActive())
+	if (mConsole)
 	{
-		return mConsole->onDigitalInputEvent(ie,val);		
+		mConsole->onDigitalInputEvent(ie,val);
+		if(mConsole->isActive())
+			return;			
 	}
 
 	MenuKey::Enum menuKey = MenuKey::NONE;
@@ -1133,7 +1214,7 @@ bool PhysXSampleApplication::onDigitalInputEvent(const SampleFramework::InputEve
 			{
 				handleMenuKey(MenuKey::NAVI_UP);
 				if(!handleMenuKey(MenuKey::SELECT))
-					return false;
+					return;
 			}
 		}
 		break;
@@ -1162,18 +1243,18 @@ bool PhysXSampleApplication::onDigitalInputEvent(const SampleFramework::InputEve
 			if (ie.m_Id == SHOW_HELP)
 			{
 				mShowHelp = !mShowHelp;
-				return true;
+				return;
 			}
 			if(mMenuType == MenuType::TESTS)
 			{
 				if(!handleMenuKey(menuKey))
-					return false;
+					return;
 			}
 			else
 			{
 				handleSettingMenuKey(menuKey);
 			}
-			return true;
+			return;
 		}
 
 		switch (ie.m_Id)
@@ -1187,14 +1268,12 @@ bool PhysXSampleApplication::onDigitalInputEvent(const SampleFramework::InputEve
 			}
 		case MENU_VISUALIZATIONS:
 			{
-				mShowExtendedHelp = false;
 				mMenuExpand = true;	
 				mMenuType = MenuType::VISUALIZATIONS;
 				break;
 			}		
 		case MENU_SAMPLES:
 			{
-				mShowExtendedHelp = false;
 				mMenuExpand = true;	
 				mMenuType = MenuType::TESTS;
 				break;
@@ -1207,8 +1286,7 @@ bool PhysXSampleApplication::onDigitalInputEvent(const SampleFramework::InputEve
 		default:
 			if(NULL != mSample)
 			{
-				if(!mSample->onDigitalInputEvent(ie,val))
-					return false;
+				mSample->onDigitalInputEvent(ie,val);
 			}
 			break;
 		}
@@ -1225,18 +1303,14 @@ bool PhysXSampleApplication::onDigitalInputEvent(const SampleFramework::InputEve
 		}
 		if(mSample)
 		{
-			if(!mSample->onDigitalInputEvent(ie,val))
-				return false;
+			mSample->onDigitalInputEvent(ie,val);
 		}
 	}
-
-	return true;
 }
 
 void PhysXSampleApplication::toggleDebugRenderer()
 {
 	PxScene& scene = mSample->getActiveScene();
-	PxReal debugRendering = scene.getVisualizationParameter(PxVisualizationParameter::eSCALE);
 	scene.setVisualizationParameter(PxVisualizationParameter::eSCALE, mSample->getDebugRenderScale());
 	mMenuVisualizations[0].toggleState = true;
 }
@@ -1278,6 +1352,9 @@ void PhysXSampleApplication::handleSettingMenuKey(MenuKey::Enum menuKey)
 
 bool PhysXSampleApplication::handleMenuKey(MenuKey::Enum menuKey)
 {
+	if (!mSelected)
+		return false;
+
 	Test::TestGroup* parent = mSelected->getParent(), *child = NULL;
 	PX_ASSERT(parent);
 	
@@ -1307,7 +1384,8 @@ bool PhysXSampleApplication::handleMenuKey(MenuKey::Enum menuKey)
 		if (mSelected->isTest())
 		{
 			mMenuExpand = false;
-			switchSample();
+			mSwitchSample = true;
+			mInputEventBuffer->clear();
 			return false;
 		}
 		else
@@ -1326,13 +1404,11 @@ bool PhysXSampleApplication::handleMenuKey(MenuKey::Enum menuKey)
 
 void PhysXSampleApplication::switchSample()
 {
+	MutexT<RawAllocator>::ScopedLock lock(mInputMutex);
+	if(mInputEventBuffer)
+		mInputEventBuffer->clear();
+
 	bool isRestart = mRunning == mSelected;
-	bool togglePause = isPaused();
-
-	if (mSample && togglePause)
-		mSample->togglePause();
-
-	setDefaultCameraController();
 
 	Renderer* renderer = getRenderer();
 	if (renderer)
@@ -1347,6 +1423,11 @@ void PhysXSampleApplication::switchSample()
 		mSample = NULL;
 	}
 
+	if(!isRestart)
+	{
+		setDefaultCameraController();
+		resetDefaultCameraController();
+	}
 	if (getNextSample())
 	{	
 		mSample->onInit(isRestart);
@@ -1358,8 +1439,7 @@ void PhysXSampleApplication::switchSample()
 		mSample->initRenderObjects();
 	}
 
-	if (mSample && togglePause)
-		mSample->togglePause();
+	mSwitchSample = false;
 }
 
 //=============================================================================
@@ -1384,7 +1464,7 @@ bool PhysXSampleApplication::addSample(Test::TestGroup &root, SampleCreator crea
 	{
 		if ('\0' == fullPath[0] || '/' == fullPath[0])
 		{
-			printf("invalid name: %s\n", fullPath);
+			shdfnd::printFormatted("invalid name: %s\n", fullPath);
 			break;
 		}
 
@@ -1396,7 +1476,7 @@ bool PhysXSampleApplication::addSample(Test::TestGroup &root, SampleCreator crea
 		{
 			if (root.getChildByName(fullPath))	// duplicated name
 			{
-				printf("test \"%s\" exists.\n", fullPath);
+				shdfnd::printFormatted("test \"%s\" exists.\n", fullPath);
 				break;
 			}
 			root.addTest(creator, fullPath);

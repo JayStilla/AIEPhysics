@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -49,8 +49,9 @@ namespace Cm
 
 	class FlushPool
 	{
+		PX_NOCOPY(FlushPool)
 	public:
-		FlushPool(PxU32 chunkSize) : mChunks(PX_DEBUG_EXP("FlushPoolChunk")), mChunkIndex(0), mOffset(0), mChunkSize(chunkSize) 
+		FlushPool(PxU32 chunkSize) : mChunks(PX_DEBUG_EXP("FlushPoolChunk")), mChunkIndex(0), mOffset(0), mChunkSize(chunkSize)
 		{
 			mChunks.pushBack(static_cast<PxU8*>(PX_ALLOC(mChunkSize, PX_DEBUG_EXP("PxU8"))));
 		}
@@ -65,7 +66,6 @@ namespace Cm
 		void* allocate(PxU32 size, PxU32 alignment=16)
 		{
 			Ps::Mutex::ScopedLock lock(mMutex);
-
 			return allocateNotThreadSafe(size, alignment);
 		}
 
@@ -106,6 +106,8 @@ namespace Cm
 
 		void clearNotThreadSafe(PxU32 spareChunkCount = sSpareChunkCount)
 		{
+			PX_UNUSED(spareChunkCount);
+
 			//release memory not used previously
 			PxU32 targetSize = mChunkIndex+sSpareChunkCount;
 			while (mChunks.size() > targetSize)
@@ -126,6 +128,16 @@ namespace Cm
 			mChunks.pushBack(firstChunk);
 			mChunkIndex = 0;
 			mOffset = 0;
+		}
+
+		void lock()
+		{
+			mMutex.lock();
+		}
+
+		void unlock()
+		{
+			mMutex.unlock();	
 		}
 
 	private:

@@ -1,37 +1,29 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #include <RendererConfig.h>
 
@@ -108,19 +100,20 @@ static D3DDECLUSAGE getD3DUsage(RendererVertexBuffer::Semantic semantic, PxU8 &u
 			break;
 		}
 	}
-	RENDERER_ASSERT(d3dUsage != D3DDECLUSAGE_FOG, "Invalid Direct3D9 vertex usage.");
+	// There's absolutely no reason why there can't be semantics for which Direct3D9 has no support
+	//RENDERER_ASSERT(d3dUsage != D3DDECLUSAGE_FOG, "Invalid Direct3D9 vertex usage.");
 	return d3dUsage;
 }
 
-D3D9RendererVertexBuffer::D3D9RendererVertexBuffer(IDirect3DDevice9 &d3dDevice, D3D9Renderer& renderer, const RendererVertexBufferDesc &desc, bool deferredUnlock) :
+D3D9RendererVertexBuffer::D3D9RendererVertexBuffer(IDirect3DDevice9 &d3dDevice, D3D9Renderer& renderer, const RendererVertexBufferDesc &desc) :
 RendererVertexBuffer(desc),
 	m_d3dDevice(d3dDevice),
 	m_savedData(NULL)
 {
 	m_d3dVertexBuffer = 0;
-	m_deferredUnlock = deferredUnlock;
 
-	m_usage      = 0;
+	m_usage      = D3DUSAGE_WRITEONLY;
+	m_lockFlags  = 0;
 	m_pool       = renderer.canUseManagedResources() ? D3DPOOL_MANAGED : D3DPOOL_DEFAULT;
 	m_bufferSize = (UINT)(desc.maxVertices * m_stride);
 
@@ -129,7 +122,17 @@ RendererVertexBuffer(desc),
 #if RENDERER_ENABLE_DYNAMIC_VB_POOLS
 	if(desc.hint==RendererVertexBuffer::HINT_DYNAMIC )
 	{
-		m_usage = desc.registerInCUDA ? 0 : D3DUSAGE_DYNAMIC;
+		if (!desc.registerInCUDA)
+		{
+			m_usage = D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY;
+			// discard all that data if we are going to overwrite it again (saves some time waiting to copy everything back)
+			m_lockFlags = D3DLOCK_DISCARD;
+		}
+		else
+		{
+			m_usage = 0;
+		}
+
 		m_pool  = D3DPOOL_DEFAULT;
 	}
 #endif
@@ -169,7 +172,10 @@ void D3D9RendererVertexBuffer::addVertexElements(PxU32 streamIndex, std::vector<
 		{
 			PxU8 d3dUsageIndex  = 0;
 			D3DDECLUSAGE d3dUsage = getD3DUsage(semantic, d3dUsageIndex);
-			vertexElements.push_back(buildVertexElement((WORD)streamIndex, (WORD)sm.offset, getD3DType(sm.format), D3DDECLMETHOD_DEFAULT, (BYTE)d3dUsage, d3dUsageIndex));
+			if (D3DDECLUSAGE_FOG != d3dUsage)
+			{
+				vertexElements.push_back(buildVertexElement((WORD)streamIndex, (WORD)sm.offset, getD3DType(sm.format), D3DDECLMETHOD_DEFAULT, (BYTE)d3dUsage, d3dUsageIndex));
+			}
 		}
 	}
 }
@@ -193,7 +199,7 @@ void *D3D9RendererVertexBuffer::lock(void)
 	if(m_d3dVertexBuffer)
 	{
 		const PxU32 bufferSize = m_maxVertices * m_stride;
-		HRESULT res = m_d3dVertexBuffer->Lock(0, (UINT)bufferSize, &lockedBuffer, 0);
+		HRESULT res = m_d3dVertexBuffer->Lock(0, (UINT)bufferSize, &lockedBuffer, m_lockFlags);
 		if(res != S_OK)
 			lockedBuffer = NULL;
 		RENDERER_ASSERT(lockedBuffer, "Failed to lock Direct3D9 Vertex Buffer.");
@@ -243,7 +249,7 @@ void D3D9RendererVertexBuffer::onDeviceLost(void)
 				m_savedData = new char[m_bufferSize];
 
 			void* lockedBuffer = 0;
-			m_d3dVertexBuffer->Lock(0, m_bufferSize, &lockedBuffer, 0);
+			m_d3dVertexBuffer->Lock(0, m_bufferSize, &lockedBuffer, m_lockFlags);
 			RENDERER_ASSERT(lockedBuffer, "Failed to lock Direct3D9 Vertex Buffer.");
 
 			memcpy(m_savedData, lockedBuffer, m_bufferSize);
@@ -272,7 +278,7 @@ void D3D9RendererVertexBuffer::onDeviceReset(void)
 		if (m_bufferWritten)
 		{
 			void* lockedBuffer = 0;
-			m_d3dVertexBuffer->Lock(0, m_bufferSize, &lockedBuffer, 0);
+			m_d3dVertexBuffer->Lock(0, m_bufferSize, &lockedBuffer, m_lockFlags);
 			RENDERER_ASSERT(lockedBuffer, "Failed to lock Direct3D9 Vertex Buffer.");
 
 			RENDERER_ASSERT(m_savedData != NULL, "Data buffer must have been allocated.");

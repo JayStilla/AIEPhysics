@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,7 @@
 @{
 */
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "PxGeometry.h"
 #include "PxBoxGeometry.h"
 #include "PxSphereGeometry.h"
@@ -153,7 +153,31 @@ public:
 		return get<const PxHeightFieldGeometry, PxGeometryType::eHEIGHTFIELD>();
 	}
 
+	PX_FORCE_INLINE void storeAny(const PxGeometry& geometry)
+	{
+		switch(geometry.getType())
+		{
+		case PxGeometryType::eSPHERE:		put<PxSphereGeometry>(geometry); break;
+		case PxGeometryType::ePLANE:		put<PxPlaneGeometry>(geometry); break;
+		case PxGeometryType::eCAPSULE:		put<PxCapsuleGeometry>(geometry); break;
+		case PxGeometryType::eBOX:			put<PxBoxGeometry>(geometry); break;
+		case PxGeometryType::eCONVEXMESH:	put<PxConvexMeshGeometry>(geometry); break;
+		case PxGeometryType::eTRIANGLEMESH: put<PxTriangleMeshGeometry>(geometry); break;
+		case PxGeometryType::eHEIGHTFIELD:	put<PxHeightFieldGeometry>(geometry); break;
+		case PxGeometryType::eGEOMETRY_COUNT:
+		case PxGeometryType::eINVALID:
+		default:
+			PX_ASSERT(0);
+		}
+	}
+
 	private:
+		template<typename T> void put(const PxGeometry& geometry)
+		{
+			static_cast<T&>(any()) = static_cast<const T&>(geometry);
+		}
+
+
 		template<typename T, PxGeometryType::Enum type> T& get()
 		{
 			PX_ASSERT(getType() == type);

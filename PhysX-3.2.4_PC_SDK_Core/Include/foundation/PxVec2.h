@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -57,6 +57,15 @@ public:
 	*/
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxVec2() {}
 
+
+	/**
+	\brief zero constructor.
+	*/
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxVec2(PxZERO r): x(0.0f), y(0.0f) 
+	{
+		PX_UNUSED(r);
+	}
+
 	/**
 	\brief Assigns scalar parameter to all elements.
 
@@ -89,12 +98,22 @@ public:
 	/**
 	\brief element access
 	*/
-	PX_CUDA_CALLABLE PX_FORCE_INLINE PxReal& operator[](int index)					{ PX_ASSERT(index>=0 && index<=1); return (&x)[index]; }
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxReal& operator[](int index)
+	{
+		PX_ASSERT(index>=0 && index<=1);
+
+		return reinterpret_cast<PxReal*>(this)[index];
+	}
 
 	/**
 	\brief element access
 	*/
-	PX_CUDA_CALLABLE PX_FORCE_INLINE const PxReal& operator[](int index) const		{ PX_ASSERT(index>=0 && index<=1); return (&x)[index]; }
+	PX_CUDA_CALLABLE PX_FORCE_INLINE const PxReal& operator[](int index) const
+	{
+		PX_ASSERT(index>=0 && index<=1);
+
+		return reinterpret_cast<const PxReal*>(this)[index];
+	}
 
 	/**
 	\brief returns true if the two vectors are exactly equal.
@@ -124,7 +143,7 @@ public:
 	*/
 	PX_CUDA_CALLABLE PX_FORCE_INLINE bool isNormalized() const
 	{
-		const float unitTolerance = PxReal(1e-4);
+		const float unitTolerance = 1e-4f;
 		return isFinite() && PxAbs(magnitude()-1)<unitTolerance;
 	}
 
@@ -168,7 +187,7 @@ public:
 	*/
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxVec2 operator /(PxReal f) const
 	{
-		f = PxReal(1) / f;	// PT: inconsistent notation with operator /=
+		f = 1.0f / f;	// PT: inconsistent notation with operator /=
 		return PxVec2(x * f, y * f);
 	}
 
@@ -225,7 +244,7 @@ public:
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxVec2 getNormalized() const
 	{
 		const PxReal m = magnitudeSquared();
-		return m>0 ? *this * PxRecipSqrt(m) : PxVec2(0,0);
+		return m>0.0f ? *this * PxRecipSqrt(m) : PxVec2(0,0);
 	}
 
 	/**
@@ -234,7 +253,7 @@ public:
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxReal normalize()
 	{
 		const PxReal m = magnitude();
-		if (m>0) 
+		if (m>0.0f) 
 			*this /= m;
 		return m;
 	}

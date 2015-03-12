@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -41,7 +41,7 @@
 
 namespace physx { namespace profile {
 	
-	typedef MutexT<WrapperReflectionAllocator<PxU8> >	TZoneMutexType;
+	typedef shdfnd::MutexT<WrapperReflectionAllocator<PxU8> >	TZoneMutexType;
 	typedef ScopedLockImpl<TZoneMutexType>				TZoneLockType;
 	typedef EventBuffer< PxDefaultContextProvider, TZoneMutexType, TZoneLockType, PxProfileNullEventFilter > TZoneEventBufferType;
 
@@ -50,7 +50,7 @@ namespace physx { namespace profile {
 					, public PxProfileZone
 					, public PxProfileEventBufferClient
 	{
-		typedef MutexT<WrapperReflectionAllocator<PxU8> >	TMutexType;
+		typedef shdfnd::MutexT<WrapperReflectionAllocator<PxU8> >	TMutexType;
 		typedef ProfileHashMap<const char*, PxU32>			TNameToEvtIndexMap;
 		//ensure we don't reuse event ids.
 		typedef ProfileHashMap<PxU16, const char*>			TEvtIdToNameMap;
@@ -68,8 +68,9 @@ namespace physx { namespace profile {
 
 		ProfileArray<PxProfileZoneClient*>				mClients;
 		volatile bool									mEventsActive;
-		PxUserCustomProfiler							*mUserCustomProfiler;
-
+		PxUserCustomProfiler*							mUserCustomProfiler;
+		
+		PX_NOCOPY(ZoneImpl<TNameProvider>)
 	public:
 		ZoneImpl( PxAllocatorCallback* inAllocator, const char* inName, PxU32 bufferSize = 0x4000 /*16k*/, const TNameProvider& inProvider = TNameProvider() )
 			: TZoneEventBufferType( inAllocator, bufferSize, PxDefaultContextProvider(), NULL, PxProfileNullEventFilter() )
@@ -102,7 +103,7 @@ namespace physx { namespace profile {
 			TZoneEventBufferType::removeClient( *this );
 		}
 
-		virtual void setUserCustomProfiler(PxUserCustomProfiler *up)
+		virtual void setUserCustomProfiler(PxUserCustomProfiler* up)
 		{
 			mUserCustomProfiler = up;
 		}
@@ -110,9 +111,7 @@ namespace physx { namespace profile {
 		void doAddName( const char* inName, PxU16 inEventId, bool inCompileTimeEnabled )
 		{
 			TLockType theLocker( mMutex );
-			bool success = mEvtIdToNameMap.insert( inEventId, inName );
-			PX_ASSERT( success ); //Indicates duplicate ids added to name map
-			PX_UNUSED( success );
+			mEvtIdToNameMap.insert( inEventId, inName );
 			PxU32 idx = static_cast<PxU32>( mEventNames.size() );
 			mNameToEvtIndexMap.insert( inName, idx );
 			mEventNames.pushBack( PxProfileEventName( inName, PxProfileEventId( inEventId, inCompileTimeEnabled ) ) );
@@ -144,14 +143,14 @@ namespace physx { namespace profile {
 				foundAnEventId = false;
 				++eventId;
 				for ( PxU16 idx = 0; idx < inLen && foundAnEventId == false; ++idx )
-					foundAnEventId = mEvtIdToNameMap.find( eventId + idx ) != NULL;
+					foundAnEventId = mEvtIdToNameMap.find( PxU16(eventId + idx) ) != NULL;
 			}
 			while( foundAnEventId );
 
 			PxU32 clientCount = mClients.size();
 			for ( PxU16 nameIdx = 0; nameIdx < inLen; ++nameIdx )
 			{
-				PxU16 newId = eventId + nameIdx;
+				PxU16 newId = PxU16(eventId + nameIdx);
 				doAddName( inNames[nameIdx], newId, true );
 				for( PxU32 clientIdx =0; clientIdx < clientCount; ++clientIdx )
 					mClients[clientIdx]->handleEventAdded( PxProfileEventName( inNames[nameIdx], PxProfileEventId( newId ) ) );
@@ -235,7 +234,7 @@ namespace physx { namespace profile {
 		{ 
 			if ( mUserCustomProfiler )
 			{
-				const char *name = mEvtIdToNameMap[inId];
+				const char* name = mEvtIdToNameMap[inId];
 				mUserCustomProfiler->onStartEvent(name,contextId,0);
 			}
 			if( mEventsActive ) 
@@ -247,7 +246,7 @@ namespace physx { namespace profile {
 		{ 
 			if ( mUserCustomProfiler )
 			{
-				const char *name = mEvtIdToNameMap[inId];
+				const char* name = mEvtIdToNameMap[inId];
 				mUserCustomProfiler->onStopEvent(name,contextId,0);
 			}
 			if( mEventsActive ) 
@@ -260,7 +259,7 @@ namespace physx { namespace profile {
 		{ 
 			if ( mUserCustomProfiler )
 			{
-				const char *name = mEvtIdToNameMap[inId];
+				const char* name = mEvtIdToNameMap[inId];
 				mUserCustomProfiler->onStartEvent(name,contextId,threadId);
 			}
 			if( mEventsActive ) 
@@ -272,7 +271,7 @@ namespace physx { namespace profile {
 		{ 
 			if ( mUserCustomProfiler )
 			{
-				const char *name = mEvtIdToNameMap[inId];
+				const char* name = mEvtIdToNameMap[inId];
 				mUserCustomProfiler->onStopEvent(name,contextId,threadId);
 			}
 			if( mEventsActive ) 
@@ -290,7 +289,7 @@ namespace physx { namespace profile {
 		{ 
 			if ( mUserCustomProfiler )
 			{
-				const char *name = mEvtIdToNameMap[inId];
+				const char* name = mEvtIdToNameMap[inId];
 				mUserCustomProfiler->onEventValue(name,inValue);
 			}
 			if( mEventsActive ) 

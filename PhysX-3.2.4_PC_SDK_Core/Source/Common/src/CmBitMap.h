@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,14 +34,12 @@
 #include "PsAllocator.h"
 #include "PsUserAllocated.h"
 #include "PxAssert.h"
-#include "PsNoCopy.h"
 #include "PxMath.h"
 #include "PsIntrinsics.h"
 #include "PsMathUtils.h"
 #include "CmPhysXCommon.h"
 // PX_SERIALIZATION
 #include "PxSerialFramework.h"
-#include "CmSerialAlignment.h"
 //~PX_SERIALIZATION
 
 namespace physx
@@ -56,33 +54,38 @@ namespace Cm
 	alternatively a copy constructor implemented.
 	*/
 	template<class Allocator>
-	class BitMapBase : public Ps::UserAllocated, private Ps::NoCopy
+	class BitMapBase : public Ps::UserAllocated
 	{
+	//= ATTENTION! =====================================================================================
+	// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+	// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+	// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+	// accordingly.
+	//==================================================================================================
+
+		PX_NOCOPY(BitMapBase)
+
 	public:
+
 		// PX_SERIALIZATION
-		/* todo: explicit */ BitMapBase(PxRefResolver& v ) 
+		/* todo: explicit */ BitMapBase(const PxEMPTY&) 
 		{
 			if(mMap)
 				mWordCount |= PX_SIGN_BITMASK;
 		}
 
-		void	exportExtraData(PxSerialStream& stream)
+		void	exportExtraData(PxSerializationContext& stream, void*)	
 		{
 			if(mMap && getWordCount())
 			{
-				Cm::alignStream(stream, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-				stream.storeBuffer(mMap, getWordCount()*sizeof(PxU32));
+				stream.alignData(PX_SERIAL_ALIGN);
+				stream.writeData(mMap, getWordCount()*sizeof(PxU32));
 			}
 		}
-		char*	importExtraData(char* address, PxU32& totalPadding)
+		void	importExtraData(PxDeserializationContext& context)
 		{
 			if(mMap && getWordCount())
-			{
-				address = Cm::alignStream(address, totalPadding, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-				mMap = (PxU32*)address;
-				address += getWordCount()*sizeof(PxU32);
-			}
-			return address;
+				mMap = context.readExtraData<PxU32, PX_SERIAL_ALIGN>(getWordCount());
 		}
 		//~PX_SERIALIZATION
 
@@ -118,7 +121,7 @@ namespace Cm
 
 		PX_INLINE Ps::IntBool boundedTest(PxU32 index) const
 		{
-			return index>>5 >= getWordCount() ? Ps::IntFalse : (mMap[index>>5]&(1<<(index&31)));
+			return Ps::IntBool(index>>5 >= getWordCount() ? Ps::IntFalse : (mMap[index>>5]&(1<<(index&31))));
 		}
 
 		// Special optimized versions, when you _know_ your index is in range
@@ -137,7 +140,7 @@ namespace Cm
 		PX_INLINE Ps::IntBool test(PxU32 index) const
 		{
 			PX_ASSERT(index<getWordCount()*32);
-			return (mMap[index>>5]&(1<<(index&31)));
+			return Ps::IntBool(mMap[index>>5]&(1<<(index&31)));
 		}
 
 		// nibble == 4 bits
@@ -175,7 +178,12 @@ namespace Cm
 		void clear(PxU32 newBitCount = 0)
 		{
 			extendUninitialized(newBitCount);
-			Ps::memSet(mMap, 0, getWordCount()*sizeof(PxU32));
+			PxMemSet(mMap, 0, getWordCount()*sizeof(PxU32));
+		}
+
+		void clearFast()
+		{
+			PxMemSet(mMap, 0, getWordCount()*sizeof(PxU32));
 		}
 
 		void setEmpty()
@@ -195,6 +203,7 @@ namespace Cm
 		void resize(PxU32 newBitCount, bool value = false)
 		{
 			PX_ASSERT(!value); // only new class supports this
+			PX_UNUSED(value);
 			extend(newBitCount);
 		}
 		PxU32 size() const { return getWordCount()*32; }
@@ -202,9 +211,9 @@ namespace Cm
 		void copy(const BitMapBase& a)
 		{
 			extendUninitialized(a.getWordCount()<<5);
-			Ps::memCopy(mMap, a.mMap, a.getWordCount() * sizeof(PxU32));
+			PxMemCopy(mMap, a.mMap, a.getWordCount() * sizeof(PxU32));
 			if(getWordCount() > a.getWordCount())
-				Ps::memSet(mMap + a.getWordCount(), 0, (getWordCount() - a.getWordCount()) * sizeof(PxU32));
+				PxMemSet(mMap + a.getWordCount(), 0, (getWordCount() - a.getWordCount()) * sizeof(PxU32));
 		}
 
 		PX_INLINE PxU32 count()		const
@@ -315,7 +324,7 @@ namespace Cm
 			{
 				mIndex = mBlock = 0;
 				PxU32 wordCount = mBitMap.getWordCount();
-				while(mIndex < wordCount && !(mBlock = mBitMap.mMap[mIndex]))
+				while(mIndex < wordCount && ((mBlock = mBitMap.mMap[mIndex]) == 0))
 					++mIndex;
 			}
 		private:
@@ -337,11 +346,11 @@ namespace Cm
 				PxU32* newMap = reinterpret_cast<PxU32*>(mAllocator.allocate(newWordCount*sizeof(PxU32), __FILE__, __LINE__));
 				if(mMap)
 				{
-					Ps::memCopy(newMap, mMap, getWordCount()*sizeof(PxU32));
+					PxMemCopy(newMap, mMap, getWordCount()*sizeof(PxU32));
 					if (!isInUserMemory())
 						mAllocator.deallocate(mMap);
 				}
-				Ps::memSet(newMap+getWordCount(), 0, (newWordCount-getWordCount())*sizeof(PxU32));
+				PxMemSet(newMap+getWordCount(), 0, (newWordCount-getWordCount())*sizeof(PxU32));
 				mMap = newMap;
 				// also resets the isInUserMemory bit
 				mWordCount = newWordCount;

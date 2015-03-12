@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
   
@@ -36,24 +36,28 @@
 using namespace physx::shdfnd;
 using namespace physx;
 using namespace physx::debugger;
+using namespace physx::debugger::comm;
 
 
-PVD::PvdConnection* PxVisualDebuggerExt::createConnection( physx::debugger::comm::PvdConnectionManager* inMgr, const char* inHost
-										, int inPort
-										, unsigned int inTimeoutInMilliseconds
-										, PxVisualDebuggerConnectionFlags inConnectionType )
+PvdConnection* physx::PxVisualDebuggerExt::createConnection( PvdConnectionManager* inMgr
+													, const char* inHost
+													, int inPort //defaults to 5425
+													, unsigned int inTimeoutInMilliseconds
+													, PxVisualDebuggerConnectionFlags inConnectionType )
 {
 	TConnectionFlagsType theFlags( (PxU32)inConnectionType );
 	inMgr->connect( Foundation::getInstance().getAllocator(), inHost, inPort, inTimeoutInMilliseconds, theFlags );
+
 	return inMgr->getAndAddRefCurrentConnection();
 }
 
-PVD::PvdConnection* PxVisualDebuggerExt::createConnection( physx::debugger::comm::PvdConnectionManager* inMgr
-												, const char* filename
-												, PxVisualDebuggerConnectionFlags inConnectionType )
+PvdConnection* physx::PxVisualDebuggerExt::createConnection( PvdConnectionManager* inMgr
+													, const char* filename
+													, PxVisualDebuggerConnectionFlags inConnectionType )
 {
 	TConnectionFlagsType theFlags( (PxU32)inConnectionType );
 	inMgr->connect( Foundation::getInstance().getAllocator(), filename, theFlags );
+
 	return inMgr->getAndAddRefCurrentConnection();
 }
 
@@ -63,13 +67,20 @@ class PvdConnectionManager;
 class PvdConnection;
 }}}
 
-PVD::PvdConnection* physx::PxVisualDebuggerExt::createConnection( physx::debugger::comm::PvdConnectionManager* , const char* 
-										, int 
-										, unsigned int 
-										, physx::PxVisualDebuggerConnectionFlags  ) { return NULL; }
+physx::debugger::comm::PvdConnection* physx::PxVisualDebuggerExt::createConnection( physx::debugger::comm::PvdConnectionManager* 
+													, const char* 
+													, int  
+													, unsigned int 
+													, PxVisualDebuggerConnectionFlags  )
+{	
+	return NULL;
+}
 
-PVD::PvdConnection* physx::PxVisualDebuggerExt::createConnection( physx::debugger::comm::PvdConnectionManager*
-												, const char*
-												, physx::PxVisualDebuggerConnectionFlags ) { return NULL; }
+physx::debugger::comm::PvdConnection* physx::PxVisualDebuggerExt::createConnection( physx::debugger::comm::PvdConnectionManager* 
+													, const char* 
+													, PxVisualDebuggerConnectionFlags  )
+{
+	return NULL;
+}
 
 #endif //PX_SUPPORT_VISUAL_DEBUGGER

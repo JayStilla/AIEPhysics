@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #ifndef PX_PROFILE_BASE_H
 #define PX_PROFILE_BASE_H
@@ -35,9 +35,8 @@
 namespace physx { 
 	namespace shdfnd {}
 	namespace profile {}
-	using namespace shdfnd;
 }
 
-#define PX_PROFILE_POINTER_TO_U64( pointer ) static_cast<PxU64>(reinterpret_cast<const size_t>(pointer))
+#define PX_PROFILE_POINTER_TO_U64( pointer ) static_cast<PxU64>(reinterpret_cast<size_t>(pointer))
 
 #endif // PX_PROFILE_BASE_H

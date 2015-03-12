@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,10 +34,12 @@
 #include "CmPhysXCommon.h"
 #include "PsAtomic.h"
 #include "PxAssert.h"
-#include "CmMetaData.h"
+#include "PxMetaData.h"
 
 namespace physx
 {
+	class PxOutputStream;
+
 namespace Cm
 {
 
@@ -46,13 +48,19 @@ namespace Cm
 
 	class RefCountable
 	{
+	//= ATTENTION! =====================================================================================
+	// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+	// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+	// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+	// accordingly.
+	//==================================================================================================
 	public:
 // PX_SERIALIZATION
-		RefCountable(PxRefResolver&) : mRefCount(1)	{}
-		static	void	getMetaData(PxSerialStream& stream);
+		RefCountable(const PxEMPTY&) : mRefCount(1)	{}
+		static	void	getBinaryMetaData(PxOutputStream& stream);
 //~PX_SERIALIZATION
 		explicit RefCountable(PxU32 initialCount = 1)
-			: mRefCount(initialCount)
+			: mRefCount((PxI32)initialCount)
 		{
 			PX_ASSERT(mRefCount!=0);
 		}
@@ -61,7 +69,7 @@ namespace Cm
 
 		/**
 		Calls 'delete this;'. It needs to be overloaded for classes also deriving from 
-		PxSerializable and call 'Cm::deleteSerializedObject(this);' instead.
+		PxBase and call 'Cm::deletePxBase(this);' instead.
 		*/
 		virtual	void onRefCountZero()
 		{
@@ -77,13 +85,14 @@ namespace Cm
 
 		void decRefCount()
 		{
+			PX_ASSERT(mRefCount>0);
 			if(physx::shdfnd::atomicDecrement(&mRefCount) == 0)
 				onRefCountZero();
 		}
 
 		PX_FORCE_INLINE PxU32 getRefCount() const
 		{
-			return mRefCount;
+			return (PxU32)mRefCount;
 		}
 	private:
 		volatile PxI32 mRefCount;

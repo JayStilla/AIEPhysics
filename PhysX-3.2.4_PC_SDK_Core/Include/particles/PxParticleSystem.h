@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -57,26 +57,26 @@ particle flag raised when a collision occurs.  This information can be used to d
 The particles of a particle system don't collide with each other.  In order to simulate particle-particle interactions use the 
 subclass PxParticleFluid.
 
-@see PxParticleBase, PxParticleReadData
+@see PxParticleBase, PxParticleReadData, PxPhysics.createParticleSystem
 */
 class PxParticleSystem : public PxParticleBase
 {
 public:
 
-		virtual		const char*					getConcreteTypeName() const					{	return "PxParticleSystem"; }
+		virtual		const char*					getConcreteTypeName() const { return "PxParticleSystem"; }
 
 /************************************************************************************************/
 
 protected:
-								PxParticleSystem(PxRefResolver& v) : PxParticleBase(v)		{}
-	PX_INLINE					PxParticleSystem() : PxParticleBase() {}
-	virtual						~PxParticleSystem() {}
-	virtual			bool		isKindOf(const char* name)	const		{	return !strcmp("PxParticleSystem", name) || PxParticleBase::isKindOf(name);  }
+	PX_INLINE									PxParticleSystem(PxType concreteType, PxBaseFlags baseFlags) : PxParticleBase(concreteType, baseFlags) {}
+	PX_INLINE									PxParticleSystem(PxBaseFlags baseFlags) : PxParticleBase(baseFlags) {}
+	virtual										~PxParticleSystem() {}
+	virtual			bool						isKindOf(const char* name) const { return !strcmp("PxParticleSystem", name) || PxParticleBase::isKindOf(name);  }
 
 };
 
-PX_INLINE PxParticleSystem*			PxActor::isParticleSystem()				{ return is<PxParticleSystem>();	}
-PX_INLINE const PxParticleSystem*	PxActor::isParticleSystem()		const	{ return is<PxParticleSystem>();	}
+PX_DEPRECATED PX_INLINE PxParticleSystem*		PxActor::isParticleSystem()				{ return is<PxParticleSystem>();	}
+PX_DEPRECATED PX_INLINE const PxParticleSystem*	PxActor::isParticleSystem()		const	{ return is<PxParticleSystem>();	}
 
 
 #ifndef PX_DOXYGEN

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -31,6 +31,7 @@
 #ifndef PX_FOUNDATION_PSMATHUTILS_H
 #define PX_FOUNDATION_PSMATHUTILS_H
 
+#include "foundation/PxPreprocessor.h"
 #include "foundation/PxTransform.h"
 #include "foundation/PxMat33.h"
 #include "Ps.h"
@@ -134,6 +135,16 @@ namespace shdfnd
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxF64 exp(const PxF64 a)				{	return ::exp(a);	}
 
 	/**
+	\brief Calculates 2^n
+	*/
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxF32 exp2(const PxF32 a)				{	return ::exp(a * 0.693147180559945309417f);	}
+	/**
+
+	\brief Calculates 2^n
+	*/
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxF64 exp2(const PxF64 a)				{	return ::exp(a * 0.693147180559945309417);	}
+
+	/**
 	\brief Calculates logarithms.
 	*/
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxF32 logE(const PxF32 a)				{	return ::log(a);	}
@@ -208,7 +219,7 @@ namespace shdfnd
 	\brief uniform random number in [a,b]
 	*/
 	PX_FORCE_INLINE PxF32 rand(const PxF32 a, const PxF32 b)	
-{
+	{
 		return a + (b-a)*::rand()/RAND_MAX;
 	}
 
@@ -233,7 +244,7 @@ namespace shdfnd
 		union { PxU32 u; PxReal f; } u1, u2;
 		u1.f = f0;
 		u2.f = f1;
-		return (u1.u^u2.u)&PX_SIGN_BITMASK;
+		return IntBool((u1.u^u2.u)&PX_SIGN_BITMASK);
 	}
 
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxMat33 star(const PxVec3& v)
@@ -252,13 +263,13 @@ namespace shdfnd
 		PxReal halfAngle = q.w<0 ? PxAtan2(-s,-q.w): PxAtan2(s,q.w);
 		PX_ASSERT(halfAngle >= -PxPi/2 && halfAngle <= PxPi/2);
 
-		return q.getImaginaryPart().getNormalized() * 2 * halfAngle;
+		return q.getImaginaryPart().getNormalized() * 2.f * halfAngle;
 	}
 
 	PX_CUDA_CALLABLE PX_INLINE PxQuat exp(const PxVec3& v)
 	{
 		const PxReal m = v.magnitudeSquared();
-		return m<1e-24 ? PxQuat::createIdentity() : 
+		return m<1e-24 ? PxQuat(PxIdentity) : 
 						 PxQuat(PxSqrt(m),v*PxRecipSqrt(m));
 	}
 
@@ -275,28 +286,37 @@ namespace shdfnd
 		return PxQuat(cross.x*r, cross.y*r, cross.z*r, s*0.5f).getNormalized();
 	}
 
-
-	//! Computes the maximum delta to another transform
-	PX_CUDA_CALLABLE PX_INLINE PxReal maxComponentDelta(const PxTransform& t0, const PxTransform& t1)
-	{
-		PxReal delta =       PxAbs(t0.p.x - t1.p.x);
-		delta = PxMax(delta, PxAbs(t0.p.y - t1.p.y));
-		delta = PxMax(delta, PxAbs(t0.p.z - t1.p.z));
-		delta = PxMax(delta, PxAbs(t0.q.x - t1.q.x));
-		delta = PxMax(delta, PxAbs(t0.q.y - t1.q.y));
-		delta = PxMax(delta, PxAbs(t0.q.z - t1.q.z));
-		delta = PxMax(delta, PxAbs(t0.q.w - t1.q.w));
-
-		return delta;
-	}
-
 	/**
 	\brief returns largest axis
 	*/
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxU32 largestAxis(const PxVec3& v)
 	{
-		PxU32 m = v.y > v.x ? 1 : 0;
+		PxU32 m = PxU32(v.y > v.x ? 1 : 0);
 		return v.z > v[m] ? 2 : m;
+	}
+
+	/**
+	\brief returns indices for the largest axis and 2 other axii
+	*/
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxU32 largestAxis(const PxVec3& v, PxU32& other1, PxU32& other2)
+	{
+		if (v.x >= PxMax(v.y, v.z))
+		{
+			other1 = 1;
+			other2 = 2;
+			return 0;
+		} else if (v.y >= v.z)
+		{
+			other1 = 0;
+			other2 = 2;
+			return 1;
+		}
+		else
+		{
+			other1 = 0;
+			other2 = 1;
+			return 2;
+		}
 	}
 
 	/**
@@ -304,7 +324,7 @@ namespace shdfnd
 	*/
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxU32 closestAxis(const PxVec3& v)
 	{
-		PxU32 m = PxAbs(v.y) > PxAbs(v.x) ? 1 : 0;
+		PxU32 m = PxU32(PxAbs(v.y) > PxAbs(v.x) ? 1 : 0);
 		return PxAbs(v.z) > PxAbs(v[m]) ? 2 : m;
 	}
 
@@ -367,7 +387,7 @@ namespace shdfnd
 	// twist.y = twist.z = 0, and twist is a unit quat
 	PX_FORCE_INLINE void separateSwingTwist(const PxQuat& q, PxQuat& swing, PxQuat& twist)
 	{
-		twist = q.x != 0.0f ? PxQuat(q.x,0,0,q.w).getNormalized() : PxQuat::createIdentity();
+		twist = q.x != 0.0f ? PxQuat(q.x,0,0,q.w).getNormalized() : PxQuat(PxIdentity);
 		swing = q * twist.getConjugate();
 	}
 
@@ -428,7 +448,7 @@ namespace shdfnd
 				return PxVec3(0, 0, point.z>0 ? radii.z : -radii.z);	
 		}
 
-		PxVec3 denom, e2 = radii.multiply(radii), q2 = q.multiply(q), eq = radii.multiply(q);
+		PxVec3 denom, e2 = radii.multiply(radii), eq = radii.multiply(q);
 
 		// we can use any initial guess which is > maximum(-e.y^2,-e.z^2) and for which f(t) is > 0. 
 		// this guess works well near the axes, but is weak along the diagonals. 
@@ -468,7 +488,7 @@ namespace shdfnd
 	{
 		PxReal v2 = v.dot(v);
 		if(v2<1e-12f)
-			return PxQuat::createIdentity();
+			return PxQuat(PxIdentity);
 		PxReal d = 1/(1+v2);
 		return PxQuat(v.x*2, v.y*2, v.z*2, 1-v2)*d;
 	}
@@ -495,7 +515,7 @@ namespace shdfnd
 
 		// Early exit if to = from
 		if( (from - to).magnitudeSquared() < 1e-4f )
-			return PxMat33::createIdentity();
+			return PxMat33(PxIdentity);
 
 		// Early exit if to = -from
 		if( (from + to).magnitudeSquared() < 1e-4f )
@@ -532,6 +552,38 @@ namespace shdfnd
 	}
 
 	PX_FOUNDATION_API void integrateTransform(const PxTransform& curTrans, const PxVec3& linvel, const PxVec3& angvel, PxReal timeStep, PxTransform& result);
+
+	PX_INLINE void computeBasis(const PxVec3& dir, PxVec3& right, PxVec3& up)
+	{
+		// Derive two remaining vectors
+		if(PxAbs(dir.y)>0.9999f)
+		{
+			right = PxVec3(1.0f, 0.0f, 0.0f);
+		}
+		else
+		{
+			right = (PxVec3(0.0f, 1.0f, 0.0f).cross(dir));
+			right.normalize();
+		}
+
+		up = dir.cross(right);
+	}
+
+	PX_INLINE void computeBasis(const PxVec3& p0, const PxVec3& p1, PxVec3& dir, PxVec3& right, PxVec3& up)
+	{
+		// Compute the new direction vector
+		dir = p1 - p0;
+		dir.normalize();
+
+		// Derive two remaining vectors
+		computeBasis(dir, right, up);
+	}
+
+	PX_FORCE_INLINE bool isAlmostZero(const PxVec3& v)
+	{
+		if(PxAbs(v.x)>1e-6 || PxAbs(v.y)>1e-6 || PxAbs(v.z)>1e-6) return false;
+		return true;
+	}
 
 } // namespace shdfnd
 } // namespace physx

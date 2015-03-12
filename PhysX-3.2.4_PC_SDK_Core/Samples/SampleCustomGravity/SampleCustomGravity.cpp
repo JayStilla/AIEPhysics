@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -75,10 +75,10 @@ SampleCustomGravity::SampleCustomGravity(PhysXSampleApplication& app) :
 	mValidTouchedTriangle	= false;
 
 	mCreateGroundPlane	= false;
-	mUseFixedStepper	= true;
+	//mStepperType = FIXED_STEPPER;
+	//mStepperType = INVERTED_FIXED_STEPPER;
 	mControllerRadius	= 0.5f;
-//	mControllerInitialPosition = PxExtendedVec3(0.0, PLANET_RADIUS + 4.0f, 0.0);
-	mControllerInitialPosition = PxExtendedVec3(0.0, 0.0, PLANET_RADIUS + 4.0f);
+	mControllerInitialPosition = PxExtendedVec3(0.0, PLANET_RADIUS + 4.0f, 0.0);
 //	mUseDebugStepper	= true;
 
 	mRenderActor = NULL;
@@ -110,7 +110,7 @@ static void gJump(Console* console, const char* text, void* userData)
 	}
 
 	const float val = (float)::atof(text);
-//	printf("value: %f\n", val);
+//	shdfnd::printFormatted("value: %f\n", val);
 	gJumpForce = val;
 }
 
@@ -161,18 +161,18 @@ static PxRigidActor* createBox(	PxScene& scene, PxPhysics& physics,
 
 KinematicPlatform* SampleCustomGravity::createPlatform(PxU32 nbPts, const PxVec3* pts, const PxQuat& localRot, const PxVec3& extents, PxF32 platformSpeed, PxF32 rotationSpeed)
 {
-	const PxTransform idt = PxTransform::createIdentity();
+	const PxTransform idt = PxTransform(PxIdentity);
 
 	PxRigidDynamic* platformActor = (PxRigidDynamic*)::createBox(getActiveScene(), getPhysics(), idt, extents, 1.0f, getDefaultMaterial(), NULL, 0);
 /*#ifdef CCT_ON_BRIDGES
 	platformActor->setName(gPlatformName);
 #endif*/
-	platformActor->setRigidDynamicFlag(PxRigidDynamicFlag::eKINEMATIC, true);
+	platformActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
 
 	PxShape* platformShape = NULL;
 	platformActor->getShapes(&platformShape, 1);
 	PX_ASSERT(platformShape);
-	createRenderObjectFromShape(platformShape, mPlatformMaterial);
+	createRenderObjectFromShape(platformActor, platformShape, mPlatformMaterial);
 
 /*#ifdef PLATFORMS_AS_OBSTACLES
 //	platformShape->userData = NULL;
@@ -189,6 +189,8 @@ void SampleCustomGravity::onInit()
 		getConsole()->addCmd("jump", gJump);
 
 	PhysXSample::onInit();
+
+	PxSceneWriteLock scopedLock(*mScene);
 
 	mApplication.setMouseCursorHiding(true);
 	mApplication.setMouseCursorRecentering(true);
@@ -226,7 +228,8 @@ void SampleCustomGravity::onInit()
 	buildScene();
 
 	// PhysX
-	mControllerManager = PxCreateControllerManager(getPhysics().getFoundation());
+	mControllerManager = PxCreateControllerManager(getActiveScene());
+
 #ifdef USE_BOX_CONTROLLER
 	mBoxController = createCharacter(mControllerInitialPosition);
 #else
@@ -245,9 +248,12 @@ void SampleCustomGravity::onInit()
 
 void SampleCustomGravity::onShutdown()
 {
-	DELETESINGLE(mCCTCamera);
-	mControllerManager->release();
-	mPlatformManager.release();
+	{
+		PxSceneWriteLock scopedLock(*mScene);
+		DELETESINGLE(mCCTCamera);
+		mControllerManager->release();
+		mPlatformManager.release();
+	}
 	PhysXSample::onShutdown();
 }
 
@@ -323,7 +329,7 @@ void SampleCustomGravity::onTickPreRender(PxReal dtime)
 #else
 		const PxExtendedVec3& newPos = mCapsuleController->getPosition();
 #endif
-		PxTransform tr = PxTransform::createIdentity();
+		PxTransform tr = PxTransform(PxIdentity);
 		tr.p.x = float(newPos.x);
 		tr.p.y = float(newPos.y);
 		tr.p.z = float(newPos.z);
@@ -343,14 +349,14 @@ void SampleCustomGravity::onTickPostRender(PxF32 dtime)
 	// PT: add CCT's internal debug rendering
 	if(mEnableCCTDebugRender)
 	{
-		mControllerManager->setDebugRenderingFlags(PxU32(PxControllerDebugRenderFlags::eALL));
+		mControllerManager->setDebugRenderingFlags(PxControllerDebugRenderFlag::eALL);
 		PxRenderBuffer& renderBuffer = mControllerManager->getRenderBuffer();
 		renderer->update(renderBuffer);
 		renderBuffer.clear();
 	}
 	else
 	{
-		mControllerManager->setDebugRenderingFlags(0);
+		mControllerManager->setDebugRenderingFlags(PxControllerDebugRenderFlag::eNONE);
 	}
 
 	if(mValidTouchedTriangle)
@@ -404,6 +410,8 @@ void SampleCustomGravity::onSubstep(float dtime)
 {
 	mPlatformManager.updatePhysicsPlatforms(dtime);
 
+	PxSceneWriteLock scopedLock(*mScene);
+
 	PxU32 nb = (PxU32)mDebugActors.size();
 	for(PxU32 i=0;i<nb;i++)
 	{
@@ -432,10 +440,9 @@ void SampleCustomGravity::onPointerInputEvent(const SampleFramework::InputEvent&
 {
 	if((ie.m_Id == RAYCAST_HIT) && val)
 	{
-		PxRaycastHit hit;
-		PxSceneQueryFlags flags;
-		getActiveScene().raycastSingle(getCamera().getPos()+getCamera().getViewDir(),getCamera().getViewDir(),1,flags,hit);
-		printf("hits: %p\n",hit.shape);
+		PxRaycastBuffer hit;
+		getActiveScene().raycast(getCamera().getPos()+getCamera().getViewDir(),getCamera().getViewDir(),1,hit);
+		shdfnd::printFormatted("hits: %p\n",hit.block.shape);
 	}
 }
 
@@ -443,7 +450,7 @@ void SampleCustomGravity::onDebugObjectCreation(PxRigidDynamic* actor)
 {
 	PxTransform pose;
 	pose.p = mCCTCamera->mTarget;
-	pose.q = PxQuat::createIdentity();
+	pose.q = PxQuat(PxIdentity);
 	actor->setGlobalPose(pose);
 
 	mDebugActors.push_back(actor);

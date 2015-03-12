@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,11 +34,12 @@
 #include "PhysXSample.h"
 
 class SampleCharacterCloth;
+class RenderClothActor;
 
 class SampleCharacterClothFlag
 {
 public:
-    SampleCharacterClothFlag(SampleCharacterCloth& sample, const PxTransform &pose, PxReal sizeX, PxReal sizeY, PxReal height);
+    SampleCharacterClothFlag(SampleCharacterCloth& sample, const PxTransform &pose, PxU32 resX, PxU32 resY, PxReal sizeX, PxReal sizeY, PxReal height);
 
 	void     setWind(const PxVec3 &dir, PxReal strength, const PxVec3& range);
     void     update(PxReal dtime);
@@ -46,12 +47,17 @@ public:
 	PxCloth* getCloth() { return mCloth; }
     
 protected:
+	RenderClothActor*		mRenderActor;
+	SampleCharacterCloth&	mSample;
     PxCloth*                mCloth;
-    SampleArray<PxReal>     mUVs;
+    SampleArray<PxVec2>     mUVs;
     PxVec3                  mWindDir;
     PxVec3                  mWindRange;
 	PxReal                  mWindStrength;
     PxReal                  mTime;
+	PxRigidDynamic*			mCapsuleActor;
+private:
+	SampleCharacterClothFlag& operator=(const SampleCharacterClothFlag&);
 };
 
 #endif

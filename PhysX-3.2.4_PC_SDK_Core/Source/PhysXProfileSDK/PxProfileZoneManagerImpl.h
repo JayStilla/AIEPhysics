@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -47,12 +47,12 @@ namespace physx { namespace profile {
 
 	class ZoneManagerImpl : public PxProfileZoneManager
 	{
-		typedef ScopedLockImpl<Mutex> TScopedLockType;
+		typedef ScopedLockImpl<shdfnd::Mutex> TScopedLockType;
 		FoundationWrapper					mWrapper;
 		ProfileArray<PxProfileZone*>			mZones;
 		ProfileArray<PxProfileZoneHandler*>	mHandlers;
-		PxUserCustomProfiler				*mUserCustomProfiler;
-		Mutex mMutex;
+		PxUserCustomProfiler*				mUserCustomProfiler;
+		shdfnd::Mutex mMutex;
 
 		ZoneManagerImpl( const ZoneManagerImpl& inOther );
 		ZoneManagerImpl& operator=( const ZoneManagerImpl& inOther );
@@ -170,7 +170,7 @@ namespace physx { namespace profile {
 		}
 
 		// Notify all existing zones of the new user custom profiler
-		virtual void setUserCustomProfiler(PxUserCustomProfiler *callback)
+		virtual void setUserCustomProfiler(PxUserCustomProfiler* callback)
 		{
 			mUserCustomProfiler = callback;
 			for ( PxU32 idx = 0; idx < mZones.size(); ++idx )

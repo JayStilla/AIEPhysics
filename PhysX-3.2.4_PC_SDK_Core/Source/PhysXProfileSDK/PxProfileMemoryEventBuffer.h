@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -51,7 +51,7 @@ namespace physx { namespace profile {
 		typedef typename TBaseType::TU8AllocatorType TU8AllocatorType;
 		typedef typename TBaseType::TMemoryBufferType TMemoryBufferType;
 		typedef typename TBaseType::TBufferClientArray TBufferClientArray;
-		typedef HashMap<const char*, PxU32, Hash<const char*>, TU8AllocatorType> TCharPtrToHandleMap;
+		typedef shdfnd::HashMap<const char*, PxU32, shdfnd::Hash<const char*>, TU8AllocatorType> TCharPtrToHandleMap;
 
 	protected:
 		TCharPtrToHandleMap mStringTable;
@@ -134,7 +134,7 @@ namespace physx { namespace profile {
 		}
 	};
 
-	class PxProfileMemoryEventBufferImpl : public UserAllocated
+	class PxProfileMemoryEventBufferImpl : public shdfnd::UserAllocated
 		, public PxProfileMemoryEventBuffer
 	{
 		typedef MemoryEventBuffer<PxProfileEventMutex, NullLock> TMemoryBufferType;
@@ -153,7 +153,7 @@ namespace physx { namespace profile {
 
 		virtual void onAllocation( size_t size, const char* typeName, const char* filename, int line, void* allocatedMemory )
 		{
-			mBuffer.onAllocation( size, typeName, filename, line, PX_PROFILE_POINTER_TO_U64( allocatedMemory ) );
+			mBuffer.onAllocation( size, typeName, filename, (PxU32)line, PX_PROFILE_POINTER_TO_U64( allocatedMemory ) );
 		}
 		virtual void onDeallocation( void* allocatedMemory )
 		{

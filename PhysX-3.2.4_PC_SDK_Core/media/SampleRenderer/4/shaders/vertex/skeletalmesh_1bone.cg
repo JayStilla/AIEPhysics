@@ -18,8 +18,18 @@ VertexOut  vmain(__in(float4,       localSpacePosition, POSITION)
                  )
 {
 	VertexOut vout;
-	
-	float4x4 boneMatrix      = g_boneMatrices[boneIndex];
+
+#if defined USE_VTF
+	float4x4 boneMatrix;
+	const float boneTextureIdx = ((float)boneIndex + 0.5f) / g_boneTextureHeight;
+	boneMatrix[0] = tex2Dlod(g_boneTexture, float4(0.5f / 4.f, boneTextureIdx, 0, 0));
+	boneMatrix[1] = tex2Dlod(g_boneTexture, float4(1.5f / 4.f, boneTextureIdx, 0, 0));
+	boneMatrix[2] = tex2Dlod(g_boneTexture, float4(2.5f / 4.f, boneTextureIdx, 0, 0));
+	boneMatrix[3] = tex2Dlod(g_boneTexture, float4(3.5f / 4.f, boneTextureIdx, 0, 0));
+#else
+	float4x4 boneMatrix = g_boneMatrices[boneIndex];
+#endif
+
 	float4   skinnedPosition = mul(boneMatrix, localSpacePosition);
 	float3   skinnedNormal   = mul(boneMatrix, float4(localSpaceNormal,  0)).xyz;
 #if !defined(GLSL_COMPILER)
@@ -46,7 +56,9 @@ VertexOut  vmain(__in(float4,       localSpacePosition, POSITION)
 	vout.params.texcoord0   = vertexTexcoord0;
 	vout.params.texcoord1   = vertexTexcoord1;
 	vout.params.texcoord2   = vertexTexcoord2;
+#if !defined (RENDERER_WIN8ARM)		
 	vout.params.texcoord3   = vertexTexcoord3;
+#endif	
 	vout.params.color       = swizzle(vertexColor);
 
 #if RENDERER_DISPLACED

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -51,7 +51,7 @@
 //TODO: dima: reference all platforms with SIMD support here,
 //all unknown/experimental cases should better default to NO SIMD.
 
-#if defined(PX_X86) || defined(PX_X64) || defined(PX_PS3) || defined(PX_X360) || (defined(PX_LINUX) && (defined(PX_X86) || defined(PX_X64)))
+#if defined(PX_X86) || defined(PX_X64) || defined(PX_WINMODERN) || defined(PX_PS3) || defined(PX_X360) || (defined(PX_LINUX) && (defined(PX_X86) || defined(PX_X64))) || (defined(PX_ANDROID) && defined(PX_ARM_NEON)) || defined(PX_XBOXONE)
 #define COMPILE_VECTOR_INTRINSICS 1 // use SIMD         
 #else
 #define COMPILE_VECTOR_INTRINSICS 0 // do not use SIMD
@@ -61,6 +61,11 @@
 #define VECMATHAOS_ASSERT PX_ASSERT 
 #else
 #define VECMATHAOS_ASSERT(x) {}
+#endif
+
+#if defined(COMPILE_VECTOR_INTRINSICS) && (defined(PX_X86) || defined(PX_X64)) && (defined PX_LINUX || defined PX_ANDROID || defined PX_APPLE || defined PX_PS4 || (defined PX_WINMODERN && defined PX_ARM_NEON))
+// only SSE2 compatible platforms should reach this
+#include <xmmintrin.h>
 #endif
 
 namespace physx
@@ -75,93 +80,213 @@ namespace aos
 //Vec3V		- 16-byte aligned representation of PxVec3 stored as (x y z 0).
 //Vec4V		- 16-byte aligned representation of vector of 4 floats stored as (x y z w).
 //BoolV		- 16-byte aligned representation of vector of 4 bools stored as (x y z w).
+//VecU32V	- 16-byte aligned representation of 4 unsigned ints stored as (x y z w).
+//VecI32V	- 16-byte aligned representation of 4 signed ints stored as (x y z w).
 //Mat33V	- 16-byte aligned representation of any 3x3 matrix.
 //Mat34V	- 16-byte aligned representation of transformation matrix (rotation in col1,col2,col3 and translation in col4).
 //Mat44V	- 16-byte aligned representation of any 4x4 matrix.
 
-//Cross-platform typedef declarations of 16-byte aligned types (win32/360/ppu/spu etc).
-//#ifdef PX_WINDOWS
-//#include "windows/CmCacheAlign.h"
-//#endif
-//#ifdef PX_X360
-//#include "xbox360/CmCacheAlign.h"
-//#endif
-//#ifdef PX_PS3
-//#include "ps3/CmCacheAlign.h"
-//#endif
-//#if defined PX_LINUX || defined PX_ANDROID || defined PX_APPLE
-//#include "linux/CmCacheAlign.h"
-//#endif
-
 #if COMPILE_VECTOR_INTRINSICS
 #include "PsAoS.h"
-#else // #if COMPILE_VECTOR_INTRINSICS
+#else 
 #include "PsVecMathAoSScalar.h"
-#endif // #if !COMPILE_VECTOR_INTRINSICS
+#endif 
 
 
-//Construct a 16-byte aligned type from a scalar type.
-PX_FORCE_INLINE FloatV FloatV_From_F32(const PxF32 f);
-PX_FORCE_INLINE Vec3V Vec3V_From_F32(const PxF32 f);			
-PX_FORCE_INLINE Vec4V Vec4V_From_F32(const PxF32 f);			
-PX_FORCE_INLINE Vec4V Vec4V_From_XYZW(const PxF32& x, const PxF32& y, const PxF32& z, const PxF32& w);
+//////////////////////////////////////////
+//Construct a simd type from a scalar type
+//////////////////////////////////////////
+
+//FloatV
+//(f,f,f,f)
+PX_FORCE_INLINE FloatV FLoad(const PxF32 f);
+
+//Vec3V
+//(f,f,f,0)
+PX_FORCE_INLINE Vec3V V3Load(const PxF32 f);			
+//(f.x,f.y,f.z,0)
+PX_FORCE_INLINE Vec3V V3LoadU(const PxVec3& f);
+//(f.x,f.y,f.z,0), f must be 16-byte aligned
+PX_FORCE_INLINE Vec3V V3LoadA(const PxVec3& f);	
+//(f.x,f.y,f.z,w_undefined), f must be 16-byte aligned
+PX_FORCE_INLINE Vec3V V3LoadUnsafeA(const PxVec3& f);
+//(f.x,f.y,f.z,0)
+PX_FORCE_INLINE Vec3V V3LoadU(const PxF32* f);
+//(f.x,f.y,f.z,0), f must be 16-byte aligned
+PX_FORCE_INLINE Vec3V V3LoadA(const PxF32* f);
+
+//Vec4V
+//(f,f,f,f)
+PX_FORCE_INLINE Vec4V V4Load(const PxF32 f);			
+//(f[0],f[1],f[2],f[3])
+PX_FORCE_INLINE Vec4V V4LoadU(const PxF32* const f);	
+//(f[0],f[1],f[2],f[3]), f must be 16-byte aligned
+PX_FORCE_INLINE Vec4V V4LoadA(const PxF32* const f);
+//(x,y,z,w)
+PX_DEPRECATED PX_FORCE_INLINE Vec4V Vec4VLoadXYZW(const PxF32& x, const PxF32& y, const PxF32& z, const PxF32& w);
+
+//BoolV
+//(f,f,f,f)
+PX_FORCE_INLINE BoolV BLoad(const bool f);	
+//(f[0],f[1],f[2],f[3])
+PX_FORCE_INLINE BoolV BLoad(const bool* const f);
+
+
+//VecU32V
+//(f,f,f,f)
+PX_FORCE_INLINE VecU32V U4Load(const PxU32 f);
+//(f[0],f[1],f[2],f[3])
+PX_FORCE_INLINE VecU32V U4LoadU(const PxU32* f);
+//(f[0],f[1],f[2],f[3]), f must be 16-byte aligned
+PX_FORCE_INLINE VecU32V U4LoadA(const PxU32* f);
+//((U32)x, (U32)y, (U32)z, (U32)w)
+PX_DEPRECATED PX_FORCE_INLINE VecU32V VecU32VLoadXYZW(PxU32 x, PxU32 y, PxU32 z, PxU32 w);
+
+//VecI32V
+//(i,i,i,i)
+PX_FORCE_INLINE VecI32V I4Load(const PxI32 i);
+//(i,i,i,i)
+PX_FORCE_INLINE VecI32V I4LoadU(const PxI32* i);
+//(i,i,i,i)
+PX_FORCE_INLINE VecI32V I4LoadA(const PxI32* i);
+
+//QuatV
+//(x = v[0], y=v[1], z=v[2], w=v3[3]) and array don't need to aligned
+PX_FORCE_INLINE QuatV QuatVLoadU(const PxF32* v);
+//(x = v[0], y=v[1], z=v[2], w=v3[3]) and array need to aligned, fast load
+PX_FORCE_INLINE QuatV QuatVLoadA(const PxF32* v);
+//(x, y, z, w)
+PX_DEPRECATED PX_FORCE_INLINE QuatV QuatVLoadXYZW(const PxF32 x, const PxF32 y, const PxF32 z, const PxF32 w);
+
+
+//not added to public api
+Vec4V Vec4V_From_PxVec3_WUndefined(const PxVec3& v);
+
+///////////////////////////////////////////////////
+//Construct a simd type from a different simd type
+///////////////////////////////////////////////////
+
+//Vec3V
+//(v.x,v.y,v.z,0)
 PX_FORCE_INLINE Vec3V Vec3V_From_Vec4V(Vec4V v)	;		
+//(v.x,v.y,v.z,undefined)
 PX_FORCE_INLINE Vec3V Vec3V_From_Vec4V_WUndefined(const Vec4V v);
+
+//Vec4V
+//(f.x,f.y,f.z,f.w)
 PX_FORCE_INLINE Vec4V Vec4V_From_Vec3V(Vec3V f);
-PX_FORCE_INLINE VecU32V VecU32V_From_XYZW(PxU32 x, PxU32 y, PxU32 z, PxU32 w);
-PX_FORCE_INLINE BoolV BoolV_From_Bool32(const bool f);	
-PX_FORCE_INLINE Vec3V Vec3V_From_PxVec3_Aligned(const PxVec3& f);		
-PX_FORCE_INLINE Vec3V Vec3V_From_PxVec3(const PxVec3& f);
-PX_FORCE_INLINE Vec4V Vec4V_From_F32Array_Aligned(const PxF32* const f);
-PX_FORCE_INLINE void F32Array_Aligned_From_Vec4V(const Vec4V a, PxF32* f);
-PX_FORCE_INLINE Vec4V Vec4V_From_F32Array(const PxF32* const f);	
-PX_FORCE_INLINE BoolV BoolV_From_Bool32Array(const bool* const f);
-PX_FORCE_INLINE void PxU32Array_Aligned_From_BoolV(const BoolV b, PxU32* f);
+//((PxF32)f.x, (PxF32)f.y, (PxF32)f.z, (PxF32)f.w)
+PX_FORCE_INLINE Vec4V Vec4V_From_VecU32V(VecU32V a);
+//((PxF32)f.x, (PxF32)f.y, (PxF32)f.z, (PxF32)f.w)
+PX_FORCE_INLINE Vec4V Vec4V_From_VecI32V(VecI32V a);
+//(*(reinterpret_cast<PxF32*>(&f.x), (reinterpret_cast<PxF32*>(&f.y), (reinterpret_cast<PxF32*>(&f.z), (reinterpret_cast<PxF32*>(&f.w))
+PX_FORCE_INLINE Vec4V Vec4V_ReinterpretFrom_VecU32V(VecU32V a);
+//(*(reinterpret_cast<PxF32*>(&f.x), (reinterpret_cast<PxF32*>(&f.y), (reinterpret_cast<PxF32*>(&f.z), (reinterpret_cast<PxF32*>(&f.w))
+PX_FORCE_INLINE Vec4V Vec4V_ReinterpretFrom_VecI32V(VecI32V a);
 
-//Convert back from 16-byte aligned type to scalar type.
-PX_FORCE_INLINE PxF32 PxF32_From_FloatV(const FloatV a);	
-PX_FORCE_INLINE void PxF32_From_FloatV(const FloatV a, PxF32* PX_RESTRICT f);
-PX_FORCE_INLINE void PxVec3Aligned_From_Vec3V(const Vec3V a, PxVec3& f);
-PX_FORCE_INLINE void PxVec3_From_Vec3V(const Vec3V a, PxVec3& f);
-PX_FORCE_INLINE Vec3V Vec3V_From_PxVec3_WUndefined(const PxVec3& f);
-PX_FORCE_INLINE	Vec4V Vec4V_From_PxVec3_WUndefiend(const PxVec3& f);
+//VecU32V
+//(*(reinterpret_cast<PxU32*>(&f.x), (reinterpret_cast<PxU32*>(&f.y), (reinterpret_cast<PxU32*>(&f.z), (reinterpret_cast<PxU32*>(&f.w))
+PX_FORCE_INLINE VecU32V VecU32V_ReinterpretFrom_Vec4V(Vec4V a);
+//(b[0], b[1], b[2], b[3])
+PX_DEPRECATED PX_FORCE_INLINE VecU32V VecU32V_From_BoolV(const BoolVArg b);
 
+//VecI32V
+//(*(reinterpret_cast<PxI32*>(&f.x), (reinterpret_cast<PxI32*>(&f.y), (reinterpret_cast<PxI32*>(&f.z), (reinterpret_cast<PxI32*>(&f.w))
+PX_FORCE_INLINE VecI32V VecI32V_ReinterpretFrom_Vec4V(Vec4V a);
+//((I32)a.x, (I32)a.y, (I32)a.z, (I32)a.w)
+PX_DEPRECATED PX_FORCE_INLINE VecI32V VecI32V_From_Vec4V(Vec4V a);
+//((I32)b.x, (I32)b.y, (I32)b.z, (I32)b.w)
+PX_DEPRECATED PX_FORCE_INLINE VecI32V VecI32V_From_BoolV(const BoolVArg b);
+
+
+///////////////////////////////////////////////////
+//Convert from a simd type back to a scalar type
+///////////////////////////////////////////////////
+
+//FloatV
+//a.x
+PX_DEPRECATED PX_FORCE_INLINE PxF32 FStore(const FloatV a);	
+//a.x
+PX_FORCE_INLINE void FStore(const FloatV a, PxF32* PX_RESTRICT f);
+
+//Vec3V
+//(a.x,a.y,a.z)
+PX_FORCE_INLINE void V3StoreA(const Vec3V a, PxVec3& f);
+//(a.x,a.y,a.z)
+PX_FORCE_INLINE void V3StoreU(const Vec3V a, PxVec3& f);
+
+//Vec4V
+PX_FORCE_INLINE void V4StoreA(const Vec4V a, PxF32* f);
+PX_FORCE_INLINE void V4StoreU(const Vec4V a, PxF32* f);
+
+//BoolV
+PX_FORCE_INLINE void BStoreA(const BoolV b, PxU32* f);
+
+//VecU32V
+PX_FORCE_INLINE void U4StoreA(const VecU32V uv, PxU32* u);
+
+//VecI32V
+PX_FORCE_INLINE void I4StoreA(const VecI32V iv, PxI32* i);
+
+
+//////////////////////////////////////////////////////////////////
+//Test that simd types have elements in the floating point range
+//////////////////////////////////////////////////////////////////
+
+//check for each component is valid ie in floating point range
+PX_FORCE_INLINE bool isFiniteFloatV(const FloatV a);
+//check for each component is valid ie in floating point range
+PX_FORCE_INLINE bool isFiniteVec3V(const Vec3V a);
+//check for each component is valid ie in floating point range
+PX_FORCE_INLINE bool isFiniteVec4V(const Vec4V a);
+
+//Check that w-component is zero.
+PX_FORCE_INLINE bool isValidVec3V(const Vec3V a);
+
+
+//////////////////////////////////////////////////////////////////
 //Tests that all elements of two 16-byte types are completely equivalent.
 //Use these tests for unit testing and asserts only.
+//////////////////////////////////////////////////////////////////
+
 namespace _VecMathTests
 {
+	PX_FORCE_INLINE Vec3V getInvalidVec3V();
 	PX_FORCE_INLINE bool allElementsEqualFloatV(const FloatV a, const FloatV b);
 	PX_FORCE_INLINE bool allElementsEqualVec3V(const Vec3V a, const Vec3V b);
 	PX_FORCE_INLINE bool allElementsEqualVec4V(const Vec4V a, const Vec4V b);
 	PX_FORCE_INLINE bool allElementsEqualBoolV(const BoolV a, const BoolV b);
+	PX_FORCE_INLINE bool allElementsEqualVecU32V(const VecU32V a, const VecU32V b);
+	PX_FORCE_INLINE bool allElementsEqualVecI32V(const VecI32V a, const VecI32V b);
+
 	PX_FORCE_INLINE bool allElementsEqualMat33V(const Mat33V& a, const Mat33V& b)
 	{
 		return
-		(
-		allElementsEqualVec3V(a.col0,b.col0) && 
-		allElementsEqualVec3V(a.col1,b.col1) && 
-		allElementsEqualVec3V(a.col2,b.col2)
-		);
+			(
+			allElementsEqualVec3V(a.col0,b.col0) && 
+			allElementsEqualVec3V(a.col1,b.col1) && 
+			allElementsEqualVec3V(a.col2,b.col2)
+			);
 	}
 	PX_FORCE_INLINE bool allElementsEqualMat34V(const Mat34V& a, const Mat34V& b)
 	{
 		return
-		(
-		allElementsEqualVec3V(a.col0,b.col0) && 
-		allElementsEqualVec3V(a.col1,b.col1) && 
-		allElementsEqualVec3V(a.col2,b.col2) &&
-		allElementsEqualVec3V(a.col3,b.col3) 
-		);
+			(
+			allElementsEqualVec3V(a.col0,b.col0) && 
+			allElementsEqualVec3V(a.col1,b.col1) && 
+			allElementsEqualVec3V(a.col2,b.col2) &&
+			allElementsEqualVec3V(a.col3,b.col3) 
+			);
 	}
 	PX_FORCE_INLINE bool allElementsEqualMat44V(const Mat44V& a, const Mat44V& b)
 	{
 		return
-		(
-		allElementsEqualVec4V(a.col0,b.col0) && 
-		allElementsEqualVec4V(a.col1,b.col1) && 
-		allElementsEqualVec4V(a.col2,b.col2) &&
-		allElementsEqualVec4V(a.col3,b.col3) 
-		);
+			(
+			allElementsEqualVec4V(a.col0,b.col0) && 
+			allElementsEqualVec4V(a.col1,b.col1) && 
+			allElementsEqualVec4V(a.col2,b.col2) &&
+			allElementsEqualVec4V(a.col3,b.col3) 
+			);
 	}
 
 	PX_FORCE_INLINE bool allElementsNearEqualFloatV(const FloatV a, const FloatV b);
@@ -170,44 +295,38 @@ namespace _VecMathTests
 	PX_FORCE_INLINE bool allElementsNearEqualMat33V(const Mat33V& a, const Mat33V& b)
 	{
 		return
-		(
-		allElementsNearEqualVec3V(a.col0,b.col0) && 
-		allElementsNearEqualVec3V(a.col1,b.col1) && 
-		allElementsNearEqualVec3V(a.col2,b.col2)
-		);
+			(
+			allElementsNearEqualVec3V(a.col0,b.col0) && 
+			allElementsNearEqualVec3V(a.col1,b.col1) && 
+			allElementsNearEqualVec3V(a.col2,b.col2)
+			);
 	}
 	PX_FORCE_INLINE bool allElementsNearEqualMat34V(const Mat34V& a, const Mat34V& b)
 	{
 		return
-		(
-		allElementsNearEqualVec3V(a.col0,b.col0) && 
-		allElementsNearEqualVec3V(a.col1,b.col1) && 
-		allElementsNearEqualVec3V(a.col2,b.col2) &&
-		allElementsNearEqualVec3V(a.col3,b.col3) 
-		);
+			(
+			allElementsNearEqualVec3V(a.col0,b.col0) && 
+			allElementsNearEqualVec3V(a.col1,b.col1) && 
+			allElementsNearEqualVec3V(a.col2,b.col2) &&
+			allElementsNearEqualVec3V(a.col3,b.col3) 
+			);
 	}
 	PX_FORCE_INLINE bool allElementsNearEqualMat44V(const Mat44V& a, const Mat44V& b)
 	{
 		return
-		(
-		allElementsNearEqualVec4V(a.col0,b.col0) && 
-		allElementsNearEqualVec4V(a.col1,b.col1) && 
-		allElementsNearEqualVec4V(a.col2,b.col2) &&
-		allElementsNearEqualVec4V(a.col3,b.col3) 
-		);
+			(
+			allElementsNearEqualVec4V(a.col0,b.col0) && 
+			allElementsNearEqualVec4V(a.col1,b.col1) && 
+			allElementsNearEqualVec4V(a.col2,b.col2) &&
+			allElementsNearEqualVec4V(a.col3,b.col3) 
+			);
 	}
-};
 
-//check for each component is valid
-PX_FORCE_INLINE bool isFiniteFloatV(const FloatV a);
-//check for each component is valid
-PX_FORCE_INLINE bool isFiniteVec3V(const Vec3V a);
-//check for each component is valid
-PX_FORCE_INLINE bool isFiniteVec4V(const Vec4V a);
+}
 
-
-
-//Math operations on 16-byte aligned floats.
+//////////////////////////////////////////////////////////////////
+//Math operations on FloatV
+//////////////////////////////////////////////////////////////////
 
 //(0,0,0,0)
 PX_FORCE_INLINE FloatV FZero();
@@ -224,15 +343,6 @@ PX_FORCE_INLINE FloatV FNegMax();
 //(1e-6f, 1e-6f, 1e-6f, 1e-6f)
 PX_FORCE_INLINE FloatV FEps6();
 //((PxF32*)&1, (PxF32*)&1, (PxF32*)&1, (PxF32*)&1)
-PX_FORCE_INLINE FloatV IZero();
-//((PxF32*)&0, (PxF32*)&0, (PxF32*)&0, (PxF32*)&0)
-PX_FORCE_INLINE FloatV IOne();
-//((PxF32*)&2, (PxF32*)&2, (PxF32*)&2, (PxF32*)&2)
-PX_FORCE_INLINE FloatV ITwo();
-//((PxF32*)&3, (PxF32*)&3, (PxF32*)&3, (PxF32*)&3)
-PX_FORCE_INLINE FloatV IThree();
-//((PxF32*)&4, (PxF32*)&4, (PxF32*)&4, (PxF32*)&4)
-PX_FORCE_INLINE FloatV IFour();
 
 //-f (per component)
 PX_FORCE_INLINE FloatV FNeg(const FloatV f)	;
@@ -304,7 +414,11 @@ PX_FORCE_INLINE FloatV FSin(const FloatV a);
 //calculate the cos of float b
 PX_FORCE_INLINE FloatV FCos(const FloatV a);
 
-//Math operations on 16-byte aligned vector3s.
+
+//////////////////////////////////////////////////////////////////
+//Math operations on Vec3V
+//////////////////////////////////////////////////////////////////
+
 
 //(f,f,f,f)
 PX_FORCE_INLINE Vec3V V3Splat(const FloatV f); 
@@ -333,16 +447,21 @@ PX_FORCE_INLINE Vec3V V3SetY(const Vec3V v, const FloatV f);
 //(v.x,v.y,f,v.w)
 PX_FORCE_INLINE Vec3V V3SetZ(const Vec3V v, const FloatV f); 
 
-
+//v.x=f
 PX_FORCE_INLINE void V3WriteX(Vec3V& v, const PxF32 f);
+//v.y=f
 PX_FORCE_INLINE void V3WriteY(Vec3V& v, const PxF32 f);
+//v.z=f
 PX_FORCE_INLINE void V3WriteZ(Vec3V& v, const PxF32 f);
-PX_FORCE_INLINE void V3WriteW(Vec3V& v, const PxF32 f);
+//v.x=f.x, v.y=f.y, v.z=f.z
 PX_FORCE_INLINE void V3WriteXYZ(Vec3V& v, const PxVec3& f);
+//return v.x
 PX_FORCE_INLINE PxF32 V3ReadX(const Vec3V& v);
+//return v.y
 PX_FORCE_INLINE PxF32 V3ReadY(const Vec3V& v);
+//return v.y
 PX_FORCE_INLINE PxF32 V3ReadZ(const Vec3V& v);
-PX_FORCE_INLINE PxF32 V3ReadW(const Vec3V& v);
+//return (v.x,v.y,v.z)
 PX_FORCE_INLINE const PxVec3& V3ReadXYZ(const Vec3V& v);
 
 //(a.x, b.x, c.x)
@@ -351,7 +470,6 @@ PX_FORCE_INLINE Vec3V V3ColX(const Vec3V a, const Vec3V b, const Vec3V c);
 PX_FORCE_INLINE Vec3V V3ColY(const Vec3V a, const Vec3V b, const Vec3V c);
 //(a.z, b.z, c.z)
 PX_FORCE_INLINE Vec3V V3ColZ(const Vec3V a, const Vec3V b, const Vec3V c);
-
 
 //(0,0,0,0)
 PX_FORCE_INLINE Vec3V V3Zero();
@@ -454,9 +572,12 @@ PX_FORCE_INLINE PxU32 V3OutOfBounds(const Vec3V a, const Vec3V bounds);
 //a.x>=-bounds.x && a.y>=-bounds.y && a.z>=-bounds.z && a.x<=bounds.x && a.y<=bounds.y && a.z<=bounds.z
 PX_FORCE_INLINE PxU32 V3InBounds(const Vec3V a, const Vec3V bounds);
 
-
+//(floor(a.x + 0.5f), floor(a.y + 0.5f), floor(a.z + 0.5f))
 PX_FORCE_INLINE Vec3V V3Round(const Vec3V a);
+
+//(sinf(a.x), sinf(a.y), sinf(a.z))
 PX_FORCE_INLINE Vec3V V3Sin(const Vec3V a);
+//(cosf(a.x), cosf(a.y), cosf(a.z))
 PX_FORCE_INLINE Vec3V V3Cos(const Vec3V a);
 
 //(a.y,a.z,a.z)
@@ -478,26 +599,32 @@ PX_FORCE_INLINE Vec3V V3Perm_0Z_Zero_1X(const Vec3V v0, const Vec3V v1);
 //(v1.y, v0.x, 0)
 PX_FORCE_INLINE Vec3V V3Perm_1Y_0X_Zero(const Vec3V v0, const Vec3V v1); 
 
-//Math operations on 16-byte aligned vector4s.
+
+//////////////////////////////////////////////////////////////////
+//Math operations on Vec4V
+//////////////////////////////////////////////////////////////////
+
 //(f,f,f,f)
 PX_FORCE_INLINE Vec4V V4Splat(const FloatV f);
 
-//(floatVArray[0],floatVArray[1],floatVArray[2],floatVArray[3])
-PX_FORCE_INLINE Vec4V V4Merge(const FloatV* const floatVArray);
-
+//(f[0],f[1],f[2],f[3])
+PX_FORCE_INLINE Vec4V V4Merge(const FloatV* const f);
+//(x,y,z,w)
 PX_FORCE_INLINE Vec4V V4Merge(const FloatVArg x, const FloatVArg y, const FloatVArg z, const FloatVArg w);
-
+//(x.w, y.w, z.w, w.w)
 PX_FORCE_INLINE Vec4V V4MergeW(const Vec4VArg x, const Vec4VArg y, const Vec4VArg z, const Vec4VArg w);
-
+//(x.z, y.z, z.z, w.z)
 PX_FORCE_INLINE Vec4V V4MergeZ(const Vec4VArg x, const Vec4VArg y, const Vec4VArg z, const Vec4VArg w);
-
+//(x.y, y.y, z.y, w.y)
 PX_FORCE_INLINE Vec4V V4MergeY(const Vec4VArg x, const Vec4VArg y, const Vec4VArg z, const Vec4VArg w);
-
+//(x.x, y.x, z.x, w.x)
 PX_FORCE_INLINE Vec4V V4MergeX(const Vec4VArg x, const Vec4VArg y, const Vec4VArg z, const Vec4VArg w);
 
+//(a.x, b.x, a.y, b.y)
 PX_FORCE_INLINE Vec4V V4UnpackXY(const Vec4VArg a, const Vec4VArg b);
-
+//(a.z, b.z, a.w, b.w)
 PX_FORCE_INLINE Vec4V V4UnpackZW(const Vec4VArg a, const Vec4VArg b);
+
 //(1,0,0,0)
 PX_FORCE_INLINE Vec4V V4UnitW();
 //(0,1,0,0)
@@ -525,15 +652,31 @@ PX_FORCE_INLINE Vec4V V4SetZ(const Vec4V v, const FloatV f);
 //(v.x,v.y,v.z,f)
 PX_FORCE_INLINE Vec4V V4SetW(const Vec4V v, const FloatV f); 
 
+//(v.x,v.y,v.z,0)
+PX_FORCE_INLINE Vec4V V4ClearW(const Vec4V v);
+
+//(a[elementIndex], a[elementIndex], a[elementIndex], a[elementIndex])
+template<int elementIndex> PX_FORCE_INLINE Vec4V V4SplatElement(Vec4V a);
+
+//v.x=f
 PX_FORCE_INLINE void V4WriteX(Vec4V& v, const PxF32 f);
+//v.y=f
 PX_FORCE_INLINE void V4WriteY(Vec4V& v, const PxF32 f);
+//v.z=f
 PX_FORCE_INLINE void V4WriteZ(Vec4V& v, const PxF32 f);
+//v.w=f
 PX_FORCE_INLINE void V4WriteW(Vec4V& v, const PxF32 f);
+//v.x=f.x, v.y=f.y, v.z=f.z
 PX_FORCE_INLINE void V4WriteXYZ(Vec4V& v, const PxVec3& f);
+//return v.x
 PX_FORCE_INLINE PxF32 V4ReadX(const Vec4V& v);
+//return v.y
 PX_FORCE_INLINE PxF32 V4ReadY(const Vec4V& v);
+//return v.z
 PX_FORCE_INLINE PxF32 V4ReadZ(const Vec4V& v);
+//return v.w
 PX_FORCE_INLINE PxF32 V4ReadW(const Vec4V& v);
+//return (v.x,v.y,v.z)
 PX_FORCE_INLINE const PxVec3& V4ReadXYZ(const Vec4V& v);
 
 //(0,0,0,0)
@@ -599,10 +742,9 @@ PX_FORCE_INLINE Vec4V V4NormalizeSafe(const Vec4V a);
 PX_FORCE_INLINE Vec4V V4NormalizeFast(const Vec4V a);
 
 //c ? a : b (per component)
-PX_FORCE_INLINE Vec4V V4Sel(const BoolV c, const Vec4V a, const Vec4V b);	  
+PX_FORCE_INLINE Vec4V V4Sel(const BoolV c, const Vec4V a, const Vec4V b);
 //a>b (per component)
 PX_FORCE_INLINE BoolV V4IsGrtr(const Vec4V a, const Vec4V b);			
-PX_FORCE_INLINE VecU32V V4IsGrtrV32u(const Vec4V a, const Vec4V b);			
 //a>=b (per component)
 PX_FORCE_INLINE BoolV V4IsGrtrOrEq(const Vec4V a, const Vec4V b);	
 //a==b (per component)
@@ -633,25 +775,19 @@ PX_FORCE_INLINE Vec4V V4Sin(const Vec4V a);
 //cos(a) (per component)
 PX_FORCE_INLINE Vec4V V4Cos(const Vec4V a);
 
+//Permute v into a new vec4v with YXWZ format
+PX_FORCE_INLINE Vec4V V4Perm_YXWZ(const Vec4V v);
+//Permute v into a new vec4v with XZXZ format
+PX_FORCE_INLINE Vec4V V4Perm_XZXZ(const Vec4V v);
+//Permute v into a new vec4v with YWYW format
+PX_FORCE_INLINE Vec4V V4Perm_YWYW(const Vec4V v);
 
-PX_FORCE_INLINE Vec4V V4LoadAligned(Vec4V* addr);
-PX_FORCE_INLINE Vec4V V4LoadUnaligned(Vec4V* addr);
+//Permute v into a new vec4v with format {a[x], a[y], a[z], a[w]}
+//V4Perm<1,3,1,3> is equal to V4Perm_YWYW
+//V4Perm<0,2,0,2> is equal to V4Perm_XZXZ
+//V3Perm<1,0,3,2> is equal to V4Perm_YXWZ
+template<PxU8 x, PxU8 y, PxU8 z, PxU8 w> PX_FORCE_INLINE Vec4V V4Perm(const Vec4V a);
 
-//floor(a)(per component)
-PX_FORCE_INLINE Vec4V V4Floor(Vec4V a);
-//ceil(a) (per component)
-PX_FORCE_INLINE Vec4V V4Ceil(Vec4V a);
-
-PX_FORCE_INLINE VecU32V V4ConvertToU32VSaturate(const Vec4V a, PxU32 power);
-template<int elementIndex>
-PX_FORCE_INLINE Vec4V V4SplatElement(Vec4V a);
-
-//(x, y, z, w)
-PX_FORCE_INLINE QuatV QuatV_From_XYZW(const PxF32 x, const PxF32 y, const PxF32 z, const PxF32 w);
-//(x = v[0], y=v[1], z=v[2], w=v3[3]) and array don't need to aligned
-PX_FORCE_INLINE QuatV QuatV_From_F32Array(const PxF32* v);
-//(x = v[0], y=v[1], z=v[2], w=v3[3]) and array need to aligned, fast load
-PX_FORCE_INLINE QuatV QuatV_From_F32Array_Aligned(const PxF32* v);
 //q = cos(a/2) + u*sin(a/2) 
 PX_FORCE_INLINE QuatV QuatV_From_RotationAxisAngle(const Vec3V u, const FloatV a);
 // convert q to a unit quaternion
@@ -757,6 +893,9 @@ PX_FORCE_INLINE BoolV BGetZ(const BoolV f);
 //get w component
 PX_FORCE_INLINE BoolV BGetW(const BoolV f);
 
+//Use elementIndex to splat xxxx or yyyy or zzzz or wwww
+template<int elementIndex> PX_FORCE_INLINE BoolV BSplatElement(Vec4V a);
+
 //component-wise && (AND)
 PX_FORCE_INLINE BoolV BAnd(const BoolV a, const BoolV b);
 //component-wise || (OR)
@@ -779,15 +918,42 @@ PX_FORCE_INLINE BoolV BAnyTrue3(const BoolV a);
 //Return 1 if all components equal, zero otherwise.
 PX_FORCE_INLINE PxU32 BAllEq(const BoolV a, const BoolV b);
 
+
 //VecI32V stuff
 
-PX_FORCE_INLINE VecI32V VecI32V_From_I32(const PxI32 i);
+PX_FORCE_INLINE VecI32V VecI32V_Zero();
 
-PX_FORCE_INLINE VecI32V VecI32V_From_I32Array(const PxI32* i);
+PX_FORCE_INLINE VecI32V VecI32V_One();
 
-PX_FORCE_INLINE VecI32V VecI32V_From_I32Array_Aligned(const PxI32* i);
+PX_FORCE_INLINE VecI32V VecI32V_Two();
+
+PX_FORCE_INLINE VecI32V VecI32V_MinusOne();
+
+//Compute a shift parameter for VecI32V_LeftShift and VecI32V_RightShift
+//Each element of shift must be identical ie the vector must have form {count, count, count, count} with count>=0
+PX_FORCE_INLINE VecShiftV VecI32V_PrepareShift(const VecI32VArg shift);
+
+//Shift each element of a leftwards by the same amount
+//Compute shift with VecI32V_PrepareShift
+//{a.x<<shift[0], a.y<<shift[0], a.z<<shift[0], a.w<<shift[0]}  
+PX_FORCE_INLINE VecI32V VecI32V_LeftShift(const VecI32VArg a, const VecShiftVArg shift);
+
+//Shift each element of a rightwards by the same amount
+//Compute shift with VecI32V_PrepareShift
+//{a.x>>shift[0], a.y>>shift[0], a.z>>shift[0], a.w>>shift[0]}  
+PX_FORCE_INLINE VecI32V VecI32V_RightShift(const VecI32VArg a, const VecShiftVArg shift);
 
 PX_FORCE_INLINE VecI32V VecI32V_Add(const VecI32VArg a, const VecI32VArg b);
+
+PX_FORCE_INLINE VecI32V VecI32V_Or(const VecI32VArg a, const VecI32VArg b);
+
+PX_FORCE_INLINE VecI32V VecI32V_GetX(const VecI32VArg a);
+
+PX_FORCE_INLINE VecI32V VecI32V_GetY(const VecI32VArg a);
+
+PX_FORCE_INLINE VecI32V VecI32V_GetZ(const VecI32VArg a);
+
+PX_FORCE_INLINE VecI32V VecI32V_GetW(const VecI32VArg a);
 
 PX_FORCE_INLINE VecI32V VecI32V_Sub(const VecI32VArg a, const VecI32VArg b);
 
@@ -795,7 +961,29 @@ PX_FORCE_INLINE BoolV VecI32V_IsGrtr(const VecI32VArg a, const VecI32VArg b);
 
 PX_FORCE_INLINE BoolV VecI32V_IsEq(const VecI32VArg a, const VecI32VArg b);
 
-PX_FORCE_INLINE VecI32V VecI32V_Zero();
+PX_FORCE_INLINE VecI32V V4I32Sel(const BoolV c, const VecI32V a, const VecI32V b);
+
+//VecU32V stuff
+
+PX_FORCE_INLINE VecU32V U4Zero();
+
+PX_FORCE_INLINE VecU32V U4One();
+
+PX_FORCE_INLINE VecU32V U4Two();
+
+PX_FORCE_INLINE BoolV V4IsEqU32(const VecU32V a, const VecU32V b);
+
+PX_FORCE_INLINE VecU32V V4U32Sel(const BoolV c, const VecU32V a, const VecU32V b);
+ 
+PX_FORCE_INLINE VecU32V V4U32or(VecU32V a, VecU32V b);
+
+PX_FORCE_INLINE VecU32V V4U32and(VecU32V a, VecU32V b);
+
+PX_FORCE_INLINE VecU32V V4U32Andc(VecU32V a, VecU32V b);
+
+//VecU32 - why does this not return a bool?
+PX_FORCE_INLINE VecU32V V4IsGrtrV32u(const Vec4V a, const Vec4V b);			
+
 
 //Math operations on 16-byte aligned Mat33s (represents any 3x3 matrix)
 //a*b
@@ -823,6 +1011,28 @@ PX_FORCE_INLINE Mat33V M33Identity();
 
 //create a vec3 to store the diagonal element of the M33
 PX_FORCE_INLINE Mat33V M33Diagonal(const Vec3VArg);
+
+
+//Not implemented
+//return 1 if all components of a are equal to all components of b
+//PX_FORCE_INLINE PxU32 V4U32AllEq(const VecU32V a, const VecU32V b);
+//v.w=f
+//PX_FORCE_INLINE void V3WriteW(Vec3V& v, const PxF32 f);
+//PX_FORCE_INLINE PxF32 V3ReadW(const Vec3V& v);
+
+
+//Not used
+//PX_FORCE_INLINE Vec4V V4LoadAligned(Vec4V* addr);
+//PX_FORCE_INLINE Vec4V V4LoadUnaligned(Vec4V* addr);
+//floor(a)(per component)
+//PX_FORCE_INLINE Vec4V V4Floor(Vec4V a);
+//ceil(a) (per component)
+//PX_FORCE_INLINE Vec4V V4Ceil(Vec4V a);
+//PX_FORCE_INLINE VecU32V V4ConvertToU32VSaturate(const Vec4V a, PxU32 power);
+
+
+
+
 
 
 //Math operations on 16-byte aligned Mat34s (represents transformation matrix - rotation and translation).
@@ -1060,8 +1270,33 @@ outC = V4UnpackXY(inA, inB);
 	outC = V4UnpackXY(inA, inC);									\
 	outD = V4UnpackZW(inA, inC);
 
+#define PX_TRANSPOSE_44(inA, inB, inC, inD, outA, outB, outC, outD) \
+	outA = V4UnpackXY(inA, inC);										\
+	inA = V4UnpackZW(inA, inC);											\
+	inC = V4UnpackXY(inB, inD);											\
+	inB	= V4UnpackZW(inB, inD);											\
+	outB = V4UnpackZW(outA, inC);										\
+	outA = V4UnpackXY(outA, inC);										\
+	outC = V4UnpackXY(inA, inB);										\
+	outD = V4UnpackZW(inA, inB);
 
+//In all platforms except 360, this is a fast way of calculating 4 dot product at once. On 360, it may be faster to call V3Dot 4 times because there is an
+//instruction to perform a dot product that completes in 14 cycles
+//It returns a Vec4V, where each element is the dot product of one pair of Vec3Vs
+PX_FORCE_INLINE Vec4V V3Dot4(const Vec3VArg a0, const Vec3VArg b0, const Vec3VArg a1, const Vec3VArg b1, const Vec3VArg a2, 
+							 const Vec3VArg b2, const Vec3VArg a3, const Vec3VArg b3)
+{
+	Vec4V a0b0 = Vec4V_From_Vec3V(V3Mul(a0, b0));
+	Vec4V a1b1 = Vec4V_From_Vec3V(V3Mul(a1, b1));
+	Vec4V a2b2 = Vec4V_From_Vec3V(V3Mul(a2, b2));
+	Vec4V a3b3 = Vec4V_From_Vec3V(V3Mul(a3, b3));
 
+	Vec4V aTrnsps, bTrnsps, cTrnsps;
+
+	PX_TRANSPOSE_44_34(a0b0, a1b1, a2b2, a3b3, aTrnsps, bTrnsps, cTrnsps);
+
+	return V4Add(V4Add(aTrnsps, bTrnsps), cTrnsps);
+}
 
 
 
@@ -1072,6 +1307,8 @@ outC = V4UnpackXY(inA, inB);
 #include "PsVecMathAoSScalarInline.h"
 #endif  // #if !COMPILE_VECTOR_INTRINSICS
 #include "PsVecQuat.h"
+
+
 
 } // namespace aos
 } // namespace shdfnd

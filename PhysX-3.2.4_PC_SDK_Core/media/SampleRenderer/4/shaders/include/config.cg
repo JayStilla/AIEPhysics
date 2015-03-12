@@ -60,7 +60,9 @@ struct FragmentParameters
 	float4 texcoord0          : TEXCOORD0;
 	float4 texcoord1          : TEXCOORD1;
 	float4 texcoord2          : TEXCOORD2;
+#if !defined (RENDERER_WIN8ARM)
 	float4 texcoord3          : TEXCOORD3;
+#endif	
 	half4  color              : COLOR;
 };
 

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -171,8 +171,8 @@ namespace physx { namespace profile {
 	{
 		typedef MemoryEventSummarizer< TSwapBytes, TNewEntryOperator, MemoryEventHandler > TThisType;
 		typedef WrapperReflectionAllocator<MemoryEventSummarizerEntry> TAllocatorType;
-		typedef HashMap<MemoryEventSummarizerEntry, PxU32, Hash<MemoryEventSummarizerEntry>, TAllocatorType> TSummarizeEntryToU32Hash;
-		typedef HashMap<PxU64, MemoryEventSummarizerAllocatedValue, Hash<PxU64>, TAllocatorType> TU64ToSummarizerValueHash;
+		typedef shdfnd::HashMap<MemoryEventSummarizerEntry, PxU32, shdfnd::Hash<MemoryEventSummarizerEntry>, TAllocatorType> TSummarizeEntryToU32Hash;
+		typedef shdfnd::HashMap<PxU64, MemoryEventSummarizerAllocatedValue, shdfnd::Hash<PxU64>, TAllocatorType> TU64ToSummarizerValueHash;
 		FoundationWrapper mWrapper;
 		TSummarizeEntryToU32Hash		mEntryIndexHash;
 		ProfileArray<PxI32>				mTotalsArray;

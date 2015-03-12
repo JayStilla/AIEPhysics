@@ -1,37 +1,29 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #include <RendererMemoryMacros.h>
 #include <windows/WindowsSamplePlatform.h>
 
@@ -44,11 +36,20 @@
 
 #include <PsString.h>
 #include <PsFile.h>
+#include <PsUtilities.h>
 
 #if defined(RENDERER_ENABLE_DIRECT3D9)
 	#include <d3d9.h>
 	#include <d3dx9.h>
 	#include <XInput.h>
+#endif
+
+#if defined(RENDERER_ENABLE_DIRECT3D11)
+#pragma warning(push)
+// Disable macro redefinition warnings
+#pragma warning(disable: 4005)
+	#include <d3d11.h>
+#pragma warning(pop)
 #endif
 
 #if defined(RENDERER_ENABLE_OPENGL)
@@ -59,6 +60,14 @@
 	#pragma comment(lib, "OpenGL32.lib")
 	#pragma comment(lib, "GLU32.lib")
 #endif
+
+using std::min;
+using std::max;
+#pragma warning(push)
+#pragma warning(disable : 4244)
+#include <atlimage.h>
+#include <Gdiplusimaging.h>
+#pragma warning(pop)
 
 using namespace SampleFramework;
 using SampleRenderer::RendererWindow;
@@ -283,12 +292,12 @@ static ATOM registerWindowClass(HINSTANCE hInstance)
 		wcex.cbClsExtra     = 0;
 		wcex.cbWndExtra     = sizeof(void*);
 		wcex.hInstance      = hInstance;
-		wcex.hIcon          = ::LoadIcon(hInstance, (LPCTSTR)0);
+		wcex.hIcon          = ::LoadIcon(hInstance, "SampleApplicationIcon");
 		wcex.hCursor        = ::LoadCursor(NULL, IDC_ARROW);
 		wcex.hbrBackground  = (HBRUSH)(COLOR_WINDOW+1);
 		wcex.lpszMenuName   = 0;
 		wcex.lpszClassName  = g_windowClassName;
-		wcex.hIconSm        = ::LoadIcon(wcex.hInstance, (LPCTSTR)0);
+		wcex.hIconSm        = ::LoadIcon(wcex.hInstance, "SampleApplicationIcon");
 		atom = ::RegisterClassEx(&wcex);
 	}
 	return atom;
@@ -339,6 +348,7 @@ void WindowsPlatform::showCursor(bool show)
 		m_showCursor = show;
 		PxI32 count = ShowCursor(show);
 		PX_ASSERT((m_showCursor && (count == 0)) || (!m_showCursor && (count == -1)));
+		PX_UNUSED(count);
 	}
 }
 
@@ -358,18 +368,55 @@ void* WindowsPlatform::compileProgram(void * context,
 	physx::string::strcat_s(fullpath, 1024, programPath);
 	CGprogram program = cgCreateProgramFromFile(static_cast<CGcontext>(context), CG_SOURCE, fullpath, static_cast<CGprofile>(profile), entry, args);
 
+	if (!program)
+	{
+		static bool ignoreErrors = false;
+		if (!ignoreErrors)
+		{
+			const char* compileError = cgGetLastListing(static_cast<CGcontext>(context));
+			int ret = MessageBoxA(0, compileError, "CG cgCreateProgramFromFile Error", MB_ABORTRETRYIGNORE);
+
+			if (ret == IDABORT)
+			{
+				exit(0);
+			}
+			else if (ret == IDIGNORE)
+			{
+				ignoreErrors = true;
+			}
+			else
+			{
+				DebugBreak();
+			}
+		}
+	}
+
 	return program;
 #else
 	return NULL;
 #endif
 }
 
-WindowsPlatform::WindowsPlatform(SampleRenderer::RendererWindow* _app) : SamplePlatform(_app)
+WindowsPlatform::WindowsPlatform(SampleRenderer::RendererWindow* _app) :
+SamplePlatform(_app), 
+m_d3d(NULL),
+m_d3dDevice(NULL),
+m_dxgiFactory(NULL),
+m_dxgiSwap(NULL),
+m_d3d11Device(NULL),
+m_d3d11DeviceContext(NULL),
+m_hwnd(0),
+m_hdc(0),
+m_hrc(0),
+m_library(NULL),
+m_dxgiLibrary(NULL),
+m_d3d11Library(NULL),
+m_ownsWindow(false),
+m_isHandlingMessages(false),
+m_destroyWindow(false),
+m_hasFocus(true),
+m_vsync(false)
 {
-	m_isHandlingMessages = false;
-	m_destroyWindow = false;
-	m_hasFocus = true;
-	m_hwnd = 0;
 	m_library = 0;
 
 	// adjust ShowCursor display counter to be 0 or -1
@@ -385,11 +432,25 @@ WindowsPlatform::WindowsPlatform(SampleRenderer::RendererWindow* _app) : SampleP
 
 WindowsPlatform::~WindowsPlatform()
 {
-	RENDERER_ASSERT(m_hwnd==0, "RendererWindow was not closed before being destroyed.");
-	if(m_library) 
+	RENDERER_ASSERT(!m_ownsWindow || m_hwnd==0, "RendererWindow was not closed before being destroyed.");
+	if(m_d3d)
 	{
+		m_d3d->Release();
+	}
+	if(m_library) 
+	{	
 		FreeLibrary(m_library);
 		m_library = 0;
+	}
+	if(m_dxgiLibrary) 
+	{
+		FreeLibrary(m_dxgiLibrary);
+		m_dxgiLibrary = 0;
+	}
+	if(m_d3d11Library) 
+	{
+		FreeLibrary(m_d3d11Library);
+		m_d3d11Library = 0;
 	}
 }
 
@@ -414,7 +475,7 @@ void WindowsPlatform::setFocus(bool b)
 
 bool WindowsPlatform::isOpen()
 {
-	if(m_hwnd) return true;
+	if(m_hwnd && !m_destroyWindow) return true;
 	return false;
 }
 
@@ -439,6 +500,20 @@ void WindowsPlatform::setTitle(const char *title)
 void WindowsPlatform::showMessage(const char* title, const char* message)
 {
 	printf("%s: %s\n", title, message);
+}
+
+bool WindowsPlatform::saveBitmap(const char* pFileName, physx::PxU32 width, physx::PxU32 height, physx::PxU32 sizeInBytes, const void* pData)
+{
+	bool bSuccess = false;
+	HBITMAP bitmap = CreateBitmap(width, height, 1, 32, pData);
+	if (bitmap)
+	{
+		CImage image;
+		image.Attach(bitmap, CImage::DIBOR_TOPDOWN);
+		bSuccess = SUCCEEDED(image.Save(pFileName, Gdiplus::ImageFormatBMP));
+		DeleteObject(bitmap);
+	}
+	return bSuccess;
 }
 
 void WindowsPlatform::setMouseCursorRecentering(bool val)
@@ -541,27 +616,52 @@ bool WindowsPlatform::openWindow(physx::PxU32& width,
 	RENDERER_ASSERT(m_hwnd==0, "Attempting to open a window that is already opened");
 	if(m_hwnd==0)
 	{
+		int offset = fullscreen ? 0 : 50;
+
 		registerWindowClass((HINSTANCE)::GetModuleHandle(0));
 		RECT winRect;
-		winRect.left   = 0;
-		winRect.top    = 0;
-		winRect.right  = width;
-		winRect.bottom = height;
+		winRect.left   = offset;
+		winRect.top    = offset;
+		winRect.right  = width + offset;
+		winRect.bottom = height + offset;
 		DWORD dwstyle  = (fullscreen ? g_fullscreenStyle : g_windowStyle);
-		UINT  offset   = fullscreen ? 0 : 50;
+
 		::AdjustWindowRect(&winRect, dwstyle, 0);
+
+		// make sure the window fits in the main screen
+		if (!fullscreen)
+		{
+			// check the work area of the primary display
+			RECT screen;
+			SystemParametersInfo(SPI_GETWORKAREA, 0, &screen, 0);
+
+			if (winRect.right > screen.right)
+			{
+				int diff = winRect.right - screen.right;
+				winRect.right -= diff;
+				winRect.left = std::max<int>(0, winRect.left - diff);
+			}
+
+			if (winRect.bottom > screen.bottom)
+			{
+				int diff = winRect.bottom - screen.bottom;
+				winRect.bottom -= diff;
+				winRect.top = std::max<int>(0, winRect.top - diff);
+			}
+		}
+
 		m_hwnd = ::CreateWindowA(g_windowClassName, title, dwstyle,
-			offset, offset,
-			winRect.right-winRect.left, winRect.bottom-winRect.top,
-			0, 0, 0, 0);
+		                         winRect.left, winRect.top,
+		                         winRect.right - winRect.left, winRect.bottom - winRect.top,
+		                         0, 0, 0, 0);
 		RENDERER_ASSERT(m_hwnd, "CreateWindow failed");
 		if(m_hwnd)
 		{
 			ok = true;
+			m_ownsWindow = true;
 			ShowWindow(m_hwnd, SW_SHOWNORMAL);
-			SetFocus(m_hwnd);              
+			SetFocus(m_hwnd);
 			SetWindowLongPtr(m_hwnd, GWLP_USERDATA, PtrToLong(m_app));
-			m_app->onOpen();
 		}
 	}
 
@@ -581,6 +681,12 @@ bool WindowsPlatform::openWindow(physx::PxU32& width,
 	}
 
 	return ok;
+}
+
+bool WindowsPlatform::useWindow(physx::PxU64 hwnd)
+{
+	m_hwnd = reinterpret_cast<HWND>(hwnd);
+	return true;
 }
 
 bool WindowsPlatform::closeWindow() 
@@ -613,7 +719,7 @@ void WindowsPlatform::setCWDToEXE(void)
 	if(exepath[0])
 	{
 		popPathSpec(exepath);
-		_chdir(exepath);
+		(void)_chdir(exepath);
 	}
 }
 
@@ -674,6 +780,8 @@ void WindowsPlatform::initializeOGLDisplay(const SampleRenderer::RendererDesc& d
 		}
 	}
 #endif
+
+	m_vsync = desc.vsync;
 }
 
 physx::PxU64 WindowsPlatform::getWindowHandle()
@@ -717,8 +825,7 @@ bool WindowsPlatform::makeContextCurrent()
 		}
 		else
 		{
-			bool ok = wglMakeCurrent(m_hdc, m_hrc) ? true : false;
-			return ok;
+			ok = wglMakeCurrent(m_hdc, m_hrc) ? true : false;
 		}
 	}
 #endif
@@ -742,13 +849,25 @@ void WindowsPlatform::postInitializeOGLDisplay()
 {
 #if defined(RENDERER_ENABLE_OPENGL)
 	glewInit();
-		// turn off v-sync...
+
 #if defined(GLEW_MX)
 	wglewInit();
 #endif
+
 	if(WGLEW_EXT_swap_control)
 	{
-		wglSwapIntervalEXT(0);
+		wglSwapIntervalEXT(m_vsync ? -1 : 0);
+	}
+#endif
+}
+
+void WindowsPlatform::setOGLVsync(bool on)
+{
+#if defined(RENDERER_ENABLE_OPENGL)
+	m_vsync = on;
+	if(WGLEW_EXT_swap_control)
+	{
+		wglSwapIntervalEXT(m_vsync ? 1 : 0);
 	}
 #endif
 }
@@ -781,8 +900,8 @@ physx::PxU32 WindowsPlatform::initializeD3D9Display(void * d3dPresentParameters,
 		RECT rect = {0};
 		GetWindowRect(m_hwnd, &rect);
 		m_d3dPresentParams->BackBufferFormat = D3DFMT_X8R8G8B8;
-		m_d3dPresentParams->BackBufferWidth  = rect.right-rect.left;
-		m_d3dPresentParams->BackBufferHeight = rect.bottom-rect.top;
+		width = (m_d3dPresentParams->BackBufferWidth  = rect.right-rect.left);
+		height = (m_d3dPresentParams->BackBufferHeight = rect.bottom-rect.top);
 
 		bool foundAdapterMode = false;
 		const UINT numAdapterModes = m_d3d->GetAdapterModeCount(0, m_d3dPresentParams->BackBufferFormat);
@@ -830,7 +949,7 @@ physx::PxU32 WindowsPlatform::initializeD3D9Display(void * d3dPresentParameters,
 
 	HRESULT res = m_d3d->CreateDevice( adapter, deviceType,
 		m_hwnd,
-		D3DCREATE_HARDWARE_VERTEXPROCESSING,
+		D3DCREATE_HARDWARE_VERTEXPROCESSING|D3DCREATE_MULTITHREADED,
 		m_d3dPresentParams, &m_d3dDevice);
 	*(static_cast<IDirect3DDevice9**>(m_d3dDevice_out)) = m_d3dDevice;
 	return res;
@@ -840,8 +959,6 @@ physx::PxU32 WindowsPlatform::D3D9Present()
 {
 	return m_d3dDevice->Present(0, 0, m_hwnd, 0);
 }
-
-
 physx::PxU64 WindowsPlatform::getD3D9TextureFormat(SampleRenderer::RendererTexture2D::Format format)
 {
 	D3DFORMAT d3dFormat = D3DFMT_UNKNOWN;
@@ -859,6 +976,186 @@ physx::PxU64 WindowsPlatform::getD3D9TextureFormat(SampleRenderer::RendererTextu
 	return static_cast<physx::PxU64>(d3dFormat);
 }
 
+physx::PxU64 WindowsPlatform::getD3D11TextureFormat(SampleRenderer::RendererTexture2D::Format format)
+{
+#if defined(RENDERER_ENABLE_DIRECT3D11)
+	DXGI_FORMAT dxgiFormat = DXGI_FORMAT_UNKNOWN;
+	switch(format)
+	{
+	case SampleRenderer::RendererTexture2D::FORMAT_B8G8R8A8: dxgiFormat = DXGI_FORMAT_B8G8R8A8_UNORM; break;
+	case SampleRenderer::RendererTexture2D::FORMAT_A8:       dxgiFormat = DXGI_FORMAT_A8_UNORM;       break;
+	case SampleRenderer::RendererTexture2D::FORMAT_R32F:     dxgiFormat = DXGI_FORMAT_R32_FLOAT;     break;
+	case SampleRenderer::RendererTexture2D::FORMAT_DXT1:     dxgiFormat = DXGI_FORMAT_BC1_UNORM;     break;
+	case SampleRenderer::RendererTexture2D::FORMAT_DXT3:     dxgiFormat = DXGI_FORMAT_BC2_UNORM;     break;
+	case SampleRenderer::RendererTexture2D::FORMAT_DXT5:     dxgiFormat = DXGI_FORMAT_BC3_UNORM;     break;
+	case SampleRenderer::RendererTexture2D::FORMAT_D16:      dxgiFormat = DXGI_FORMAT_R16_TYPELESS;      break;
+	}
+#else
+	PxU64 dxgiFormat = 0;
+#endif
+	return static_cast<physx::PxU64>(dxgiFormat);
+}
+
+void* WindowsPlatform::initializeD3D11()
+{
+	m_dxgiLibrary   = 0;
+	m_d3d11Library  = 0;
+#if defined(RENDERER_ENABLE_DIRECT3D11)
+	if(m_hwnd)
+	{
+#if defined(D3D_DEBUG_INFO)
+#define D3D11_DLL "d3d11d.dll"
+#define DXGI_DLL "dxgid.dll"
+#else
+#define D3D11_DLL "d3d11.dll"
+#define DXGI_DLL "dxgi.dll"
+#endif
+		m_dxgiLibrary = LoadLibraryA(DXGI_DLL);
+		m_d3d11Library = LoadLibraryA(D3D11_DLL);
+		RENDERER_ASSERT(m_dxgiLibrary, "Could not load " DXGI_DLL ".");
+		RENDERER_ASSERT(m_d3d11Library, "Could not load " D3D11_DLL ".");
+		if(!m_dxgiLibrary)
+		{
+			MessageBoxA(0, "Could not load " DXGI_DLL ". Please install the latest DirectX End User Runtime available at www.microsoft.com/directx.", "Renderer Error.", MB_OK);
+		}
+		if(!m_d3d11Library)
+		{
+			MessageBoxA(0, "Could not load " D3D11_DLL ". Please install the latest DirectX End User Runtime available at www.microsoft.com/directx.", "Renderer Error.", MB_OK);
+		}
+#undef D3D11_DLL
+#undef DXGI_DLL
+		if(m_dxgiLibrary)
+		{
+			typedef HRESULT     (WINAPI * LPCREATEDXGIFACTORY)(REFIID, void ** );
+			LPCREATEDXGIFACTORY pCreateDXGIFactory = (LPCREATEDXGIFACTORY)GetProcAddress(m_dxgiLibrary, "CreateDXGIFactory1");
+			RENDERER_ASSERT(pCreateDXGIFactory, "Could not find CreateDXGIFactory1 function.");
+			if(pCreateDXGIFactory)
+			{
+				pCreateDXGIFactory(__uuidof(IDXGIFactory1), (void**)(&m_dxgiFactory));
+			}
+		}
+	}
+#endif
+	return m_dxgiFactory;
+}
+
+
+bool WindowsPlatform::isD3D11ok()
+{
+	if(m_dxgiLibrary && m_d3d11Library) 
+	{
+		return true;
+	}
+	return false;
+}
+
+physx::PxU32 WindowsPlatform::initializeD3D11Display(void *dxgiSwapChainDesc, 
+															  char *m_deviceName, 
+													 physx::PxU32& width, 
+													 physx::PxU32& height,
+															  void *m_d3dDevice_out,
+															  void *m_d3dDeviceContext_out,
+															  void *m_dxgiSwap_out)
+{
+	HRESULT hr = S_OK;
+
+#if defined(RENDERER_ENABLE_DIRECT3D11)
+	ID3D11Device* pD3D11Device               = NULL;
+	ID3D11DeviceContext* pD3D11DeviceContext = NULL;
+	IDXGISwapChain* pSwapChain               = NULL;
+	IDXGIFactory1* pDXGIFactory              = m_dxgiFactory;
+	DXGI_SWAP_CHAIN_DESC* pSwapChainDesc     = static_cast<DXGI_SWAP_CHAIN_DESC*>(dxgiSwapChainDesc);
+	
+	hr = pDXGIFactory->MakeWindowAssociation(m_hwnd, 0);
+	pSwapChainDesc->OutputWindow = m_hwnd;
+
+	bool fullscreen = false;
+	WINDOWINFO wininfo = {0};
+	if(GetWindowInfo(m_hwnd, &wininfo))
+	{
+		if(wininfo.dwStyle & WS_POPUP)
+		{
+			fullscreen = true;
+			pSwapChainDesc->Windowed = 0;
+		}
+	}
+	
+	PFN_D3D11_CREATE_DEVICE pD3D11CreateDevice = (PFN_D3D11_CREATE_DEVICE)GetProcAddress(m_d3d11Library, "D3D11CreateDevice");
+	RENDERER_ASSERT(pD3D11CreateDevice, "Could not find D3D11CreateDeviceAndSwapChain.");
+	if (pD3D11CreateDevice)
+	{
+		UINT i                  = 0; 
+		IDXGIAdapter1* pAdapter = NULL; 
+		std::vector<IDXGIAdapter1*> vAdapters; 
+		while(pDXGIFactory->EnumAdapters1(i++, &pAdapter) != DXGI_ERROR_NOT_FOUND) 
+		{ 
+			vAdapters.push_back(pAdapter); 
+		} 
+
+		const D3D_FEATURE_LEVEL supportedFeatureLevels[] = 
+		{
+			D3D_FEATURE_LEVEL_11_0,
+			D3D_FEATURE_LEVEL_10_1,
+			D3D_FEATURE_LEVEL_10_0,
+			//D3D_FEATURE_LEVEL_9_3,
+			//D3D_FEATURE_LEVEL_9_2,
+			//D3D_FEATURE_LEVEL_9_1,
+		};
+
+		D3D11_CREATE_DEVICE_FLAG deviceFlags = (D3D11_CREATE_DEVICE_FLAG)(D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT);
+		D3D_FEATURE_LEVEL deviceFeatureLevel = D3D_FEATURE_LEVEL_11_0;
+		for (i = 0; i < vAdapters.size(); ++i)
+		{
+			hr = pD3D11CreateDevice(
+				vAdapters[i],
+				D3D_DRIVER_TYPE_UNKNOWN,
+				NULL,
+				deviceFlags,
+				supportedFeatureLevels, 
+				PX_ARRAY_SIZE(supportedFeatureLevels),
+				D3D11_SDK_VERSION,
+				&pD3D11Device,
+				&deviceFeatureLevel,
+				&pD3D11DeviceContext);
+
+			if (SUCCEEDED(hr))
+			{
+				// Disable MSAA on sub DX10.1 devices
+				if (deviceFeatureLevel <= D3D_FEATURE_LEVEL_10_0)
+				{
+					pSwapChainDesc->SampleDesc.Count   = 1;
+					pSwapChainDesc->SampleDesc.Quality = 0;
+				}
+				hr = pDXGIFactory->CreateSwapChain(pD3D11Device, pSwapChainDesc, &pSwapChain);
+			}
+
+			if (SUCCEEDED(hr))
+			{
+				m_dxgiSwap = pSwapChain;
+				m_d3d11Device = pD3D11Device;
+				m_d3d11DeviceContext = pD3D11DeviceContext;
+				*(static_cast<IDXGISwapChain**>(m_dxgiSwap_out)) = m_dxgiSwap;
+				*(static_cast<ID3D11Device**>(m_d3dDevice_out)) = m_d3d11Device;
+				*(static_cast<ID3D11DeviceContext**>(m_d3dDeviceContext_out)) = m_d3d11DeviceContext;
+				break;
+			}
+
+			// If DXGI creation failed but device creation succeeded, we need to release both device and context
+			if (pD3D11Device)        pD3D11Device->Release();
+			if (pD3D11DeviceContext) pD3D11DeviceContext->Release();
+		}
+
+		for (i = 0; i < vAdapters.size(); ++i)
+		{
+			vAdapters[i]->Release();
+		}
+	} 
+	RENDERER_ASSERT(m_dxgiSwap && m_d3d11Device && m_d3d11DeviceContext, "Unable to create D3D device and swap chain");
+#endif
+
+	return hr;
+}
+
 bool WindowsPlatform::makeSureDirectoryPathExists(const char* dirPath)
 {
 	// [Kai] Currently create the final folder only if the dirPath doesn't exist.
@@ -868,4 +1165,13 @@ bool WindowsPlatform::makeSureDirectoryPathExists(const char* dirPath)
 	if (!ok)
 		ok = CreateDirectory(dirPath, NULL) != 0;
 	return ok;
+}
+
+physx::PxU32 WindowsPlatform::D3D11Present(bool vsync)
+{
+#if defined(RENDERER_ENABLE_DIRECT3D11)
+	return m_dxgiSwap->Present(vsync ? 1 : 0, 0);
+#else
+	return 0;
+#endif
 }

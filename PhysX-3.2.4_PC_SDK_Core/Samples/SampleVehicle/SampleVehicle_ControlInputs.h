@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -31,7 +31,7 @@
 #ifndef SAMPLE_VEHICLE_CONTROL_INPUTS_H
 #define SAMPLE_VEHICLE_CONTROL_INPUTS_H
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 
 using namespace physx;
 
@@ -48,35 +48,59 @@ public:
 	PxF32					getRotateY() const							{return mCameraRotateInputY;}
 	PxF32					getRotateZ() const							{return mCameraRotateInputZ;}
 
-	//Driving inputs - keys
+	//Keyboard driving inputs - (car + tank)
 	void					setAccelKeyPressed(const bool b) 			{mAccelKeyPressed=b;}
+	void					setGearUpKeyPressed(const bool b) 			{mGearUpKeyPressed=b;}
+	void					setGearDownKeyPressed(const bool b)			{mGearDownKeyPressed=b;}
+	bool					getAccelKeyPressed() const					{return mAccelKeyPressed;}
+	bool					getGearUpKeyPressed() const					{return mGearUpKeyPressed;}
+	bool					getGearDownKeyPressed() const				{return mGearDownKeyPressed;}
+
+	//Keyboard driving inputs - (car only)
 	void					setBrakeKeyPressed(const bool b) 			{mBrakeKeyPressed=b;}
 	void					setHandbrakeKeyPressed(const bool b)		{mHandbrakeKeyPressed=b;}
 	void					setSteerLeftKeyPressed(const bool b)		{mSteerLeftKeyPressed=b;}
 	void					setSteerRightKeyPressed(const bool b)		{mSteerRightKeyPressed=b;}
-	void					setGearUpKeyPressed(const bool b) 			{mGearUpKeyPressed=b;}
-	void					setGearDownKeyPressed(const bool b)			{mGearDownKeyPressed=b;}
-	bool					getAccelKeyPressed() const					{return mAccelKeyPressed;}
 	bool					getBrakeKeyPressed() const					{return mBrakeKeyPressed;}
 	bool					getHandbrakeKeyPressed() const				{return mHandbrakeKeyPressed;}
 	bool					getSteerLeftKeyPressed() const				{return mSteerLeftKeyPressed;}
 	bool					getSteerRightKeyPressed() const				{return mSteerRightKeyPressed;}
-	bool					getGearUpKeyPressed() const					{return mGearUpKeyPressed;}
-	bool					getGearDownKeyPressed() const				{return mGearDownKeyPressed;}
 
-	//Driving inputs - gamepad
+	//Keyboard driving inputs - (tank only)
+	void					setBrakeLeftKeyPressed(const bool b) 		{mBrakeLeftKeyPressed=b;}
+	void					setBrakeRightKeyPressed(const bool b) 		{mBrakeRightKeyPressed=b;}
+	void					setThrustLeftKeyPressed(const bool b) 		{mThrustLeftKeyPressed=b;}
+	void					setThrustRightKeyPressed(const bool b) 		{mThrustRightKeyPressed=b;}
+	bool					getBrakeLeftKeyPressed() const				{return mBrakeLeftKeyPressed;}
+	bool					getBrakeRightKeyPressed() const	 			{return mBrakeRightKeyPressed;}
+	bool					getThrustLeftKeyPressed() const	 			{return mThrustLeftKeyPressed;}
+	bool					getThrustRightKeyPressed() const	 		{return mThrustRightKeyPressed;}
+
+	//Gamepad driving inputs (car + tank)
 	void					setAccel(const PxF32 f) 					{mAccel=f;}
-	void					setBrake(const PxF32 f) 					{mBrake=f;}
-	void					setSteer(const PxF32 f) 					{mSteer=f;}
 	void					setGearUp(const bool b) 					{mGearup=b;}
 	void					setGearDown(const bool b) 					{mGeardown=b;}
-	void					setHandbrake(const bool b) 					{mHandbrake=b;}
 	PxF32					getAccel() const							{return mAccel;}
-	PxF32					getBrake() const							{return mBrake;}
-	PxF32					getSteer() const							{return mSteer;}
 	bool					getGearUp() const							{return mGearup;}
 	bool					getGearDown() const							{return mGeardown;}
+
+	//Gamepad driving inputs (car only)
+	void					setBrake(const PxF32 f) 					{mBrake=f;}
+	void					setSteer(const PxF32 f) 					{mSteer=f;}
+	void					setHandbrake(const bool b) 					{mHandbrake=b;}
+	PxF32					getBrake() const							{return mBrake;}
+	PxF32					getSteer() const							{return mSteer;}
 	bool					getHandbrake() const						{return mHandbrake;}
+
+	//Gamepad driving inputs (tank only)
+	void					setThrustLeft(const PxF32 f)				{mThrustLeft=f;}
+	void					setThrustRight(const PxF32 f)				{mThrustRight=f;}
+	PxF32					getThrustLeft() const						{return mThrustLeft;}
+	PxF32					getThrustRight() const						{return mThrustRight;}
+	void					setBrakeLeft(const PxF32 f)					{mBrakeLeft=f;}
+	void					setBrakeRight(const PxF32 f)				{mBrakeRight=f;}
+	PxF32					getBrakeLeft() const						{return mBrakeLeft;}
+	PxF32					getBrakeRight() const						{return mBrakeRight;}
 
 private:
 
@@ -84,22 +108,38 @@ private:
 	PxF32			mCameraRotateInputY;
 	PxF32			mCameraRotateInputZ;
 
-	//Driving inputs - keys
+	//keyboard inputs (car and tank)
 	bool			mAccelKeyPressed;
+	bool			mGearUpKeyPressed;
+	bool			mGearDownKeyPressed;
+
+	//keyboard inputs (car only)
 	bool			mBrakeKeyPressed;
 	bool			mHandbrakeKeyPressed;
 	bool			mSteerLeftKeyPressed;
 	bool			mSteerRightKeyPressed;
-	bool			mGearUpKeyPressed;
-	bool			mGearDownKeyPressed;
 
-	//Driving inputs - gamepad
+	//keyboard inputs (tank only)
+	bool mBrakeLeftKeyPressed;
+	bool mBrakeRightKeyPressed;
+	bool mThrustLeftKeyPressed;
+	bool mThrustRightKeyPressed;
+
+	//gamepad inputs (car and tank)
 	PxF32			mAccel;
-	PxF32			mBrake;
-	PxF32			mSteer;
 	bool			mGearup;
 	bool			mGeardown;
+
+	//gamepad inputs (car only)
+	PxF32			mBrake;
+	PxF32			mSteer;
 	bool			mHandbrake;
+
+	//gamepad inputs (tank only)
+	PxF32			mThrustLeft;
+	PxF32			mThrustRight;
+	PxF32			mBrakeLeft;
+	PxF32			mBrakeRight;
 };
 
 #endif //SAMPLE_VEHICLE_CONTROL_INPUTS_H

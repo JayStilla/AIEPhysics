@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -54,7 +54,7 @@ struct PxExtensionPvdOnlyProperties
 		DEFINE_ENUM_RANGE( PxPrismaticJoint_Limit, 100 ),
 		DEFINE_ENUM_RANGE( PxRevoluteJoint_Limit, 100 ),
 		DEFINE_ENUM_RANGE( PxSphericalJoint_LimitCone, 100 ),
-		DEFINE_ENUM_RANGE( PxJoint_LocalPose, 2 ),
+		DEFINE_ENUM_RANGE( PxJoint_LocalPose, 2 )
 	};
 };
 

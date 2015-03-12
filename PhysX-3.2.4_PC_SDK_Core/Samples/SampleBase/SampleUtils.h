@@ -23,15 +23,16 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #ifndef SAMPLE_UTILS_H
 #define SAMPLE_UTILS_H
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "foundation/PxVec3.h"
+#include "PsMathUtils.h"
 
 	//Integer representation of a floating-point value.
 	#define PX_IR(x)			((PxU32&)(x))
@@ -41,32 +42,6 @@
 	PX_INLINE PxReal degtorad(PxReal d)
 	{
 		return d * PxPi / 180.0f;
-	}
-
-	PX_INLINE void computeBasis(const PxVec3& dir, PxVec3& right, PxVec3& up)
-	{
-		// Derive two remaining vectors
-		if(dir.y>0.9999f)
-		{
-			right = PxVec3(1.0f, 0.0f, 0.0f);
-		}
-		else
-		{
-			right = (PxVec3(0.0f, 1.0f, 0.0f).cross(dir));
-			right.normalize();
-		}
-
-		up = dir.cross(right);
-	}
-
-	PX_INLINE void computeBasis(const PxVec3& p0, const PxVec3& p1, PxVec3& dir, PxVec3& right, PxVec3& up)
-	{
-		// Compute the new direction vector
-		dir = p1 - p0;
-		dir.normalize();
-
-		// Derive two remaining vectors
-		computeBasis(dir, right, up);
 	}
 
 #endif

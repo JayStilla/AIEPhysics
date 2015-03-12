@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -39,11 +39,10 @@
 #include "PsUtilities.h"
 #include "CmPhysXCommon.h"
 #include "PxScene.h"
-
+#include "CmUtils.h"
 
 namespace physx
 {
-
 bool PxVehicleDriveSimData4W::isValid() const
 {
 	PX_CHECK_AND_RETURN_VAL(PxVehicleDriveSimData::isValid(), "Invalid PxVehicleDriveSimData4W", false);
@@ -58,7 +57,7 @@ void PxVehicleDriveSimData4W::setDiffData(const PxVehicleDifferential4WData& dif
 	PX_CHECK_AND_RETURN(diff.mType!=PxVehicleDifferential4WData::eDIFF_TYPE_LS_4WD || (diff.mCentreBias>=1), "Diff centre bias must be greater than or equal to 1");
 	PX_CHECK_AND_RETURN((diff.mType!=PxVehicleDifferential4WData::eDIFF_TYPE_LS_4WD && diff.mType!=PxVehicleDifferential4WData::eDIFF_TYPE_LS_FRONTWD) || (diff.mFrontBias>=1), "Diff front bias must be greater than or equal to 1");
 	PX_CHECK_AND_RETURN((diff.mType!=PxVehicleDifferential4WData::eDIFF_TYPE_LS_4WD && diff.mType!=PxVehicleDifferential4WData::eDIFF_TYPE_LS_REARWD) || (diff.mRearBias>=1), "Diff rear bias must be greater than or equal to 1");
-	PX_CHECK_AND_RETURN(diff.mType<PxVehicleDifferential4WData::eMAX_NUM_DIFF_TYPES, "Illegal differential type");
+	PX_CHECK_AND_RETURN(diff.mType<PxVehicleDifferential4WData::eMAX_NB_DIFF_TYPES, "Illegal differential type");
 
 	mDiff=diff;
 }
@@ -83,7 +82,7 @@ bool PxVehicleDrive4W::isValid() const
 
 PxVehicleDrive4W* PxVehicleDrive4W::allocate(const PxU32 numWheels)
 {
-	PX_CHECK_AND_RETURN_NULL(numWheels>0, "Cars with zero wheels are illegal");
+	PX_CHECK_AND_RETURN_NULL(numWheels>=4, "PxVehicleDrive4W::allocate - needs to have at least 4 wheels");
 
 	//Compute the bytes needed.
 	const PxU32 numWheels4 = (((numWheels + 3) & ~3) >> 2);
@@ -91,13 +90,14 @@ PxVehicleDrive4W* PxVehicleDrive4W::allocate(const PxU32 numWheels)
 
 	//Allocate the memory.
 	PxVehicleDrive4W* veh = (PxVehicleDrive4W*)PX_ALLOC(byteSize, PX_DEBUG_EXP("PxVehicleDrive4W"));
-
+	Cm::markSerializedMem(veh, byteSize);
+	new(veh) PxVehicleDrive4W();
 	//Patch up the pointers.
 	PxU8* ptr = (PxU8*)veh + sizeof(PxVehicleDrive4W);
 	ptr=PxVehicleDrive::patchupPointers(veh,ptr,numWheels4,numWheels);
 
 	//Set the vehicle type.
-	veh->mType = eVEHICLE_TYPE_DRIVE4W;
+	veh->mType = PxVehicleTypes::eDRIVE4W;
 
 	return veh;
 }
@@ -113,6 +113,7 @@ void PxVehicleDrive4W::setup
  const PxU32 numNonDrivenWheels)
 {
 	PX_CHECK_AND_RETURN(driveData.isValid(), "PxVehicleDrive4W::setup - invalid driveData");
+	PX_CHECK_AND_RETURN(wheelsData.getNbWheels() >= 4, "PxVehicleDrive4W::setup - needs to have at least 4 wheels");
 
 	//Set up the wheels.
 	PxVehicleDrive::setup(physics,vehActor,wheelsData,4,numNonDrivenWheels);
@@ -140,17 +141,5 @@ void PxVehicleDrive4W::setToRestState()
 	//Set core to rest state.
 	PxVehicleDrive::setToRestState();
 }
-
-
-
-
-
-
-
-
-
-
-
-
 } //namespace physx
 

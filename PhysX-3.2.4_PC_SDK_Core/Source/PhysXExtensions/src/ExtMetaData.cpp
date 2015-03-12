@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -37,394 +37,412 @@
 #include "ExtSphericalJoint.h"
 #include "ExtRevoluteJoint.h"
 #include "ExtPrismaticJoint.h"
-#include "CmSerialAlignment.h"
+#include "PxIO.h"
+#include "serialization/SnSerializationRegistry.h"
+#include "serialization/Binary/SnSerializationContext.h"
 
 using namespace physx;
-using namespace Ps;
 using namespace Cm;
 using namespace Ext;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void getMetaData_JointData(PxSerialStream& stream)
-{
-	DEFINE_MD_CLASS(JointData)
 
-#ifdef DEFINE_MD_ITEMS2
-	DEFINE_MD_ITEMS2(JointData,	PxTransform,		c2b,				0)
-#else
-	DEFINE_MD_ITEMS(JointData,	PxTransform,		c2b,				0, 2)
-#endif
-	DEFINE_MD_ITEM(JointData,	PxConstraintFlags,	constraintFlags,	0)
+
+
+static void getBinaryMetaData_JointData(PxOutputStream& stream)
+{
+	PX_DEF_BIN_METADATA_CLASS(stream,		JointData)
+
+	PX_DEF_BIN_METADATA_ITEMS_AUTO(stream,	JointData,				PxTransform,				c2b,				0)
 #ifdef EXPLICIT_PADDING_METADATA
-	DEFINE_MD_ITEM(JointData,	PxU16,				paddingFromFlags,	MdFlags::ePADDING)
+	PX_DEF_BIN_METADATA_ITEM(stream,		JointData,				PxU32,				        paddingFromFlags,	PxMetaDataFlag::ePADDING)
 #endif
+	PX_DEF_BIN_METADATA_ITEM(stream,		JointData,				PxConstraintInvMassScale,	invMassScale,	    0)
 }
 
-static void getMetaData_PxD6JointDrive(PxSerialStream& stream)
+static void getBinaryMetaData_PxD6JointDrive(PxOutputStream& stream)
 {
-	DEFINE_MD_TYPEDEF(PxD6JointDriveFlags, PxU32)
+	PX_DEF_BIN_METADATA_TYPEDEF(stream, 	PxD6JointDriveFlags,	PxU32)
 
-	DEFINE_MD_CLASS(PxD6JointDrive)
-	DEFINE_MD_ITEM(PxD6JointDrive,	PxReal,				spring,		0)
-	DEFINE_MD_ITEM(PxD6JointDrive,	PxReal,				damping,	0)
-	DEFINE_MD_ITEM(PxD6JointDrive,	PxReal,				forceLimit,	0)
-	DEFINE_MD_ITEM(PxD6JointDrive,	PxD6JointDriveFlags,	flags,		0)
+	PX_DEF_BIN_METADATA_CLASS(stream,		PxD6JointDrive)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxD6JointDrive,			PxReal,						stiffness,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxD6JointDrive,			PxReal,						damping,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxD6JointDrive,			PxReal,						forceLimit,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxD6JointDrive,			PxD6JointDriveFlags,		flags,		0)
 }
 
-static void getMetaData_PxJointLimitParameters(PxSerialStream& stream)
+static void getBinaryMetaData_PxJointLimitParameters(PxOutputStream& stream)
 {
-	DEFINE_MD_CLASS(PxJointLimitParameters)
+	PX_DEF_BIN_METADATA_CLASS(stream,	PxJointLimitParameters)
 
-	DEFINE_MD_ITEM(PxJointLimitParameters,	PxReal,		restitution,		0)
-	DEFINE_MD_ITEM(PxJointLimitParameters,	PxReal,		spring,				0)
-	DEFINE_MD_ITEM(PxJointLimitParameters,	PxReal,		damping,			0)
-	DEFINE_MD_ITEM(PxJointLimitParameters,	PxReal,		contactDistance,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	PxJointLimitParameters,		PxReal,						restitution,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	PxJointLimitParameters,		PxReal,						bounceThreshold,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	PxJointLimitParameters,		PxReal,						stiffness,			0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	PxJointLimitParameters,		PxReal,						damping,			0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	PxJointLimitParameters,		PxReal,						contactDistance,	0)
 }
 
-static void getMetaData_PxJointLimit(PxSerialStream& stream)
+static void getBinaryMetaData_PxJointLinearLimit(PxOutputStream& stream)
 {
-	DEFINE_MD_CLASS(PxJointLimit)
-	DEFINE_MD_BASE_CLASS(PxJointLimit, PxJointLimitParameters)
+	PX_DEF_BIN_METADATA_CLASS(stream,		PxJointLinearLimit)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	PxJointLinearLimit,		PxJointLimitParameters)
 
-	DEFINE_MD_ITEM(PxJointLimit,	PxReal,		value,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxJointLinearLimit,		PxReal,						value,				0)
 }
 
-static void getMetaData_PxJointLimitPair(PxSerialStream& stream)
+static void getBinaryMetaData_PxJointLinearLimitPair(PxOutputStream& stream)
 {
-	DEFINE_MD_CLASS(PxJointLimitPair)
-	DEFINE_MD_BASE_CLASS(PxJointLimitPair, PxJointLimitParameters)
+	PX_DEF_BIN_METADATA_CLASS(stream,		PxJointLinearLimitPair)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	PxJointLinearLimitPair, PxJointLimitParameters)
 
-	DEFINE_MD_ITEM(PxJointLimitPair,	PxReal,		upper,		0)
-	DEFINE_MD_ITEM(PxJointLimitPair,	PxReal,		lower,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxJointLinearLimitPair,	PxReal,		upper,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxJointLinearLimitPair,	PxReal,		lower,		0)
 }
 
-static void getMetaData_PxJointLimitCone(PxSerialStream& stream)
+static void getBinaryMetaData_PxJointAngularLimitPair(PxOutputStream& stream)
 {
-	DEFINE_MD_CLASS(PxJointLimitCone)
-	DEFINE_MD_BASE_CLASS(PxJointLimitCone, PxJointLimitParameters)
+	PX_DEF_BIN_METADATA_CLASS(stream,		PxJointAngularLimitPair)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	PxJointAngularLimitPair, PxJointLimitParameters)
 
-	DEFINE_MD_ITEM(PxJointLimitCone,	PxReal,		yAngle,		0)
-	DEFINE_MD_ITEM(PxJointLimitCone,	PxReal,		zAngle,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxJointAngularLimitPair,	PxReal,		upper,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxJointAngularLimitPair,	PxReal,		lower,		0)
 }
 
-void PxJoint::getMetaData(PxSerialStream& stream)
-{
-	DEFINE_MD_VCLASS(PxJoint)
-	DEFINE_MD_BASE_CLASS(PxJoint, PxSerializable)
 
-	DEFINE_MD_ITEM(PxJoint, void,	userData,	MdFlags::ePTR)
+static void getBinaryMetaData_PxJointLimitCone(PxOutputStream& stream)
+{
+	PX_DEF_BIN_METADATA_CLASS(stream,		PxJointLimitCone)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	PxJointLimitCone,	PxJointLimitParameters)
+
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxJointLimitCone,	PxReal,		yAngle,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxJointLimitCone,	PxReal,		zAngle,		0)
+}
+
+void PxJoint::getBinaryMetaData(PxOutputStream& stream)
+{
+	PX_DEF_BIN_METADATA_VCLASS(stream,		PxJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	PxJoint, PxBase)
+
+	PX_DEF_BIN_METADATA_ITEM(stream,		PxJoint, void,	userData,	PxMetaDataFlag::ePTR)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void getMetaData_RevoluteJointData(PxSerialStream& stream)
+static void getBinaryMetaData_RevoluteJointData(PxOutputStream& stream)
 {
-	DEFINE_MD_TYPEDEF(PxRevoluteJointFlags, PxU16)
+	PX_DEF_BIN_METADATA_TYPEDEF(stream,		PxRevoluteJointFlags,	PxU16)
 
-	DEFINE_MD_CLASS(RevoluteJointData)
-	DEFINE_MD_BASE_CLASS(RevoluteJointData, JointData)
+	PX_DEF_BIN_METADATA_CLASS(stream,		RevoluteJointData)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	RevoluteJointData,		JointData)
 
-	DEFINE_MD_ITEM(RevoluteJointData,	PxReal,					driveVelocity,				0)
-	DEFINE_MD_ITEM(RevoluteJointData,	PxReal,					driveForceLimit,			0)
-	DEFINE_MD_ITEM(RevoluteJointData,	PxReal,					driveGearRatio,				0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxReal,					driveVelocity,				0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxReal,					driveForceLimit,			0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxReal,					driveGearRatio,				0)
 
-	DEFINE_MD_ITEM(RevoluteJointData,	PxJointLimitPair,		limit,						0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxJointAngularLimitPair,limit,						0)
 
-	DEFINE_MD_ITEM(RevoluteJointData,	PxReal,					tqHigh,						0)
-	DEFINE_MD_ITEM(RevoluteJointData,	PxReal,					tqLow,						0)
-	DEFINE_MD_ITEM(RevoluteJointData,	PxReal,					tqPad,						0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxReal,					tqHigh,						0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxReal,					tqLow,						0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxReal,					tqPad,						0)
 
-	DEFINE_MD_ITEM(RevoluteJointData,	PxReal,					projectionLinearTolerance,	0)
-	DEFINE_MD_ITEM(RevoluteJointData,	PxReal,					projectionAngularTolerance,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxReal,					projectionLinearTolerance,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxReal,					projectionAngularTolerance,	0)
 
-	DEFINE_MD_ITEM(RevoluteJointData,	PxRevoluteJointFlags,	jointFlags,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxRevoluteJointFlags,	jointFlags,					0)
 #ifdef EXPLICIT_PADDING_METADATA
-	DEFINE_MD_ITEM(RevoluteJointData,	PxU16,					paddingFromFlags,			MdFlags::ePADDING)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJointData,		PxU16,					paddingFromFlags,			PxMetaDataFlag::ePADDING)
 #endif
 }
 
-void RevoluteJoint::getMetaData(PxSerialStream& stream)
+void RevoluteJoint::getBinaryMetaData(PxOutputStream& stream)
 {
-	getMetaData_RevoluteJointData(stream);
+	getBinaryMetaData_RevoluteJointData(stream);
 
-	DEFINE_MD_VCLASS(RevoluteJoint)
-	DEFINE_MD_BASE_CLASS(RevoluteJoint, PxJoint)
-	DEFINE_MD_BASE_CLASS(RevoluteJoint, PxConstraintConnector)
+	PX_DEF_BIN_METADATA_VCLASS(stream,		RevoluteJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	RevoluteJoint,	PxJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	RevoluteJoint,	PxConstraintConnector)
 
-	DEFINE_MD_ITEM(RevoluteJoint,	char,			mName,			MdFlags::ePTR)
-#ifdef DEFINE_MD_ITEMS2
-	DEFINE_MD_ITEMS2(RevoluteJoint,	PxTransform,	mLocalPose,		0)
-#else
-	DEFINE_MD_ITEMS(RevoluteJoint,	PxTransform,	mLocalPose,		0, 2)
-#endif
-	DEFINE_MD_ITEM(RevoluteJoint,	PxConstraint,	mPxConstraint,	MdFlags::ePTR)
-	DEFINE_MD_ITEM(RevoluteJoint,	JointData,		mData,			MdFlags::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJoint,	char,					mName,			PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEMS_AUTO(stream,	RevoluteJoint,	PxTransform,			mLocalPose,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJoint,	PxConstraint,			mPxConstraint,	PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		RevoluteJoint,	JointData,				mData,			PxMetaDataFlag::ePTR)
 
 	//------ Extra-data ------
 
-	DEFINE_MD_EXTRA_DATA_ITEM(RevoluteJoint, RevoluteJointData,		mData, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP)
+	PX_DEF_BIN_METADATA_EXTRA_ITEM(stream,	RevoluteJoint, RevoluteJointData,		mData,			PX_SERIAL_ALIGN)
+	PX_DEF_BIN_METADATA_EXTRA_NAME(stream,	RevoluteJoint, mName, 0)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void getMetaData_SphericalJointData(PxSerialStream& stream)
+static void getBinaryMetaData_SphericalJointData(PxOutputStream& stream)
 {
-	DEFINE_MD_TYPEDEF(PxSphericalJointFlags, PxU16)
+	PX_DEF_BIN_METADATA_TYPEDEF(stream,		PxSphericalJointFlags,	PxU16)
 
-	DEFINE_MD_CLASS(SphericalJointData)
-	DEFINE_MD_BASE_CLASS(SphericalJointData, JointData)
+	PX_DEF_BIN_METADATA_CLASS(stream,		SphericalJointData)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	SphericalJointData, 	JointData)
 
-	DEFINE_MD_ITEM(SphericalJointData,	PxJointLimitCone,		limit,						0)
-	DEFINE_MD_ITEM(SphericalJointData,	PxReal,					tanQYLimit,					0)
-	DEFINE_MD_ITEM(SphericalJointData,	PxReal,					tanQZLimit,					0)
-	DEFINE_MD_ITEM(SphericalJointData,	PxReal,					tanQPad,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		SphericalJointData,		PxJointLimitCone,		limit,						0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		SphericalJointData,		PxReal,					tanQYLimit,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		SphericalJointData,		PxReal,					tanQZLimit,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		SphericalJointData,		PxReal,					tanQPad,					0)
 
-	DEFINE_MD_ITEM(SphericalJointData,	PxReal,					projectionLinearTolerance,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		SphericalJointData,		PxReal,					projectionLinearTolerance,	0)
 
-	DEFINE_MD_ITEM(SphericalJointData,	PxSphericalJointFlags,	jointFlags,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		SphericalJointData,		PxSphericalJointFlags,	jointFlags,					0)
 #ifdef EXPLICIT_PADDING_METADATA
-	DEFINE_MD_ITEM(SphericalJointData,	PxU16,					paddingFromFlags,			MdFlags::ePADDING)
+	PX_DEF_BIN_METADATA_ITEM(stream,		SphericalJointData,		PxU16,					paddingFromFlags,			PxMetaDataFlag::ePADDING)
 #endif
 }
 
-void SphericalJoint::getMetaData(PxSerialStream& stream)
+void SphericalJoint::getBinaryMetaData(PxOutputStream& stream)
 {
-	getMetaData_SphericalJointData(stream);
+	getBinaryMetaData_SphericalJointData(stream);
 
-	DEFINE_MD_VCLASS(SphericalJoint)
-	DEFINE_MD_BASE_CLASS(SphericalJoint, PxJoint)
-	DEFINE_MD_BASE_CLASS(SphericalJoint, PxConstraintConnector)
+	PX_DEF_BIN_METADATA_VCLASS(stream,		SphericalJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	SphericalJoint, 		PxJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	SphericalJoint, 		PxConstraintConnector)
 
-	DEFINE_MD_ITEM(SphericalJoint,		char,			mName,			MdFlags::ePTR)
-#ifdef DEFINE_MD_ITEMS2
-	DEFINE_MD_ITEMS2(SphericalJoint,	PxTransform,	mLocalPose,		0)
-#else
-	DEFINE_MD_ITEMS(SphericalJoint,		PxTransform,	mLocalPose,		0, 2)
-#endif
-	DEFINE_MD_ITEM(SphericalJoint,		PxConstraint,	mPxConstraint,	MdFlags::ePTR)
-	DEFINE_MD_ITEM(SphericalJoint,		JointData,		mData,			MdFlags::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		SphericalJoint,			char,						mName,			PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEMS_AUTO(stream,	SphericalJoint,			PxTransform,				mLocalPose,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		SphericalJoint,			PxConstraint,				mPxConstraint,	PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		SphericalJoint,			JointData,					mData,			PxMetaDataFlag::ePTR)
 
 	//------ Extra-data ------
 
-	DEFINE_MD_EXTRA_DATA_ITEM(SphericalJoint, SphericalJointData, mData, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP)
+	PX_DEF_BIN_METADATA_EXTRA_ITEM(stream,	SphericalJoint, 		SphericalJointData,			mData,			PX_SERIAL_ALIGN)
+	PX_DEF_BIN_METADATA_EXTRA_NAME(stream,	SphericalJoint, 		mName, 0)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void getMetaData_DistanceJointData(PxSerialStream& stream)
+static void getBinaryMetaData_DistanceJointData(PxOutputStream& stream)
 {
-	DEFINE_MD_TYPEDEF(PxDistanceJointFlags, PxU16)
+	PX_DEF_BIN_METADATA_TYPEDEF(stream,		PxDistanceJointFlags,	PxU16)
 
-	DEFINE_MD_CLASS(DistanceJointData)
-	DEFINE_MD_BASE_CLASS(DistanceJointData, JointData)
+	PX_DEF_BIN_METADATA_CLASS(stream,		DistanceJointData)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	DistanceJointData,		JointData)
 
-	DEFINE_MD_ITEM(DistanceJointData,	PxReal,					minDistance,		0)
-	DEFINE_MD_ITEM(DistanceJointData,	PxReal,					maxDistance,		0)
-	DEFINE_MD_ITEM(DistanceJointData,	PxReal,					tolerance,			0)
-	DEFINE_MD_ITEM(DistanceJointData,	PxReal,					spring,				0)
-	DEFINE_MD_ITEM(DistanceJointData,	PxReal,					damping,			0)
-	DEFINE_MD_ITEM(DistanceJointData,	PxDistanceJointFlags,	jointFlags,			0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		DistanceJointData,		PxReal,					minDistance,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		DistanceJointData,		PxReal,					maxDistance,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		DistanceJointData,		PxReal,					tolerance,			0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		DistanceJointData,		PxReal,					stiffness,			0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		DistanceJointData,		PxReal,					damping,			0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		DistanceJointData,		PxDistanceJointFlags,	jointFlags,			0)
 #ifdef EXPLICIT_PADDING_METADATA
-	DEFINE_MD_ITEM(DistanceJointData,	PxU16,					paddingFromFlags,	MdFlags::ePADDING)
+	PX_DEF_BIN_METADATA_ITEM(stream,		DistanceJointData,		PxU16,					paddingFromFlags,	PxMetaDataFlag::ePADDING)
 #endif
 }
 
-void DistanceJoint::getMetaData(PxSerialStream& stream)
+void DistanceJoint::getBinaryMetaData(PxOutputStream& stream)
 {
-	getMetaData_DistanceJointData(stream);
+	getBinaryMetaData_DistanceJointData(stream);
 
-	DEFINE_MD_VCLASS(DistanceJoint)
-	DEFINE_MD_BASE_CLASS(DistanceJoint, PxJoint)
-	DEFINE_MD_BASE_CLASS(DistanceJoint, PxConstraintConnector)
+	PX_DEF_BIN_METADATA_VCLASS(stream,		DistanceJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	DistanceJoint,			PxJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	DistanceJoint,			PxConstraintConnector)
 
-	DEFINE_MD_ITEM(DistanceJoint,	char,			mName,			MdFlags::ePTR)
-#ifdef DEFINE_MD_ITEMS2
-	DEFINE_MD_ITEMS2(DistanceJoint,	PxTransform,	mLocalPose,		0)
-#else
-	DEFINE_MD_ITEMS(DistanceJoint,	PxTransform,	mLocalPose,		0, 2)
-#endif
-	DEFINE_MD_ITEM(DistanceJoint,	PxConstraint,	mPxConstraint,	MdFlags::ePTR)
-	DEFINE_MD_ITEM(DistanceJoint,	JointData,		mData,			MdFlags::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		DistanceJoint,			char,					mName,			PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEMS_AUTO(stream,	DistanceJoint,			PxTransform,			mLocalPose,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		DistanceJoint,			PxConstraint,			mPxConstraint,	PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		DistanceJoint,			JointData,				mData,			PxMetaDataFlag::ePTR)
 
 	//------ Extra-data ------
 
-	DEFINE_MD_EXTRA_DATA_ITEM(DistanceJoint, DistanceJointData, mData, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP)
+	PX_DEF_BIN_METADATA_EXTRA_ITEM(stream,	DistanceJoint, 			DistanceJointData,		mData,			PX_SERIAL_ALIGN)
+	PX_DEF_BIN_METADATA_EXTRA_NAME(stream,	DistanceJoint, 			mName,					0)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void getMetaData_D6JointData(PxSerialStream& stream)
+static void getBinaryMetaData_D6JointData(PxOutputStream& stream)
 {
-	DEFINE_MD_TYPEDEF(PxD6Motion::Enum, PxU32)
+	PX_DEF_BIN_METADATA_TYPEDEF(stream,		PxD6Motion::Enum,	PxU32)
 
-	DEFINE_MD_CLASS(D6JointData)
-	DEFINE_MD_BASE_CLASS(D6JointData, JointData)
+	PX_DEF_BIN_METADATA_CLASS(stream,		D6JointData)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	D6JointData,		JointData)
 
-#ifdef DEFINE_MD_ITEMS2
-	DEFINE_MD_ITEMS2(D6JointData,	PxD6Motion::Enum,	motion,						0)
-#else
-	DEFINE_MD_ITEMS(D6JointData,	PxD6Motion::Enum,	motion,						0, 6)
-#endif
-	DEFINE_MD_ITEM(D6JointData,		PxJointLimit,		linearLimit,				0)
-	DEFINE_MD_ITEM(D6JointData,		PxJointLimitCone,	swingLimit,					0)
-	DEFINE_MD_ITEM(D6JointData,		PxJointLimitPair,	twistLimit,					0)
+	PX_DEF_BIN_METADATA_ITEMS_AUTO(stream,	D6JointData,		PxD6Motion::Enum,	    	motion,						0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxJointLinearLimit,			linearLimit,				0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxJointLimitCone,			swingLimit,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxJointAngularLimitPair,	twistLimit,					0)
 
-#ifdef DEFINE_MD_ITEMS2
-	DEFINE_MD_ITEMS2(D6JointData,	PxD6JointDrive,		drive,						0)
-#else
-	DEFINE_MD_ITEMS(D6JointData,	PxD6JointDrive,		drive,						0, PxD6Drive::eCOUNT)
-#endif
+	PX_DEF_BIN_METADATA_ITEMS_AUTO(stream,	D6JointData,		PxD6JointDrive,				drive,						0)
 
-	DEFINE_MD_ITEM(D6JointData,		PxTransform,		drivePosition,				0)
-	DEFINE_MD_ITEM(D6JointData,		PxVec3,				driveLinearVelocity,		0)
-	DEFINE_MD_ITEM(D6JointData,		PxVec3,				driveAngularVelocity,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxTransform,				drivePosition,				0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxVec3,						driveLinearVelocity,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxVec3,						driveAngularVelocity,		0)
 
-	DEFINE_MD_ITEM(D6JointData,		PxU32,				locked,						0)
-	DEFINE_MD_ITEM(D6JointData,		PxU32,				limited,					0)
-	DEFINE_MD_ITEM(D6JointData,		PxU32,				driving,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxU32,						locked,						0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxU32,						limited,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxU32,						driving,					0)
 
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				thSwingY,					0)
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				thSwingZ,					0)
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				thSwingPad,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						thSwingY,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						thSwingZ,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						thSwingPad,					0)
 	
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				tqSwingY,					0)
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				tqSwingZ,					0)
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				tqSwingPad,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						tqSwingY,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						tqSwingZ,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						tqSwingPad,					0)
 
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				tqTwistLow,					0)
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				tqTwistHigh,				0)
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				tqTwistPad,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						tqTwistLow,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						tqTwistHigh,				0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						tqTwistPad,					0)
 
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				linearMinDist,				0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						linearMinDist,				0)
 
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				projectionLinearTolerance,	0)
-	DEFINE_MD_ITEM(D6JointData,		PxReal,				projectionAngularTolerance,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						projectionLinearTolerance,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6JointData,		PxReal,						projectionAngularTolerance,	0)
 }
 
-void D6Joint::getMetaData(PxSerialStream& stream)
+void D6Joint::getBinaryMetaData(PxOutputStream& stream)
 {
-	getMetaData_D6JointData(stream);
+	getBinaryMetaData_D6JointData(stream);
 
-	DEFINE_MD_VCLASS(D6Joint)
-	DEFINE_MD_BASE_CLASS(D6Joint, PxJoint)
-	DEFINE_MD_BASE_CLASS(D6Joint, PxConstraintConnector)
+	PX_DEF_BIN_METADATA_VCLASS(stream,		D6Joint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	D6Joint, 			PxJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	D6Joint, 			PxConstraintConnector)
 
-	DEFINE_MD_ITEM(D6Joint,		char,			mName,				MdFlags::ePTR)
-#ifdef DEFINE_MD_ITEMS2
-	DEFINE_MD_ITEMS2(D6Joint,	PxTransform,	mLocalPose,			0)
-#else
-	DEFINE_MD_ITEMS(D6Joint,	PxTransform,	mLocalPose,			0, 2)
-#endif
-	DEFINE_MD_ITEM(D6Joint,		PxConstraint,	mPxConstraint,		MdFlags::ePTR)
-	DEFINE_MD_ITEM(D6Joint,		JointData,		mData,				MdFlags::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6Joint, 			char,			mName,				PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEMS_AUTO(stream,	D6Joint, 			PxTransform,	mLocalPose,			0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6Joint, 			PxConstraint,	mPxConstraint,		PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6Joint, 			JointData,		mData,				PxMetaDataFlag::ePTR)
 
-	DEFINE_MD_ITEM(D6Joint,		bool,			mRecomputeMotion,	0)
-	DEFINE_MD_ITEM(D6Joint,		bool,			mRecomputeLimits,	0)
-#ifdef DEFINE_MD_ITEMS2
-	DEFINE_MD_ITEMS2(D6Joint,	bool,			mPadding,			MdFlags::ePADDING)
-#else
-	DEFINE_MD_ITEMS(D6Joint,	bool,			mPadding,			MdFlags::ePADDING, 2)
-#endif
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6Joint, 			bool,			mRecomputeMotion,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		D6Joint, 			bool,			mRecomputeLimits,	0)
+	PX_DEF_BIN_METADATA_ITEMS_AUTO(stream,	D6Joint, 			bool,			mPadding,			PxMetaDataFlag::ePADDING)
 
 	//------ Extra-data ------
 
-	DEFINE_MD_EXTRA_DATA_ITEM(D6Joint, D6JointData, mData, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP)
+	PX_DEF_BIN_METADATA_EXTRA_ITEM(stream,	D6Joint,			D6JointData,	mData,				PX_SERIAL_ALIGN)
+	PX_DEF_BIN_METADATA_EXTRA_NAME(stream,	D6Joint,			mName, 0)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void getMetaData_PrismaticJointData(PxSerialStream& stream)
+static void getBinaryMetaData_PrismaticJointData(PxOutputStream& stream)
 {
-	DEFINE_MD_TYPEDEF(PxPrismaticJointFlags, PxU16)
+	PX_DEF_BIN_METADATA_TYPEDEF(stream,		PxPrismaticJointFlags,	PxU16)
 
-	DEFINE_MD_CLASS(PrismaticJointData)
-	DEFINE_MD_BASE_CLASS(PrismaticJointData, JointData)
+	PX_DEF_BIN_METADATA_CLASS(stream,		PrismaticJointData)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	PrismaticJointData, 	JointData)
 
-	DEFINE_MD_ITEM(PrismaticJointData,	PxJointLimitPair,		limit,						0)
-	DEFINE_MD_ITEM(PrismaticJointData,	PxReal,					projectionLinearTolerance,	0)
-	DEFINE_MD_ITEM(PrismaticJointData,	PxReal,					projectionAngularTolerance,	0)
-	DEFINE_MD_ITEM(PrismaticJointData,	PxPrismaticJointFlags,	jointFlags,					0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PrismaticJointData,		PxJointLinearLimitPair,	limit,						0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PrismaticJointData,		PxReal,					projectionLinearTolerance,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PrismaticJointData,		PxReal,					projectionAngularTolerance,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PrismaticJointData,		PxPrismaticJointFlags,	jointFlags,					0)
 #ifdef EXPLICIT_PADDING_METADATA
-	DEFINE_MD_ITEM(PrismaticJointData,	PxU16,					paddingFromFlags,			MdFlags::ePADDING)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PrismaticJointData,		PxU16,					paddingFromFlags,			PxMetaDataFlag::ePADDING)
 #endif
 }
 
-void PrismaticJoint::getMetaData(PxSerialStream& stream)
+void PrismaticJoint::getBinaryMetaData(PxOutputStream& stream)
 {
-	getMetaData_PrismaticJointData(stream);
+	getBinaryMetaData_PrismaticJointData(stream);
 
-	DEFINE_MD_VCLASS(PrismaticJoint)
-	DEFINE_MD_BASE_CLASS(PrismaticJoint, PxJoint)
-	DEFINE_MD_BASE_CLASS(PrismaticJoint, PxConstraintConnector)
+	PX_DEF_BIN_METADATA_VCLASS(stream,		PrismaticJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	PrismaticJoint, 		PxJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	PrismaticJoint, 		PxConstraintConnector)
 
-	DEFINE_MD_ITEM(PrismaticJoint,		char,			mName,			MdFlags::ePTR)
-#ifdef DEFINE_MD_ITEMS2
-	DEFINE_MD_ITEMS2(PrismaticJoint,	PxTransform,	mLocalPose,		0)
-#else
-	DEFINE_MD_ITEMS(PrismaticJoint,		PxTransform,	mLocalPose,		0, 2)
-#endif
-	DEFINE_MD_ITEM(PrismaticJoint,		PxConstraint,	mPxConstraint,	MdFlags::ePTR)
-	DEFINE_MD_ITEM(PrismaticJoint,		JointData,		mData,			MdFlags::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PrismaticJoint,			char,			mName,			PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEMS_AUTO(stream,	PrismaticJoint,			PxTransform,	mLocalPose,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PrismaticJoint,			PxConstraint,	mPxConstraint,	PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		PrismaticJoint,			JointData,		mData,			PxMetaDataFlag::ePTR)
 
 	//------ Extra-data ------
 
-	DEFINE_MD_EXTRA_DATA_ITEM(PrismaticJoint, PrismaticJointData, mData, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP)
+	PX_DEF_BIN_METADATA_EXTRA_ITEM(stream,	PrismaticJoint, 		PrismaticJointData, mData, PX_SERIAL_ALIGN)
+	PX_DEF_BIN_METADATA_EXTRA_NAME(stream,	PrismaticJoint, 		mName, 0)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static void getMetaData_FixedJointData(PxSerialStream& stream)
+static void getBinaryMetaData_FixedJointData(PxOutputStream& stream)
 {
-	DEFINE_MD_CLASS(FixedJointData)
-	DEFINE_MD_BASE_CLASS(FixedJointData, JointData)
+	PX_DEF_BIN_METADATA_CLASS(stream,		FixedJointData)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	FixedJointData, JointData)
 
-	DEFINE_MD_ITEM(FixedJointData,	PxReal,	projectionLinearTolerance,	0)
-	DEFINE_MD_ITEM(FixedJointData,	PxReal,	projectionAngularTolerance,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		FixedJointData,	PxReal,	projectionLinearTolerance,	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		FixedJointData,	PxReal,	projectionAngularTolerance,	0)
 }
 
-void FixedJoint::getMetaData(PxSerialStream& stream)
+void FixedJoint::getBinaryMetaData(PxOutputStream& stream)
 {
-	getMetaData_FixedJointData(stream);
+	getBinaryMetaData_FixedJointData(stream);
 
-	DEFINE_MD_VCLASS(FixedJoint)
-	DEFINE_MD_BASE_CLASS(FixedJoint, PxJoint)
-	DEFINE_MD_BASE_CLASS(FixedJoint, PxConstraintConnector)
+	PX_DEF_BIN_METADATA_VCLASS(stream,		FixedJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	FixedJoint, PxJoint)
+	PX_DEF_BIN_METADATA_BASE_CLASS(stream,	FixedJoint, PxConstraintConnector)
 
-	DEFINE_MD_ITEM(FixedJoint,		char,			mName,			MdFlags::ePTR)
-#ifdef DEFINE_MD_ITEMS2
-	DEFINE_MD_ITEMS2(FixedJoint,	PxTransform,	mLocalPose,		0)
-#else
-	DEFINE_MD_ITEMS(FixedJoint,		PxTransform,	mLocalPose,		0, 2)
-#endif
-	DEFINE_MD_ITEM(FixedJoint,		PxConstraint,	mPxConstraint,	MdFlags::ePTR)
-	DEFINE_MD_ITEM(FixedJoint,		JointData,		mData,			MdFlags::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		FixedJoint,	char,			mName,			PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEMS_AUTO(stream,	FixedJoint,	PxTransform,	mLocalPose,		0)
+	PX_DEF_BIN_METADATA_ITEM(stream,		FixedJoint,	PxConstraint,	mPxConstraint,	PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,		FixedJoint,	JointData,		mData,			PxMetaDataFlag::ePTR)
 
 	//------ Extra-data ------
 
-	DEFINE_MD_EXTRA_DATA_ITEM(FixedJoint, FixedJointData, mData, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP)
+	PX_DEF_BIN_METADATA_EXTRA_ITEM(stream,	FixedJoint,	FixedJointData, mData,			PX_SERIAL_ALIGN)
+	PX_DEF_BIN_METADATA_EXTRA_NAME(stream,	FixedJoint, mName, 0)
 }
 
-///////////////////////////////////////////////////////////////////////////////
 
-void PxRegisterExtJointMetaData(PxSerialStream& stream)
+void getBinaryMetaData_SerializationContext(PxOutputStream& stream)
 {
-	DEFINE_MD_VCLASS(PxConstraintConnector)
+	PX_DEF_BIN_METADATA_TYPEDEF(stream, PxSerialObjectId,			PxU64)
+	PX_DEF_BIN_METADATA_TYPEDEF(stream,	SerialObjectIndex,			PxU32)
 
-	getMetaData_JointData(stream);
-	getMetaData_PxD6JointDrive(stream);
-	getMetaData_PxJointLimitParameters(stream);
-	getMetaData_PxJointLimit(stream);
-	getMetaData_PxJointLimitPair(stream);
-	getMetaData_PxJointLimitCone(stream);
+	PX_DEF_BIN_METADATA_CLASS(stream,	Sn::ManifestEntry)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::ManifestEntry,			PxU32,		offset,   	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::ManifestEntry,			PxType,	    type,   	0)
+		
+	PX_DEF_BIN_METADATA_CLASS(stream,	Sn::ImportReference)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::ImportReference,		PxSerialObjectId,		id,   	    0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::ImportReference,		PxType,	                type,   	0)
+		
+	PX_DEF_BIN_METADATA_CLASS(stream,	Sn::ExportReference)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::ExportReference,		PxSerialObjectId,		id,   	    0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::ExportReference,		SerialObjectIndex,	    objIndex,  	0)
+	
+	PX_DEF_BIN_METADATA_CLASS(stream,	Sn::InternalReferencePtr)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::InternalReferencePtr,	void,		            reference,  PxMetaDataFlag::ePTR)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::InternalReferencePtr,	PxU32,		            kind,   	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::InternalReferencePtr,	SerialObjectIndex,	    objIndex,  	0)
 
-	PxJoint::getMetaData(stream);
-	RevoluteJoint::getMetaData(stream);
-	SphericalJoint::getMetaData(stream);
-	DistanceJoint::getMetaData(stream);
-	D6Joint::getMetaData(stream);
-	PrismaticJoint::getMetaData(stream);
-	FixedJoint::getMetaData(stream);
+	PX_DEF_BIN_METADATA_CLASS(stream,	Sn::InternalReferenceIdx)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::InternalReferenceIdx,	PxU32,		            reference,  0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::InternalReferenceIdx,	PxU32,		            kind,   	0)
+	PX_DEF_BIN_METADATA_ITEM(stream,	Sn::InternalReferenceIdx,	SerialObjectIndex,	    objIndex,  	0)
+}
+
+namespace physx
+{
+namespace Ext
+{
+void GetExtensionsBinaryMetaData(PxOutputStream& stream)
+{
+	PX_DEF_BIN_METADATA_VCLASS(stream,PxConstraintConnector)
+
+	getBinaryMetaData_JointData(stream);
+	getBinaryMetaData_PxD6JointDrive(stream);
+	getBinaryMetaData_PxJointLimitParameters(stream);	
+	getBinaryMetaData_PxJointLimitCone(stream);	
+	getBinaryMetaData_PxJointLinearLimit(stream);
+	getBinaryMetaData_PxJointLinearLimitPair(stream);
+	getBinaryMetaData_PxJointAngularLimitPair(stream);
+	
+	PxJoint::getBinaryMetaData(stream);
+	RevoluteJoint::getBinaryMetaData(stream);
+	SphericalJoint::getBinaryMetaData(stream);
+	DistanceJoint::getBinaryMetaData(stream);
+	D6Joint::getBinaryMetaData(stream);
+	PrismaticJoint::getBinaryMetaData(stream);
+	FixedJoint::getBinaryMetaData(stream);
+
+	getBinaryMetaData_SerializationContext(stream);
+}
+
+}
 }
 
 ///////////////////////////////////////////////////////////////////////////////

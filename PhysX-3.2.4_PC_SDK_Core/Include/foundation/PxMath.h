@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,22 +35,42 @@
 @{
 */
 
-#include <math.h>
-#include <float.h>
+#include "foundation/PxPreprocessor.h"
 
+#ifdef PX_VC
+#pragma warning(push)
+#pragma warning( disable : 4985 ) // 'symbol name': attributes not present on previous declaration
+#endif
+#include <math.h>
+#ifdef PX_VC
+#pragma warning(pop)
+#endif
+
+#include <float.h>
 #include "foundation/PxIntrinsics.h"
 #include "foundation/PxAssert.h"
+
 
 #ifndef PX_DOXYGEN
 namespace physx
 {
 #endif
 
+	/** enum for zero constructor tag for vectors and matrices */
+	enum PxZERO			{	PxZero		};
+
+	/** enum for identity constructor flag for quaternions, transforms, and matrices */
+	enum PxIDENTITY		{	PxIdentity	};
+
+
 	// constants
-	static const PxReal PxPi		=	PxReal(3.141592653589793);
-	static const PxReal PxHalfPi	=	PxReal(1.57079632679489661923);
-	static const PxReal PxTwoPi		=	PxReal(6.28318530717958647692);
-	static const PxReal PxInvPi		=	PxReal(0.31830988618379067154);
+	static const PxReal PxPi			=	PxReal(3.141592653589793);
+	static const PxReal PxHalfPi		=	PxReal(1.57079632679489661923);
+	static const PxReal PxTwoPi			=	PxReal(6.28318530717958647692);
+	static const PxReal PxInvPi			=	PxReal(0.31830988618379067154);		
+	static const PxReal PxInvTwoPi		=   PxReal(0.15915494309189533577);
+	static const PxReal PxPiDivTwo		=   PxReal(1.57079632679489661923);
+	static const PxReal PxPiDivFour		=   PxReal(0.78539816339744830962);
 
 
 	/**
@@ -210,9 +230,9 @@ namespace physx
 
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxF32 PxSign(PxF32 a)						{ return physx::intrinsics::sign(a); }
 
-	PX_CUDA_CALLABLE PX_FORCE_INLINE PxF32 PxPow(PxF32 x,PxF32 y)				{ return ::powf(x,y); };
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxF32 PxPow(PxF32 x,PxF32 y)				{ return ::powf(x,y); }
 
-	PX_CUDA_CALLABLE PX_FORCE_INLINE PxF32 PxLog(PxF32 x)						{ return ::log(x); };
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxF32 PxLog(PxF32 x)						{ return ::log(x); }
 
 #ifndef PX_DOXYGEN
 } // namespace physx

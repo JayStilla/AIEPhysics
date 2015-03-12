@@ -1,37 +1,29 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #include <RendererMaterial.h>
 
 #include <Renderer.h>
@@ -61,6 +53,7 @@ static PxU32 getVariableTypeSize(RendererMaterial::VariableType type)
 	case RendererMaterial::VARIABLE_FLOAT4x4:  size = sizeof(float)*4*4;          break;
 	case RendererMaterial::VARIABLE_INT:       size = sizeof(int)*1;              break;
 	case RendererMaterial::VARIABLE_SAMPLER2D: size = sizeof(RendererTexture2D*); break;
+	case RendererMaterial::VARIABLE_SAMPLER3D: size = sizeof(RendererTexture3D*); break;
 	default: break;
 	}
 	RENDERER_ASSERT(size>0, "Unable to compute Variable Type size.");
@@ -112,31 +105,33 @@ const char *RendererMaterial::getPassName(Pass pass)
 	const char *passName = 0;
 	switch(pass)
 	{
-	case PASS_UNLIT:             passName="PASS_UNLIT";             break;
+	case PASS_UNLIT:                passName="PASS_UNLIT";                break;
 
-	case PASS_AMBIENT_LIGHT:     passName="PASS_AMBIENT_LIGHT";     break;
-	case PASS_POINT_LIGHT:       passName="PASS_POINT_LIGHT";       break;
-	case PASS_DIRECTIONAL_LIGHT: passName="PASS_DIRECTIONAL_LIGHT"; break;
-	case PASS_SPOT_LIGHT:        passName="PASS_SPOT_LIGHT";        break;
+	case PASS_AMBIENT_LIGHT:        passName="PASS_AMBIENT_LIGHT";        break;
+	case PASS_POINT_LIGHT:          passName="PASS_POINT_LIGHT";          break;
+	case PASS_DIRECTIONAL_LIGHT:    passName="PASS_DIRECTIONAL_LIGHT";    break;
+	case PASS_SPOT_LIGHT_NO_SHADOW: passName="PASS_SPOT_LIGHT_NO_SHADOW"; break;
+	case PASS_SPOT_LIGHT:           passName="PASS_SPOT_LIGHT";           break;
 
-	case PASS_NORMALS:           passName="PASS_NORMALS";           break;
-	case PASS_DEPTH:             passName="PASS_DEPTH";             break;
+	case PASS_NORMALS:              passName="PASS_NORMALS";              break;
+	case PASS_DEPTH:                passName="PASS_DEPTH";                break;
+	default: break;
 
 		// LRR: The deferred pass causes compiles with the ARB_draw_buffers profile option, creating 
 		// multiple color draw buffers.  This doesn't work in OGL on ancient Intel parts.
 		//case PASS_DEFERRED:          passName="PASS_DEFERRED";          break;
-	default: break;
 	}
 	RENDERER_ASSERT(passName, "Unable to obtain name for the given Material Pass.");
 	return passName;
 }
 
-RendererMaterial::RendererMaterial(const RendererMaterialDesc &desc) :
+RendererMaterial::RendererMaterial(const RendererMaterialDesc &desc, bool enableMaterialCaching) :
 	m_type(desc.type),
 	m_alphaTestFunc(desc.alphaTestFunc),
 	m_srcBlendFunc(desc.srcBlendFunc),
 	m_dstBlendFunc(desc.dstBlendFunc),
-	m_refCount(1)
+	m_refCount(1),
+	mEnableMaterialCaching(enableMaterialCaching)
 {
 	m_alphaTestRef       = desc.alphaTestRef;
 	m_blending           = desc.blending;
@@ -145,7 +140,7 @@ RendererMaterial::RendererMaterial(const RendererMaterialDesc &desc) :
 
 RendererMaterial::~RendererMaterial(void)
 {
-	PX_ASSERT(m_refCount == 1);
+	RENDERER_ASSERT(m_refCount == 0, "RendererMaterial was not released as often as it was created");
 
 	PxU32 numVariables = (PxU32)m_variables.size();
 	for(PxU32 i=0; i<numVariables; i++)
@@ -156,13 +151,11 @@ RendererMaterial::~RendererMaterial(void)
 
 void RendererMaterial::release()
 {
-	if (m_refCount > 1)
+	m_refCount--;
+
+	if (!mEnableMaterialCaching)
 	{
-		m_refCount--;
-	}
-	else
-	{
-		getRenderer().unregisterMaterial(this);
+		PX_ASSERT(m_refCount == 0);
 		delete this;
 	}
 }
@@ -178,6 +171,11 @@ void RendererMaterial::bind(RendererMaterial::Pass pass, RendererMaterialInstanc
 			bindVariable(pass, variable, materialInstance->m_data+variable.getDataOffset());
 		}
 	}
+}
+
+bool RendererMaterial::rendererBlendingOverrideEnabled() const
+{
+	return getRenderer().blendingOverrideEnabled(); 
 }
 
 const RendererMaterial::Variable *RendererMaterial::findVariable(const char *name, RendererMaterial::VariableType varType)

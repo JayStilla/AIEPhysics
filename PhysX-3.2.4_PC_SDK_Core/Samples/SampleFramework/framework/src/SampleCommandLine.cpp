@@ -1,52 +1,44 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #include "FrameworkFoundation.h"
-
 #include <SampleCommandLine.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include "PsFile.h"
 
-// for PsString.h
-namespace physx
-{
-	namespace string
-	{
-	}
-}
+#ifdef WIN32
+#include <windows.h>
+#elif defined(ANDROID)
+typedef int errno_t;
+#endif
+
+
 #include <PsString.h>
 
 using namespace SampleFramework;
@@ -140,38 +132,85 @@ static bool isSwitchChar(char c)
 	return (c == '-' || c == '/');
 }
 
-SampleCommandLine::SampleCommandLine(unsigned int argc, const char *const* argv)
+namespace
 {
-	m_argc   = argc;
-	m_argv   = argv;
-	m_freeme = 0;
-	m_argUsed = new bool[m_argc];
-	for(unsigned int i = 0; i < m_argc; i++)
-	{
-		m_argUsed[i] = false;
-	}
+void operationOK(int e)
+{
+	PX_UNUSED(e);
+	PX_ASSERT(0 == e);
 }
 
-SampleCommandLine::SampleCommandLine(const char *args)
+const char * const * getCommandLineArgumentsFromFile(unsigned int & argc, const char * programName, const char * commandLineFilePath)
 {
-	m_argUsed  = 0;
-	m_argc   = 0;
-	m_argv   = 0;
-	m_freeme = 0;
+	const char * const * argv = NULL;
+	argc = 0;
+	PX_ASSERT(NULL != programName);
+	PX_ASSERT(NULL != commandLineFilePath);
+	if(NULL != programName && NULL != commandLineFilePath)
+	{
+		File* commandLineFile = NULL;
+		operationOK(Fnd::fopen_s(&commandLineFile, commandLineFilePath, "r"));
+		if(NULL != commandLineFile)
+		{
+			operationOK(fseek(commandLineFile, 0, SEEK_END));
+			const unsigned int commandLineFileCount = static_cast<unsigned int>(ftell(commandLineFile));
+			rewind(commandLineFile);
+			const unsigned int bufferCount = static_cast<unsigned int>(::strlen(programName)) + 1 + commandLineFileCount + 1;
+			if(bufferCount > 0)
+			{
+				char * argsOwn = static_cast<char*>(::malloc(bufferCount));
+				physx::string::strcpy_s(argsOwn, bufferCount, programName);
+				physx::string::strcat_s(argsOwn, bufferCount, " ");
+				const unsigned int offset = static_cast<unsigned int>(::strlen(argsOwn));
+				PX_ASSERT((bufferCount - offset - 1) == commandLineFileCount);
+				if(NULL != fgets(argsOwn + offset, bufferCount - offset, commandLineFile))
+				{
+					argv = CommandLineToArgvA(argsOwn, argc);
+				}
+				::free(argsOwn);
+				argsOwn = NULL;
+			}
+			operationOK(fclose(commandLineFile));
+			commandLineFile = NULL;
+		}
+	}
+	return argv;
+}
+} //namespace nameless
+
+SampleCommandLine::SampleCommandLine(unsigned int argc, const char * const * argv, const char * commandLineFilePathFallback)
+	:m_argc(0)
+	,m_argv(NULL)
+	,m_freeme(NULL)
+	,m_argUsed(NULL)
+{
+	//initially, set to use inherent command line arguments
+	PX_ASSERT((0 != argc) && (NULL != argv) && "This class assumes argument 0 is always the executable path!");
+	m_argc = argc;
+	m_argv = argv;
+
+	//finalize init
+	initCommon(commandLineFilePathFallback);
+}
+
+SampleCommandLine::SampleCommandLine(const char * args, const char * commandLineFilePathFallback)
+	:m_argc(0)
+	,m_argv(NULL)
+	,m_freeme(NULL)
+	,m_argUsed(NULL)
+{
+	//initially, set to use inherent command line arguments
 	unsigned int argc = 0;
-	char       **argv = CommandLineToArgvA(args, argc);
-	PX_ASSERT(argv);
-	if(argv)
-	{
-		m_argc   = argc;
-		m_argv   = argv;
-		m_freeme = argv;
-	}
-	m_argUsed = new bool[m_argc];
-	for(unsigned int i = 0; i < m_argc; i++)
-	{
-		m_argUsed[i] = false;
-	}
+	const char * const * argvOwning = NULL;
+	argvOwning = CommandLineToArgvA(args, argc);
+	PX_ASSERT((0 != argc) && (NULL != argvOwning) && "This class assumes argument 0 is always the executable path!");
+	m_argc = argc;
+	m_argv = argvOwning;
+	m_freeme = const_cast<void *>(static_cast<const void *>(argvOwning));
+	argvOwning = NULL;
+
+	//finalize init
+	initCommon(commandLineFilePathFallback);
 }
 
 SampleCommandLine::~SampleCommandLine(void)
@@ -185,6 +224,40 @@ SampleCommandLine::~SampleCommandLine(void)
 	{
 		delete[] m_argUsed;
 		m_argUsed = NULL;
+	}
+}
+
+void SampleCommandLine::initCommon(const char * commandLineFilePathFallback)
+{
+	//if available, set to use command line arguments from file
+	const bool tryUseCommandLineArgumentsFromFile = ((1 == m_argc) && (NULL != commandLineFilePathFallback));
+	if(tryUseCommandLineArgumentsFromFile)
+	{
+		unsigned int argcFile = 0;
+		const char * const * argvFileOwn = NULL;
+		argvFileOwn = getCommandLineArgumentsFromFile(argcFile, m_argv[0], commandLineFilePathFallback);
+		if((0 != argcFile) && (NULL != argvFileOwn))
+		{
+			if(NULL != m_freeme)
+			{
+				::free(m_freeme);
+				m_freeme = NULL;
+			}
+			m_argc = argcFile;
+			m_argv = argvFileOwn;
+			m_freeme = const_cast<void *>(static_cast<const void *>(argvFileOwn));
+			argvFileOwn = NULL;
+		}
+	}
+
+	//for tracking use-status of arguments
+	if((0 != m_argc) && (NULL != m_argv))
+	{
+		m_argUsed = new bool[m_argc];
+		for(unsigned int i = 0; i < m_argc; i++)
+		{
+			m_argUsed[i] = false;
+		}
 	}
 }
 
@@ -251,7 +324,7 @@ bool SampleCommandLine::hasSwitch(const char *s, unsigned int argNum) const
 		else
 		{
 			firstArg = 1;
-			lastArg  = m_argc - 1;
+			lastArg  = (m_argc > 1) ? (m_argc - 1) : 0;
 		}
 		for(unsigned int i=firstArg; i<=lastArg; i++)
 		{
@@ -343,4 +416,10 @@ const char *SampleCommandLine::getCommand(void) const
 		command = m_argv[1];
 	}
 	return command;
+}
+
+//! whether or not an argument has been read already
+bool SampleCommandLine::isUsed(unsigned int argNum) const
+{
+	return argNum < m_argc ? m_argUsed[argNum] : false;
 }

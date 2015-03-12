@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -37,12 +37,16 @@
 	#include "foundation/windows/PxWindowsString.h"
 #elif defined PX_X360
 	#include "foundation/xbox360/PxXbox360String.h"
-#elif (defined PX_LINUX || defined PX_APPLE || defined PX_ANDROID)
-	#include "foundation/linux/PxLinuxString.h"
+#elif (defined PX_LINUX || defined PX_APPLE || defined PX_ANDROID || defined PX_PS4)
+	#include "foundation/unix/PxUnixString.h"
 #elif defined PX_PS3
 	#include "foundation/ps3/PxPS3String.h"
 #elif defined PX_PSP2
 	#include "foundation/psp2/PxPSP2String.h"
+#elif defined PX_WIIU
+	#include "foundation/wiiu/PxWiiUString.h"
+#elif defined PX_XBOXONE
+	#include "foundation/XboxOne/PxXboxOneString.h"
 #else
 	#error "Platform not supported!"
 #endif

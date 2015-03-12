@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -57,6 +57,20 @@ typedef __m128 QuatV;
 #define VecI16VArg  VecI16V&
 #define VecU8VArg   VecU8V&
 #define QuatVArg	QuatV&
+
+//Optimization for situations in which you cross product multiple vectors with the same vector.
+//Avoids 2X shuffles per product
+struct VecCrossV
+{
+	Vec3V mL1;
+	Vec3V mR1;
+};
+
+struct VecShiftV
+{
+	VecI32V shift;
+};
+#define VecShiftVArg VecShiftV&
 
 PX_ALIGN_PREFIX(16)
 struct Mat33V

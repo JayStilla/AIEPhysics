@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,6 +32,7 @@
 #define PX_FOUNDATION_PSFPU_H
 
 #include "Ps.h"
+#include "PsIntrinsics.h"
 #include "foundation/PxUnionCast.h"
 
 //unsigned integer representation of a floating-point value.
@@ -82,11 +83,10 @@ PX_FORCE_INLINE float* PX_FPTR(int* x)
 #define	PX_SIGN_BITMASK		0x80000000
 
 #define PX_FPU_GUARD shdfnd::FPUGuard scopedFpGuard;
-
-#if defined(PX_WINDOWS)
 #define PX_SIMD_GUARD shdfnd::SIMDGuard scopedFpGuard;
-#else
-#define PX_SIMD_GUARD
+
+#if defined(PX_WINDOWS) || defined(PX_XBOXONE) || defined(PX_LINUX) || defined(PX_PS4) || defined(PX_OSX)
+#define PX_SUPPORT_GUARDS 1
 #endif
 
 namespace physx
@@ -104,13 +104,15 @@ namespace shdfnd
 	};
 
 	// sets default SDK state for simd unit only, lighter weight than FPUGuard
-	class PX_FOUNDATION_API SIMDGuard
+	class SIMDGuard
 	{
 	public:
-		SIMDGuard(); // set simd control word for PhysX
-		~SIMDGuard(); // restore simd control word
+		PX_INLINE SIMDGuard();  // set simd control word for PhysX
+		PX_INLINE ~SIMDGuard(); // restore simd control word
 	private:
+#ifdef PX_SUPPORT_GUARDS
 		PxU32 mControlWord;
+#endif
 	};
 
 	/**
@@ -125,5 +127,14 @@ namespace shdfnd
 
 } // namespace shdfnd
 } // namespace physx
+
+#if defined(PX_WINDOWS) || defined(PX_XBOXONE)
+#include "windows/PsWindowsFPU.h"
+#elif defined(PX_LINUX) || defined(PX_PS4) || defined(PX_OSX)
+#include "unix/PsUnixFPU.h"
+#else
+PX_INLINE physx::shdfnd::SIMDGuard::SIMDGuard() {}
+PX_INLINE physx::shdfnd::SIMDGuard::~SIMDGuard() {}
+#endif
 
 #endif

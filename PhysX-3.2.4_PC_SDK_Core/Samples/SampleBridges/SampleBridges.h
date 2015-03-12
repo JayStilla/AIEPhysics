@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -80,10 +80,11 @@ namespace physx
 
 		// Implements SampleApplication
 		virtual	void							onInit();
+        virtual	void						    onInit(bool restart) { onInit(); }
 		virtual	void							onShutdown();
 		virtual	void							onTickPreRender(float dtime);
 		virtual void							onTickPostRender(float dtime);
-		virtual bool							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);			
+		virtual void							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);			
 
 		///////////////////////////////////////////////////////////////////////////////
 
@@ -106,13 +107,13 @@ namespace physx
 		virtual void							onObstacleHit(const PxControllerObstacleHit& hit)	{}
 
 		// Implements PxControllerBehaviorCallback
-		virtual PxU32							getBehaviorFlags(const PxShape& shape);
-		virtual PxU32							getBehaviorFlags(const PxController& controller);
-		virtual PxU32							getBehaviorFlags(const PxObstacle& obstacle);
+		virtual PxControllerBehaviorFlags		getBehaviorFlags(const PxShape& shape, const PxActor& actor);
+		virtual PxControllerBehaviorFlags		getBehaviorFlags(const PxController& controller);
+		virtual PxControllerBehaviorFlags		getBehaviorFlags(const PxObstacle& obstacle);
 
 		// Implements PxSceneQueryFilterCallback
-		virtual	PxSceneQueryHitType::Enum		preFilter(const PxFilterData& filterData, PxShape* shape, PxSceneQueryFilterFlags& filterFlags);
-		virtual	PxSceneQueryHitType::Enum		postFilter(const PxFilterData& filterData, const PxSceneQueryHit& hit);
+		virtual PxQueryHitType::Enum			preFilter(const PxFilterData& filterData, const PxShape* shape, const PxRigidActor* actor, PxSceneQueryFlags& queryFlags);
+		virtual	PxQueryHitType::Enum			postFilter(const PxFilterData& filterData, const PxSceneQueryHit& hit);
 #endif
 
 		private:

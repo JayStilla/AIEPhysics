@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,7 +35,7 @@
 #define PX_PROFILE_EVENT_PROFILE_THRESHOLD EventPriorities::Detail //default knob
 #endif
 
-#include "PxPhysXCommon.h" // added for definition of PX_PHYSX_COMMON_API
+#include "PxPhysXCommonConfig.h" // added for definition of PX_PHYSX_COMMON_API
 #include "PxProfileCompileTimeEventFilter.h"
 #include "PxProfileScopedEvent.h"
 #include "PxProfileEventNames.h"
@@ -45,15 +45,16 @@
 
 #define PX_PROFILE_EVENT_DEFINITION_HEADER "CmProfileEventDefs.h"
 
-
 	//Define all the event enumeration values as well as functions for creating the events.
 #include "CmProfileDeclareEventInfo.h"
+
+#include "CmNvToolsExtProfiler.h"
 
 namespace physx
 {
 namespace Cm
 {
-	struct CmEventNameProvider : public physx::PxProfileNameProvider
+	struct PX_UNIX_EXPORT CmEventNameProvider : public physx::PxProfileNameProvider
 	{
 		PX_PHYSX_COMMON_API physx::PxProfileNames getProfileNames() const;
 	};
@@ -61,6 +62,7 @@ namespace Cm
 #define PX_PROFILE_BEGIN_SUBSYSTEM( subsys ) struct subsys {
 #define PX_PROFILE_EVENT( subsys, name, priority ) static const physx::PxProfileEventId name; \
 	PX_PHYSX_COMMON_API static const physx::PxProfileEventId& Get##name() { return name; }
+#define PX_PROFILE_EVENT_DETAIL( subsys, name, priority ) PX_PROFILE_EVENT(subsys, name, priority )
 #define PX_PROFILE_END_SUBSYSTEM( subsys ) };
 	struct ProfileEventId
 	{
@@ -68,12 +70,17 @@ namespace Cm
 	};
 #undef PX_PROFILE_BEGIN_SUBSYSTEM
 #undef PX_PROFILE_EVENT
+#undef PX_PROFILE_EVENT_DETAIL
 #undef PX_PROFILE_END_SUBSYSTEM
 
 	class EventProfiler
 	{
 		physx::PxU64					mEventContext;
-		physx::PxProfileEventSender*			mSDK;
+		physx::PxProfileEventSender*	mSDK;
+#if PX_NVTX
+		nvtx::EventHashMap				mCrossThreadEvents;
+		physx::shdfnd::Mutex			mCrossThreadMutex;
+#endif
 	public:
 		EventProfiler( physx::PxProfileEventSender* inSDK = NULL, physx::PxU64 inEventContext = 0 )
 			: mEventContext( inEventContext )
@@ -89,6 +96,24 @@ namespace Cm
 		}
 		physx::PxProfileEventSender* getProfileEventSender() { return mSDK; }
 		physx::PxU64 getEventContext() const { return mEventContext; }
+#if PX_NVTX		
+		PX_PHYSX_COMMON_API	const char*	getStringFromId(PxU16 id);
+		PX_FORCE_INLINE		nvtxRangeId_t		getCrossEvent(PxU16 id, PxU64 context) 
+		{  
+			physx::shdfnd::Mutex::ScopedLock lock(mCrossThreadMutex); 
+			const physx::shdfnd::Pair<const nvtx::EventIdContextPair, PxU64>* e = mCrossThreadEvents.find(nvtx::EventIdContextPair(context, id));
+			if(e)
+				return e->second;
+			else 
+				return 0;
+		};
+		PX_PHYSX_COMMON_API	void		storeCrossEvent(PxU16 id, PxU64 context, nvtxRangeId_t crossEvent) 
+		{ 
+			physx::shdfnd::Mutex::ScopedLock lock(mCrossThreadMutex);
+			mCrossThreadEvents[nvtx::EventIdContextPair(context, id)] =  crossEvent;
+		}
+#endif
+
 	};
 }
 
@@ -149,24 +174,27 @@ template<> struct CmProfileValue<false>
 
 inline physx::PxU64 getProfileEventContext() { return 0; }
 
-#define CM_PROFILE_START( _p, _id) physx::profile::startEvent( _id.mCompileTimeEnabled, _p.getProfileEventSender(), _id, _p.getEventContext() );
-#define CM_PROFILE_STOP( _p, _id) physx::profile::stopEvent( _id.mCompileTimeEnabled, _p.getProfileEventSender(), _id, _p.getEventContext() );
+#define CM_PROFILE_START( _p, _id) if(_p) {physx::profile::startEvent( _id.mCompileTimeEnabled, _p->getProfileEventSender(), _id, _p->getEventContext() ); NV_TEXT_PROFILE_START((*(_p)), _id);}
+#define CM_PROFILE_STOP( _p, _id) if(_p) {physx::profile::stopEvent( _id.mCompileTimeEnabled, _p->getProfileEventSender(), _id, _p->getEventContext() ); NV_TEXT_PROFILE_STOP((*(_p)), _id);}
+
+
+#define CONCAT_(a, b) a##b
+#define CONCAT(a, b) CONCAT_(a, b)
 
 #define CM_PROFILE_ZONE( _p, _id) \
-	physx::profile::DynamicallyEnabledScopedEvent<PxProfileEventSender> scopedEvent( _p.getProfileEventSender(), _id, _p.getEventContext() );
-
-#define CM_PROFILE_ZONE_WITH_SUBSYSTEM( _p, subsystem, eventId ) CmProfileZone<PX_PROFILE_EVENT_FILTER_VALUE(subsystem,eventId)> __zone( _p, physx::profile::EventIds::subsystem##eventId );
-#define CM_PROFILE_VALUE( _p, subsystem, eventId, value ) CmProfileValue<PX_PROFILE_EVENT_FILTER_VALUE(subsystem,eventId)> __val( _p, physx::profile::EventIds::subsystem##eventId, static_cast<PxI64>( value ) );
+physx::profile::DynamicallyEnabledScopedEvent<PxProfileEventSender> CONCAT(scopedEvent,__LINE__)( _p.getProfileEventSender(), _id, _p.getEventContext() ); NV_TEXT_PROFILE_ZONE( _p, _id);
+	
+#define CM_PROFILE_ZONE_WITH_SUBSYSTEM( _p, subsystem, eventId ) CmProfileZone<PX_PROFILE_EVENT_FILTER_VALUE(subsystem,eventId)> __zone##eventId( _p, physx::profile::EventIds::subsystem##eventId ); NV_TEXT_PROFILE_ZONE_WITH_SUBSYSTEM( _p, subsystem, eventId );
+#define CM_PROFILE_VALUE( _p, subsystem, eventId, value ) CmProfileValue<PX_PROFILE_EVENT_FILTER_VALUE(subsystem,eventId)> __val( _p, physx::profile::EventIds::subsystem##eventId, static_cast<PxI64>( value ) ); NV_TEXT_PROFILE_VALUE( _p, subsystem, eventId, value )
 
 // there is just one filtering option for all tasks now
 #define CM_PROFILE_TASK_ZONE(_p, _id) CM_PROFILE_ZONE( _p, _id )
 
-#define CM_CROSSTHREAD_FAKE_THREADID 99999789
 #define CM_PROFILE_START_CROSSTHREAD( _p, _id) \
-if ( _id.mCompileTimeEnabled && _p.getProfileEventSender() ) _p.getProfileEventSender()->startEvent( _id, _p.getEventContext(), CM_CROSSTHREAD_FAKE_THREADID );
+	if ( _id.mCompileTimeEnabled && _p.getProfileEventSender() ) _p.getProfileEventSender()->startEvent( _id, _p.getEventContext(), PxProfileEventSender::CrossThreadId ); NV_TEXT_PROFILE_START_CROSSTHREAD( _p, _id);
 
 #define CM_PROFILE_STOP_CROSSTHREAD( _p, _id) \
-if ( _id.mCompileTimeEnabled && _p.getProfileEventSender() ) _p.getProfileEventSender()->stopEvent( _id, _p.getEventContext(), CM_CROSSTHREAD_FAKE_THREADID );
+if ( _id.mCompileTimeEnabled && _p.getProfileEventSender() ) _p.getProfileEventSender()->stopEvent( _id, _p.getEventContext(), PxProfileEventSender::CrossThreadId ); NV_TEXT_PROFILE_STOP_CROSSTHREAD( _p, _id);
 
 }
 

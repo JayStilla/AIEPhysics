@@ -23,18 +23,20 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
+#include "foundation/PxMemory.h"
 #include "SamplePreprocessor.h"
 #include "PhysXSampleApplication.h"
 #include "PhysXSample.h"
 #include "SampleCommandLine.h"
 
 #include "PsFile.h"
+#include "PsPrintString.h"
 
 #include "PxToolkit.h"
-#include "common/PxCoreUtilities.h"
+#include "extensions/PxDefaultStreams.h"
 
 #include "RenderBoxActor.h"
 #include "RenderSphereActor.h"
@@ -45,11 +47,13 @@
 #include "RenderTexture.h"
 #include "RenderPhysX3Debug.h"
 #include "RenderClothActor.h"
+#include "RendererClothShape.h"
 #include "ParticleSystem.h"
 #include "physxprofilesdk/PxProfileZoneManager.h"
 #ifdef PX_PS3
 #include "extensions/ps3/PxPS3Extension.h"
 #include "extensions/ps3/PxDefaultSpuDispatcher.h"
+//#define PRINT_BLOCK_COUNTERS
 #endif
 
 #include <SamplePlatform.h>
@@ -62,17 +66,32 @@
 #include <algorithm>
 #include <ctype.h>
 
-#include "cloth/PxClothReadData.h"
+#include "cloth/PxClothParticleData.h"
 #include "TestClothHelpers.h"
+#include "extensions/PxClothFabricCooker.h"
 
 #include "Picking.h"
 #include "TestGroup.h"
+ 
+
+#ifdef PX_WIIU  
+#pragma ghs nowarning 236 //controlling expression is constant
+#endif
+
+#ifdef PX_WINDOWS
+// Starting with Release 302 drivers, application developers can direct the Optimus driver at runtime to use the High Performance
+// Graphics to render any application; even those applications for which there is no existing application profile.
+// They can do this by exporting a global variable named NvOptimusEnablement.
+// A value of 0x00000001 indicates that rendering should be performed using High Performance Graphics.
+// A value of 0x00000000 indicates that this method should be ignored.
+extern "C"
+{
+	_declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+}
+#endif
 
 using namespace SampleFramework;
 using namespace SampleRenderer;
-
-static const char* DEFAULT_PVD_HOST = "127.0.0.1";
-static const PxU32 DEFAULT_PVD_PORT = 5425;
 
 static bool gRecook	= false;
 PxDefaultAllocator gDefaultAllocatorCallback;
@@ -104,13 +123,32 @@ PX_FORCE_INLINE void SetupDefaultRigidDynamic(PxRigidDynamic& body, bool kinemat
 {
 	body.setActorFlag(PxActorFlag::eVISUALIZATION, true);
 	body.setAngularDamping(0.5f);
-	body.setRigidDynamicFlag(PxRigidDynamicFlag::eKINEMATIC, kinematic);
+	body.setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, kinematic);
 }
 
-PX_FORCE_INLINE void link(RenderBaseActor* renderActor, PxShape* shape)
+void PhysXSample::unlink(RenderBaseActor* renderActor, PxShape* shape, PxRigidActor* actor)
 {
-	shape->userData = renderActor;
-	renderActor->setPhysicsShape(shape);
+	PhysXShape theShape(actor, shape);
+	mPhysXShapeToRenderActorMap.erase(theShape);
+
+	PX_UNUSED(renderActor);
+}
+
+void PhysXSample::link(RenderBaseActor* renderActor, PxShape* shape, PxRigidActor* actor)
+{
+	PhysXShape theShape(actor, shape);
+	mPhysXShapeToRenderActorMap[theShape] = renderActor;
+
+	renderActor->setPhysicsShape(shape, actor);
+}
+
+RenderBaseActor* PhysXSample::getRenderActor(PxRigidActor* actor, PxShape* shape)
+{
+	PhysXShape theShape(actor, shape);
+	PhysXShapeToRenderActorMap::iterator it = mPhysXShapeToRenderActorMap.find(theShape);
+	if (mPhysXShapeToRenderActorMap.end() != it)
+		return it->second;
+	return NULL;
 }
 
 SampleDirManager& PhysXSample::getSampleOutputDirManager()
@@ -258,8 +296,8 @@ static PxRigidDynamic* GenerateCompound(PxPhysics& sdk, PxScene* scene, PxMateri
 		const PxTransform& currentPose = poses[i];
 		const PxGeometry* currentGeom = geometries[i];
 
-		PxShape* shape = actor->createShape(*currentGeom, *defaultMat, currentPose);
-		shape->setFlag(PxShapeFlag::eVISUALIZATION, true);
+		PxShape* shape = actor->createShape(*currentGeom, *defaultMat);
+		shape->setLocalPose(currentPose);
 		PX_ASSERT(shape);
 	}
 
@@ -269,6 +307,28 @@ static PxRigidDynamic* GenerateCompound(PxPhysics& sdk, PxScene* scene, PxMateri
 		scene->addActor(*actor);
 	}
 	return actor;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+void PhysXSample::onRelease(const PxBase* observed, void* userData, PxDeletionEventFlag::Enum deletionEvent)
+{
+	PX_UNUSED(userData);
+	PX_UNUSED(deletionEvent);
+
+	if(observed->is<PxRigidActor>())
+	{
+		const PxRigidActor* actor = static_cast<const PxRigidActor*>(observed);
+
+		removeRenderActorsFromPhysicsActor(actor);
+
+		std::vector<PxRigidActor*>::iterator actorIter = std::find(mPhysicsActors.begin(), mPhysicsActors.end(), actor);
+		if(actorIter != mPhysicsActors.end())
+		{
+			mPhysicsActors.erase(actorIter);
+		}
+
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -287,7 +347,7 @@ RenderMeshActor* PhysXSample::createRenderMeshFromRawMesh(const RAWMesh& data, P
 			indices[i*3+2] = src[i*3+1];
 	}
 
-	RenderMeshActor* meshActor = SAMPLE_NEW(RenderMeshActor)(*getRenderer(), data.mVerts, data.mNbVerts, data.mVertexNormals, data.mUVs, indices, nbTris);
+	RenderMeshActor* meshActor = SAMPLE_NEW(RenderMeshActor)(*getRenderer(), data.mVerts, data.mNbVerts, data.mVertexNormals, data.mUVs, indices, NULL, nbTris);
 	SAMPLE_FREE(indices);
 
 	if(data.mMaterialID!=0xffffffff)
@@ -326,6 +386,7 @@ RenderTexture* PhysXSample::createRenderTextureFromRawTexture(const RAWTexture& 
 
 		SampleTextureAsset* textureAsset = static_cast<SampleTextureAsset*>(t);
 		texture = SAMPLE_NEW(RenderTexture)(*getRenderer(), data.mID, textureAsset->getTexture());
+
 	}
 	else
 	{
@@ -376,8 +437,8 @@ void PhysXSample::newMesh(const RAWMesh& data)
 	bool ok = false;
 	if(!gRecook)
 	{
-		FILE* fp = NULL;
-		physx::fopen_s(&fp, filePathCooked, "rb");
+		SampleFramework::File* fp = NULL;
+		physx::shdfnd::fopen_s(&fp, filePathCooked, "rb");
 		if(fp)
 		{
 			fclose(fp);
@@ -396,15 +457,15 @@ void PhysXSample::newMesh(const RAWMesh& data)
 		meshDesc.triangles.data		= data.mIndices;
 
 		//
-		printf("Cooking object... %s", filePathCooked);
-		PxToolkit::FileOutputStream stream(filePathCooked);
+		shdfnd::printFormatted("Cooking object... %s",filePathCooked);
+		PxDefaultFileOutputStream stream(filePathCooked);
 		ok = mCooking->cookTriangleMesh(meshDesc, stream);
-		printf(" - Done\n");
+		shdfnd::printFormatted(" - Done\n");
 	}
 
 	if(ok)
 	{
-		PxToolkit::FileInputData stream(filePathCooked);
+		PxDefaultFileInputData stream(filePathCooked);
 		PxTriangleMesh* triangleMesh = mPhysics->createTriangleMesh(stream);
 		if(triangleMesh)
 		{
@@ -412,8 +473,9 @@ void PhysXSample::newMesh(const RAWMesh& data)
 			triGeom.triangleMesh = triangleMesh;
 			PxRigidStatic* actor = mPhysics->createRigidStatic(data.mTransform);
 			PxShape* shape = actor->createShape(triGeom, *mMaterial);
+			PX_UNUSED(shape);
 			mScene->addActor(*actor);
-			mPhysicsActors.push_back(actor);
+			addPhysicsActors(actor);
 
 			if(0)
 			{
@@ -422,9 +484,9 @@ void PhysXSample::newMesh(const RAWMesh& data)
 				const PxVec3* verts = triangleMesh->getVertices();
 				PxU32 nbTris = triangleMesh->getNbTriangles();
 				const void* tris = triangleMesh->getTriangles();
-				bool s = triangleMesh->has16BitTriangleIndices();
+				bool s = triangleMesh->getTriangleMeshFlags() & PxTriangleMeshFlag::eHAS_16BIT_TRIANGLE_INDICES ? true : false;
 				PX_ASSERT(s);
-
+				PX_UNUSED(s);
 				const PxU16* src = (const PxU16*)tris;
 				PxU16* indices = (PxU16*)SAMPLE_ALLOC(sizeof(PxU16)*nbTris*3);
 				for(PxU32 i=0;i<nbTris;i++)
@@ -434,13 +496,14 @@ void PhysXSample::newMesh(const RAWMesh& data)
 					indices[i*3+2] = src[i*3+1];
 				}
 
-				RenderMeshActor* meshActor = SAMPLE_NEW(RenderMeshActor)(*getRenderer(), verts, nbVerts, verts, NULL, indices, nbTris);
+				RenderMeshActor* meshActor = SAMPLE_NEW(RenderMeshActor)(*getRenderer(), verts, nbVerts, verts, NULL, indices, NULL, nbTris);
 				if(data.mName)
 					strcpy(meshActor->mName, data.mName);
 				PxShape* shape; 
 				actor->getShapes(&shape, 1);
-				link(meshActor, shape);
+				link(meshActor, shape, actor);
 				mRenderActors.push_back(meshActor);
+				meshActor->setEnableCameraCull(true);
 				SAMPLE_FREE(indices);
 			}
 			else
@@ -448,7 +511,8 @@ void PhysXSample::newMesh(const RAWMesh& data)
 				PxShape* shape; 
 				actor->getShapes(&shape, 1);
 				RenderMeshActor* meshActor = createRenderMeshFromRawMesh(data, shape);
-				link(meshActor, shape);
+				link(meshActor, shape, actor);
+				meshActor->setEnableCameraCull(true);
 			}
 
 			mMeshTag++;
@@ -482,9 +546,9 @@ void PhysXSample::togglePvdConnection()
 
 void PhysXSample::createPvdConnection()
 {
-	if(mPhysics->getPvdConnectionManager() == NULL)
+	PxVisualDebuggerConnectionManager* pvd = mPhysics->getPvdConnectionManager();
+	if(!pvd)
 		return;
-
 
 	//The connection flags state overall what data is to be sent to PVD.  Currently
 	//the Debug connection flag requires support from the implementation (don't send
@@ -492,96 +556,39 @@ void PhysXSample::createPvdConnection()
 	//are taken care of by the PVD SDK.
 
 	//Use these flags for a clean profile trace with minimal overhead
-	PxVisualDebuggerConnectionFlags theConnectionFlags( PxVisualDebuggerExt::getAllConnectionFlags() );
-	if (!mUseFullPvdConnection)
-		theConnectionFlags = PxVisualDebuggerConnectionFlag::Profile;
-
+	PxVisualDebuggerConnectionFlags theConnectionFlags( PxVisualDebuggerConnectionFlag::eDEBUG | PxVisualDebuggerConnectionFlag::ePROFILE | PxVisualDebuggerConnectionFlag::eMEMORY );
+	if (!mPvdParams.useFullPvdConnection )
+	{
+		theConnectionFlags = PxVisualDebuggerConnectionFlag::ePROFILE;
+	}
+	
 	//Create a pvd connection that writes data straight to the filesystem.  This is
 	//the fastest connection on windows for various reasons.  First, the transport is quite fast as
 	//pvd writes data in blocks and filesystems work well with that abstraction.
 	//Second, you don't have the PVD application parsing data and using CPU and memory bandwidth
 	//while your application is running.
 	//PxVisualDebuggerExt::createConnection(mPhysics->getPvdConnectionManager(), "c:\\temp.pxd2", theConnectionFlags);
-	
-	const char* pvdHost = DEFAULT_PVD_HOST;
-	PxU32 pvdPort = DEFAULT_PVD_PORT;
-
-	if (mApplication.getCommandLine().hasSwitch("pvdhost"))
-	{
-		const char* hostStr = mApplication.getCommandLine().getValue("pvdhost");
-		if (hostStr)
-			pvdHost = hostStr;
-	}
-
-	if (mApplication.getCommandLine().hasSwitch("pvdport"))
-	{	
-		const char* portStr = mApplication.getCommandLine().getValue("pvdport");
-		if (portStr)
-			pvdPort = atoi(portStr);	
-	}
 
 	//The normal way to connect to pvd.  PVD needs to be running at the time this function is called.
 	//We don't worry about the return value because we are already registered as a listener for connections
 	//and thus our onPvdConnected call will take care of setting up our basic connection state.
-	PVD::PvdConnection* theConnection = PxVisualDebuggerExt::createConnection(mPhysics->getPvdConnectionManager(), pvdHost, pvdPort, 4000, theConnectionFlags );
-	if (theConnection)
-		theConnection->release();
+
+	PxVisualDebuggerExt::createConnection(pvd, mPvdParams.ip, mPvdParams.port, mPvdParams.timeout, theConnectionFlags);
 }
 
 void PhysXSample::onPvdConnected(PVD::PvdConnection& )
 {
 	//setup joint visualization.  This gets piped to pvd.
 	mPhysics->getVisualDebugger()->setVisualizeConstraints(true);
-	mPhysics->getVisualDebugger()->setVisualDebuggerFlag(PxVisualDebuggerFlags::eTRANSMIT_CONTACTS, true);
-	mPhysics->getVisualDebugger()->setVisualDebuggerFlag(PxVisualDebuggerFlags::eTRANSMIT_SCENEQUERIES, true);
+	mPhysics->getVisualDebugger()->setVisualDebuggerFlag(PxVisualDebuggerFlag::eTRANSMIT_CONTACTS, true);
+	mPhysics->getVisualDebugger()->setVisualDebuggerFlag(PxVisualDebuggerFlag::eTRANSMIT_SCENEQUERIES, true);
 }
 
-void PhysXSample::onPvdDisconnected(PVD::PvdConnection& )
+void PhysXSample::onPvdDisconnected(PVD::PvdConnection& conn)
 {
+	conn.release();
 }
 
-void PhysXSample::updateSweepSettingForShapes()
-{
-	enum Word3
-	{
-		SWEPT_INTEGRATION_LINEAR = 1,
-		CLEAN_PAIR_FLAG = 2		// usually the pair flag is initialized to PxPairFlag::eCONTACT_DEFAULT and changes are 
-								// applied on top of that. Set this flag to start from a clean pair flag.
-	};
-
-	PxU32 word3 = 0;
-	bool enable = false;
-	if(getActiveScene().getFlags() & PxSceneFlag::eENABLE_SWEPT_INTEGRATION)
-	{
-		word3 |= SWEPT_INTEGRATION_LINEAR;
-		enable = true;
-	}
-
-	PxU32 count = getActiveScene().getNbActors(PxActorTypeSelectionFlag::eRIGID_STATIC | PxActorTypeSelectionFlag::eRIGID_DYNAMIC);
-	PxActor** buffer = new PxActor*[count];
-	getActiveScene().getActors(PxActorTypeSelectionFlag::eRIGID_STATIC | PxActorTypeSelectionFlag::eRIGID_DYNAMIC, buffer, count);
-
-	for(PxU32 i = 0; i < count; i++)
-	{
-		PxRigidActor* actor = static_cast<PxRigidActor*>(buffer[i]);
-		PxU32 nbShapes = actor->getNbShapes();
-		PxShape** shapes = (PxShape**) ::alloca(nbShapes * sizeof(PxShape*));
-
-		actor->getShapes(shapes, nbShapes);
-		for(PxU32 j = 0; j < nbShapes; j++)
-		{
-			PxShape* shape = shapes[j];
-			if(actor->is<PxRigidDynamic>())
-				shape->setFlag(PxShapeFlag::eUSE_SWEPT_BOUNDS, enable);
-
-			//also rerun filtering
-			PxFilterData d = shape->getSimulationFilterData();
-			d.word3 = word3;
-			shape->setSimulationFilterData(d);
-		}
-	}
-	delete buffer;
-}
 ///////////////////////////////////////////////////////////////////////////////
 //
 // default implemententions for PhysXSample interface
@@ -600,8 +607,8 @@ void PhysXSample::onPointerInputEvent(const InputEvent& ie, physx::PxU32 x, phys
 		{
 			if(mPicking)
 			{
-				mPicked = pressed;
-				if(pressed)
+				mPicked = !mPicked;;
+				if(mPicked)
 					mPicking->lazyPick();
 				else
 					mPicking->letGo();
@@ -624,7 +631,6 @@ PhysXSample::~PhysXSample()
 		mDeletedRenderActors[i]->release();
 	}
 	mDeletedRenderActors.clear();
-
 	PX_ASSERT(!mRenderActors.size());
 	PX_ASSERT(!mRenderTextures.size());
 	PX_ASSERT(!mRenderMaterials.size());
@@ -634,7 +640,7 @@ PhysXSample::~PhysXSample()
 	PX_ASSERT(!mScene);
 	PX_ASSERT(!mCpuDispatcher);
 //	PX_ASSERT(!mMaterial);
-#ifdef PX_WINDOWS
+#if PX_SUPPORT_GPU_PHYSX
 	PX_ASSERT(!mCudaContextManager);
 #endif
 #ifdef PX_PS3
@@ -655,13 +661,12 @@ PhysXSample::PhysXSample(PhysXSampleApplication& app, PxU32 maxSubSteps) :
 	mInitialDebugRender(false),
 	mCreateCudaCtxManager(false),
 	mCreateGroundPlane(true),
-	mUseDebugStepper(false),
-	mUseFixedStepper(true),
+	mStepperType(FIXED_STEPPER),
+	//mStepperType(INVERTED_FIXED_STEPPER),
 	mMaxNumSubSteps(maxSubSteps),
 	mNbThreads(1),
 	mMaxNumSpus(5),
 	mDefaultDensity(1.0f),
-	mUseFullPvdConnection(true),
 	mDisplayFPS(true),
 
 	mPause(app.mPause),
@@ -672,6 +677,7 @@ PhysXSample::PhysXSample(PhysXSampleApplication& app, PxU32 maxSubSteps) :
 	mHideGraphics(false),
 	mEnableAutoFlyCamera(false),
 	mCameraController(app.mCameraController),
+	mPvdParams(app.mPvdParams),
 	mApplication(app),
 	mFoundation(NULL),
 	mProfileZoneManager(NULL),
@@ -683,7 +689,7 @@ PhysXSample::PhysXSample(PhysXSampleApplication& app, PxU32 maxSubSteps) :
 #ifdef PX_PS3
 	mSpuDispatcher(NULL),
 #endif
-#ifdef PX_WINDOWS
+#if PX_SUPPORT_GPU_PHYSX
 	mCudaContextManager(NULL),
 #endif
 	mManagedMaterials(app.mManagedMaterials),
@@ -691,6 +697,7 @@ PhysXSample::PhysXSample(PhysXSampleApplication& app, PxU32 maxSubSteps) :
 	mBufferedActiveTransforms(NULL),
 	mActiveTransformCount(0),
 	mActiveTransformCapacity(0),
+	mIsFlyCamera(false),
 	mMeshTag(0),
 	mFilename(NULL),
 	mScale(1.0f),
@@ -700,23 +707,21 @@ PhysXSample::PhysXSample(PhysXSampleApplication& app, PxU32 maxSubSteps) :
 	
 	mDebugStepper(0.016666660f),
 	mFixedStepper(0.016666660f, maxSubSteps),
+	mInvertedFixedStepper(0.016666660f, maxSubSteps),
 	mVariableStepper(1.0f / 80.0f, 1.0f / 40.0f, maxSubSteps),
 	mWireFrame(false),
-
 	mSimulationTime(0.0f),
 	mPicked(false),
 	mExtendedHelpPage(0),
-	mDebugObjectType(DEBUG_OBJECT_BOX)
+	mDebugObjectType(DEBUG_OBJECT_BOX)//,
 {
-	mDebugStepper.mSample = this;
-	mFixedStepper.mSample = this;
-	mVariableStepper.mSample = this;
+	mDebugStepper.setSample(this);
+	mFixedStepper.setSample(this);
+	mVariableStepper.setSample(this);
+	mInvertedFixedStepper.setSample(this);
 	
 	mScratchBlock = SCRATCH_BLOCK_SIZE ? SAMPLE_ALLOC(SCRATCH_BLOCK_SIZE) : 0;
-
-	if (mApplication.getCommandLine().hasSwitch("nonVizPvd"))
-		mUseFullPvdConnection = false;
-
+	
 	mFlyCameraController.init(PxVec3(0.0f, 10.0f, 0.0f), PxVec3(0.0f, 0.0f, 0.0f));
 
 	mPicking = new physx::Picking(*this);
@@ -736,20 +741,22 @@ void PhysXSample::render()
 		for(PxU32 i = 0; i < mRenderActors.size(); ++i)
 		{
 			RenderBaseActor* renderActor = mRenderActors[i];
-			if(camera.mPerformVFC && getCamera().cull(renderActor->getWorldBounds())==PLANEAABB_EXCLUSION)
+			if(camera.mPerformVFC && 
+				renderActor->getEnableCameraCull() && 
+				getCamera().cull(renderActor->getWorldBounds())==PLANEAABB_EXCLUSION)
 				continue;
 
 			renderActor->render(*renderer, mManagedMaterials[MATERIAL_GREY], mWireFrame);
 			++nbVisible;
 		}
 
-		if(camera.mPerformVFC)
-			printf("Nb visible: %d\n", nbVisible);
+		//if(camera.mPerformVFC)
+			//shdfnd::printFormatted("Nb visible: %d\n", nbVisible);
 	}
-	
+
 	RenderPhysX3Debug* debugRender = getDebugRenderer();
 	if(debugRender)
-		debugRender->queueForRender();
+		debugRender->queueForRenderTriangle();
 }
 
 void PhysXSample::displayFPS()
@@ -763,7 +770,7 @@ void PhysXSample::displayFPS()
 	Renderer* renderer = getRenderer();
 
 	const PxU32 yInc = 18;
-	renderer->print(10, getCamera().getScreenHeight() - yInc*2, fpsText);
+	renderer->print(10, getCamera().getScreenHeight() - yInc*2, fpsText);	
 
 //	sprintf(fpsText, "%d visible objects", mNbVisible);
 //	renderer->print(10, mCamera.getScreenHeight() - yInc*3, fpsText);
@@ -771,6 +778,9 @@ void PhysXSample::displayFPS()
 
 void PhysXSample::onShutdown()
 {
+	// else you get a warning in inverted stepping mode.
+	mScene->fetchResults(true);
+
 #if defined(RENDERER_TABLET)
 	getRenderer()->releaseAllButtons();
 #endif
@@ -778,12 +788,16 @@ void PhysXSample::onShutdown()
 	releaseAll(mRenderActors);
 	releaseAll(mRenderTextures);
 	releaseAll(mRenderMaterials);
-	releaseAll(mPhysicsActors);
+	{
+		PxSceneWriteLock scopedLock(*mScene);
+		releaseAll(mPhysicsActors);
+	}
 	
 	SAMPLE_FREE(mBufferedActiveTransforms);
 	mFixedStepper.shutdown();
 	mDebugStepper.shutdown();
 	mVariableStepper.shutdown();
+	mInvertedFixedStepper.shutdown();
 
 	const size_t nbManagedAssets = mManagedAssets.size();
 	if(nbManagedAssets)
@@ -801,6 +815,8 @@ void PhysXSample::onShutdown()
 		mApplication.getAssetManager()->returnAsset(*mSampleInputAsset);
 		mSampleInputAsset = NULL;
 	}
+
+	mPhysics->unregisterDeletionListener(*this);
 
 	SAFE_RELEASE(mScene);
 	SAFE_RELEASE(mCpuDispatcher);
@@ -823,13 +839,44 @@ void PhysXSample::onShutdown()
 
 	SAFE_RELEASE(mPhysics);
 
-#ifdef PX_WINDOWS
+#if PX_SUPPORT_GPU_PHYSX
 	SAFE_RELEASE(mCudaContextManager);
 #endif
 
 	SAFE_RELEASE(mProfileZoneManager);
 	SAFE_RELEASE(mFoundation);
 }
+
+//#define USE_MBP
+
+#ifdef USE_MBP
+
+static void setupMBP(PxScene& scene)
+{
+	const float range = 1000.0f;
+	const PxU32 subdiv = 4;
+//	const PxU32 subdiv = 1;
+//	const PxU32 subdiv = 2;
+//	const PxU32 subdiv = 8;
+
+	const PxVec3 min(-range);
+	const PxVec3 max(range);
+	const PxBounds3 globalBounds(min, max);
+
+	PxBounds3 bounds[256];
+	const PxU32 nbRegions = PxBroadPhaseExt::createRegionsFromWorldBounds(bounds, globalBounds, subdiv);
+
+	for(PxU32 i=0;i<nbRegions;i++)
+	{
+		PxBroadPhaseRegion region;
+		region.bounds = bounds[i];
+		region.userData = (void*)i;
+		scene.addBroadPhaseRegion(region);
+	}
+}
+#endif
+
+
 
 void PhysXSample::onInit()
 {
@@ -865,11 +912,31 @@ void PhysXSample::onInit()
 	if(!mProfileZoneManager)
 		fatalError("PxProfileZoneManager::createProfileZoneManager failed!");
 
+#if PX_SUPPORT_GPU_PHYSX
 	if(mCreateCudaCtxManager)
 	{
-#ifdef PX_WINDOWS
-		pxtask::CudaContextManagerDesc cudaContextManagerDesc;
-		mCudaContextManager = pxtask::createCudaContextManager(*mFoundation, cudaContextManagerDesc, mProfileZoneManager);
+		PxCudaContextManagerDesc cudaContextManagerDesc;
+
+#if defined(RENDERER_ENABLE_CUDA_INTEROP)
+		if (!mApplication.getCommandLine().hasSwitch("nointerop"))
+		{
+			switch (getRenderer()->getDriverType())
+			{
+			case Renderer::DRIVER_DIRECT3D9:
+				cudaContextManagerDesc.interopMode = PxCudaInteropMode::D3D9_INTEROP;
+				break;
+			case Renderer::DRIVER_DIRECT3D11:
+				cudaContextManagerDesc.interopMode = PxCudaInteropMode::D3D11_INTEROP;
+				break;
+			case Renderer::DRIVER_OPENGL:
+				cudaContextManagerDesc.interopMode = PxCudaInteropMode::OGL_INTEROP;
+				break;
+			};
+
+			cudaContextManagerDesc.graphicsDevice = getRenderer()->getDevice();
+		}
+#endif 
+		mCudaContextManager = PxCreateCudaContextManager(*mFoundation, cudaContextManagerDesc, mProfileZoneManager);
 		if( mCudaContextManager )
 		{
 			if( !mCudaContextManager->contextIsValid() )
@@ -878,10 +945,13 @@ void PhysXSample::onInit()
 				mCudaContextManager = NULL;
 			}
 		}
-#endif
 	}
+#endif
 
-	mPhysics = PxCreatePhysics(PX_PHYSICS_VERSION, *mFoundation, PxTolerancesScale(), recordMemoryAllocations, mProfileZoneManager);
+	PxTolerancesScale scale;
+	customizeTolerances(scale);
+
+	mPhysics = PxCreatePhysics(PX_PHYSICS_VERSION, *mFoundation, scale, recordMemoryAllocations, mProfileZoneManager);
 	if(!mPhysics)
 		fatalError("PxCreatePhysics failed!");
 
@@ -891,7 +961,10 @@ void PhysXSample::onInit()
 	if(!PxInitExtensions(*mPhysics))
 		fatalError("PxInitExtensions failed!");
 
-	mCooking = PxCreateCooking(PX_PHYSICS_VERSION, *mFoundation, PxCookingParams(PxTolerancesScale()));
+	PxCookingParams params(scale);
+	params.meshWeldTolerance = 0.001f;
+	params.meshPreprocessParams = PxMeshPreprocessingFlags(PxMeshPreprocessingFlag::eWELD_VERTICES | PxMeshPreprocessingFlag::eREMOVE_UNREFERENCED_VERTICES | PxMeshPreprocessingFlag::eREMOVE_DUPLICATED_TRIANGLES);
+	mCooking = PxCreateCooking(PX_PHYSICS_VERSION, *mFoundation, params);
 	if(!mCooking)
 		fatalError("PxCreateCooking failed!");
 
@@ -900,9 +973,11 @@ void PhysXSample::onInit()
 	if(mPhysics->getPvdConnectionManager())
 		mPhysics->getPvdConnectionManager()->addHandler(*this);
 
+	mPhysics->registerDeletionListener(*this, PxDeletionEventFlag::eUSER_RELEASE);
+
 #ifdef PX_PS3
 
-#ifdef _DEBUG 
+#ifdef PX_DEBUG 
 	bool spuPrintfEnabled = true;
 #else
 	bool spuPrintfEnabled = false;
@@ -977,6 +1052,8 @@ void PhysXSample::onInit()
 		renderer->addButton(leftBottom, rightTop, NULL, 
 			buttonMaterial->mRenderMaterial, buttonMaterial->mRenderMaterialInstance);
 		leftBottom.y += yInc; rightTop.y += yInc;
+		renderer->addButton(leftBottom, rightTop, NULL, 
+			buttonMaterial->mRenderMaterial, buttonMaterial->mRenderMaterialInstance);
 
 		// quick access button
 		leftBottom.y += yInc; rightTop.y += yInc;
@@ -1018,7 +1095,7 @@ void PhysXSample::onInit()
 	if(!sceneDesc.filterShader)
 		sceneDesc.filterShader	= getSampleFilterShader();
 
-#ifdef PX_WINDOWS
+#if PX_SUPPORT_GPU_PHYSX
 	if(!sceneDesc.gpuDispatcher && mCudaContextManager)
 	{
 		sceneDesc.gpuDispatcher = mCudaContextManager->getGpuDispatcher();
@@ -1037,20 +1114,35 @@ void PhysXSample::onInit()
 #endif
 
 	//sceneDesc.flags |= PxSceneFlag::eENABLE_TWO_DIRECTIONAL_FRICTION;
-	//sceneDesc.flags |= PxSceneFlag::eENABLE_PCM;//need to register the pcm code in the PxCreatePhysics
-	//sceneDesc.flags |= PxSceneFlag::eENABLE_ONE_DIRECTIONAL_FRICTION;
+	//sceneDesc.flags |= PxSceneFlag::eENABLE_PCM;
+	//sceneDesc.flags |= PxSceneFlag::eENABLE_ONE_DIRECTIONAL_FRICTION;  
 	//sceneDesc.flags |= PxSceneFlag::eADAPTIVE_FORCE;
 	sceneDesc.flags |= PxSceneFlag::eENABLE_ACTIVETRANSFORMS;
+	//sceneDesc.flags |= PxSceneFlag::eDISABLE_CONTACT_CACHE;
+
+	
+#ifdef USE_MBP
+	sceneDesc.broadPhaseType = PxBroadPhaseType::eMBP;
+#endif
+	if(mStepperType == INVERTED_FIXED_STEPPER)
+		sceneDesc.simulationOrder = PxSimulationOrder::eSOLVE_COLLIDE;
+
 	mScene = mPhysics->createScene(sceneDesc);
 	if(!mScene)
 		fatalError("createScene failed!");
    
+	PxSceneWriteLock scopedLock(*mScene);
+
 	PxSceneFlags flag = mScene->getFlags();
 
-
+	PX_UNUSED(flag);
 	mScene->setVisualizationParameter(PxVisualizationParameter::eSCALE,				mInitialDebugRender ? mDebugRenderScale : 0.0f);
 	mScene->setVisualizationParameter(PxVisualizationParameter::eCOLLISION_SHAPES,	1.0f);
-	
+
+#ifdef USE_MBP
+	setupMBP(*mScene);
+#endif
+
 	mApplication.refreshVisualizationMenuState(PxVisualizationParameter::eCOLLISION_SHAPES);
 	mApplication.applyDefaultVisualizationSettings();
 	mApplication.setMouseCursorHiding(false);
@@ -1060,6 +1152,7 @@ void PhysXSample::onInit()
 
 	if(mCreateGroundPlane)
 		createGrid();
+
 	LOG_INFO("PhysXSample", "Init sample ok!");
 }
 
@@ -1078,15 +1171,21 @@ RenderMaterial* PhysXSample::getMaterial(PxU32 materialID)
 
 Stepper* PhysXSample::getStepper()
 {
-	if(mUseDebugStepper)
+	switch(mStepperType)
+	{
+	case DEFAULT_STEPPER:
 		return &mDebugStepper;
-	else if(mUseFixedStepper)
+	case FIXED_STEPPER:
 		return &mFixedStepper;
-	else
-		return &mVariableStepper;
+	case INVERTED_FIXED_STEPPER:
+		return &mInvertedFixedStepper;
+	default:
+		return &mVariableStepper;  
+	};
 }
 
 
+// ### PT: TODO: refactor this with onTickPreRender
 void PhysXSample::freeDeletedActors()
 {
 	getRenderer()->finishRendering();
@@ -1096,9 +1195,7 @@ void PhysXSample::freeDeletedActors()
 	{
 		mDeletedRenderActors[i]->release();
 	}
-
 	mDeletedRenderActors.clear();
-
 }
 
 void PhysXSample::onTickPreRender(float dtime)
@@ -1108,13 +1205,20 @@ void PhysXSample::onTickPreRender(float dtime)
 	{
 		mDeletedRenderActors[i]->release();
 	}
-
 	mDeletedRenderActors.clear();
 
-	mApplication.baseTickPreRender(dtime);
-	
-	mFPS.update();
+#ifdef PX_PROFILE
+	{
+#endif
+		PxSceneWriteLock scopedLock(*mScene);
 
+
+		mApplication.baseTickPreRender(dtime);
+
+		mFPS.update();
+#ifdef PX_PROFILE
+	}
+#endif
 	if(!isPaused())
 	{
 		Stepper* stepper = getStepper();
@@ -1135,16 +1239,19 @@ void PhysXSample::onTickPreRender(float dtime)
 #else
 			// in profile builds we run the whole frame sequentially
 			// simulate, wait, update render objects, render
-			bool simulationStarted;
 			{
-				simulationStarted = stepper->advance(mScene, dtime, mScratchBlock, SCRATCH_BLOCK_SIZE);
+				//PIX_PROFILE_ZONE(simulate);
+				mWaitForResults = stepper->advance(mScene, dtime, mScratchBlock, SCRATCH_BLOCK_SIZE);
 				stepper->renderDone();
-				stepper->wait(mScene);
-				mSimulationTime = stepper->getSimulationTime();
+				if (mWaitForResults)
+				{
+					stepper->wait(mScene);
+					mSimulationTime = stepper->getSimulationTime();
+				}
 			}
 
 			// update render objects immediately
-			if (simulationStarted)
+			if (mWaitForResults)
 			{
 				bufferActiveTransforms();
 				updateRenderObjectsSync(dtime);
@@ -1155,11 +1262,19 @@ void PhysXSample::onTickPreRender(float dtime)
 		}
 	}
 
-	// profile builds can update render actors debug 
-	// draw immediately to avoid one frame lag
+	// profile builds should update render actors 
+	// and debug draw immediately to avoid one frame lag
 #if defined(PX_PROFILE)
-	updateRenderObjectsDebug(dtime);
+	RenderPhysX3Debug* debugRenderer = getDebugRenderer();
+	if(debugRenderer && mScene)
+	{
+		const PxRenderBuffer& debugRenderable = mScene->getRenderBuffer();
+		debugRenderer->update(debugRenderable);
+
+		updateRenderObjectsDebug(dtime);
+	}
 #endif
+
 
 	if(mPicking)
 	{
@@ -1189,19 +1304,36 @@ void PhysXSample::onTickPostRender(float dtime)
 			}
 			else
 				updateRenderObjectsSync(dtime);
+
+			if(mStepperType == INVERTED_FIXED_STEPPER)
+				stepper->postRender(dtime);			
 		}
 	}
+#else
 
+	//ML::mWaitForResults will be false if the substep was too small to kick off any physics.
+	//In this case, we should not perform postRender as this kicks off collision detection, which can cause
+	//things to get out-of-sync, this is for inverted stepper
+	if(!isPaused() && mScene && mWaitForResults && (mStepperType == INVERTED_FIXED_STEPPER))
+	{
+		Stepper* stepper = getStepper();
+		//stepper->wait(mScene);
+		stepper->postRender(dtime);
+	}
+	
 #endif
+
+	
 	
 	RenderPhysX3Debug* debugRenderer = getDebugRenderer();
 	if(debugRenderer && mScene)
 	{
 		const PxRenderBuffer& debugRenderable = mScene->getRenderBuffer();
+		PX_UNUSED(debugRenderable);
 		debugRenderer->clear();
-		debugRenderer->update(debugRenderable);
 
 #if !defined(PX_PROFILE)
+		debugRenderer->update(debugRenderable);
 		updateRenderObjectsDebug(dtime);
 #endif
 
@@ -1213,6 +1345,62 @@ void PhysXSample::onTickPostRender(float dtime)
 		mOneFrameUpdate = false;
 		if (!isPaused()) togglePause();
 	}
+
+#ifdef PRINT_BLOCK_COUNTERS
+#ifdef PX_PS3
+	PxU32 nbContactBlocks, nbFrictionBlocks, nbConstraintBlocks;
+	PxPS3Config::getSpuMemBlockCounters(getActiveScene(), nbContactBlocks, nbFrictionBlocks, nbConstraintBlocks);
+
+	PxU32 oldConstraintBlocks = PxPS3Config::getSceneParamInt(getActiveScene(),PxPS3ConfigParam::eMEM_CONSTRAINT_BLOCKS);
+	PxU32 oldFBlocks = PxPS3Config::getSceneParamInt(getActiveScene(),PxPS3ConfigParam::eMEM_FRICTION_BLOCKS);
+	PxU32 oldContactBlocks = PxPS3Config::getSceneParamInt(getActiveScene(),PxPS3ConfigParam::eMEM_CONTACT_STREAM_BLOCKS);
+
+	static PxU32 refContactBlocks=-1, refFBlocks=-1, refConstraintBlocks=-1;
+
+	//if(oldCBlocks != nbConstraintBlocks || oldFBlocks != nbFrictionBlocks || oldSBlocks != nbShaderBlocks)
+	if(refContactBlocks != nbContactBlocks || refFBlocks != nbFrictionBlocks || refConstraintBlocks != nbConstraintBlocks)
+	{
+		shdfnd::printFormatted("SPU settings request: %3d contact blocks, %3d friction blocks, %3d constraint blocks\n",nbContactBlocks,nbFrictionBlocks,nbConstraintBlocks);
+		shdfnd::printFormatted("currently are set:    %3d contact blocks, %3d friction blocks, %3d constraint blocks\n",oldContactBlocks,oldFBlocks,oldConstraintBlocks);
+	}
+
+	refConstraintBlocks = nbConstraintBlocks;
+	refFBlocks = nbFrictionBlocks;
+	refContactBlocks = nbContactBlocks;
+
+	PxU32 setConstraintB = oldConstraintBlocks;
+	PxU32 setFB = oldFBlocks;
+	PxU32 setContactB = oldContactBlocks;
+
+	if(nbConstraintBlocks > setConstraintB)
+	{
+		static PxU32 count = 0;
+		setConstraintB = nbConstraintBlocks;
+		shdfnd::printFormatted("must set %d to %d CB (%d)\n",oldConstraintBlocks,setConstraintB,++count);
+		PxPS3Config::setSceneParamInt(getActiveScene(),PxPS3ConfigParam::eMEM_CONSTRAINT_BLOCKS,setConstraintB);
+	}
+	if(nbFrictionBlocks > oldFBlocks)
+	{
+		static PxU32 count = 0;
+		setFB = nbFrictionBlocks;
+		shdfnd::printFormatted("must set %d to %d FB (%d)\n",oldFBlocks,setFB,++count);
+		PxPS3Config::setSceneParamInt(getActiveScene(),PxPS3ConfigParam::eMEM_FRICTION_BLOCKS,setFB);
+	}
+	if(nbContactBlocks > setContactB)
+	{
+		static PxU32 count = 0;
+		setContactB = nbContactBlocks;
+		shdfnd::printFormatted("must set %d to %d SB (%d)\n",oldContactBlocks,setContactB,++count);
+		PxPS3Config::setSceneParamInt(getActiveScene(),PxPS3ConfigParam::eMEM_CONTACT_STREAM_BLOCKS,setContactB);
+	}
+#endif // PX_PS3
+
+	static PxU32 refMax = -1;
+	PxU32 newMax = getActiveScene().getMaxNbContactDataBlocksUsed();
+	if(refMax != newMax)
+		shdfnd::printFormatted("max blocks used: %d\n",newMax);
+	refMax = newMax;
+#endif // PRINT_BLOCK_COUNTERS
 }
 
 void PhysXSample::saveUserInputs()
@@ -1221,6 +1409,10 @@ void PhysXSample::saveUserInputs()
 	char sBuffer[512];
 
 	const char* sampleName = mApplication.mRunning->getName();
+
+	SampleUserInput* sampleUserInput = mApplication.getPlatform()->getSampleUserInput();
+	if(!sampleUserInput)
+		return;
 
 	strcpy(name,"input");	
 	strcat(name,"/UserInputList.txt");
@@ -1231,14 +1423,14 @@ void PhysXSample::saveUserInputs()
 
 		if(getSampleOutputDirManager().getFilePath(name, sBuffer, false))
 		{
-			FILE* file = NULL;
+			SampleFramework::File* file = NULL;
 			shdfnd::fopen_s(&file, sBuffer, "w");
 
 			if(file)
 			{
 				fputs("UserInputList:\n",file);
 				fputs("----------------------------------------\n",file);
-				const std::vector<UserInput>& ilist = mApplication.getPlatform()->getSampleUserInput()->getUserInputList();
+				const std::vector<UserInput>& ilist = sampleUserInput->getUserInputList();
 				for (size_t i = 0; i < ilist.size(); i++)
 				{
 					const UserInput& ui = ilist[i];
@@ -1258,6 +1450,9 @@ void PhysXSample::saveInputEvents(const std::vector<const InputEvent*>& inputEve
 	char sBuffer[512];
 
 	const char* sampleName = mApplication.mRunning->getName();
+	SampleUserInput* sampleUserInput = mApplication.getPlatform()->getSampleUserInput();
+	if(!sampleUserInput)
+		return;
 
 	strcpy(name,"input");	
 	strcat(name,"/InputEventList.txt");
@@ -1268,7 +1463,7 @@ void PhysXSample::saveInputEvents(const std::vector<const InputEvent*>& inputEve
 
 		if(getSampleOutputDirManager().getFilePath(name, sBuffer, false))
 		{
-			FILE* file = NULL;
+			SampleFramework::File* file = NULL;
 			shdfnd::fopen_s(&file, sBuffer, "w");
 
 			if(file)
@@ -1282,10 +1477,11 @@ void PhysXSample::saveInputEvents(const std::vector<const InputEvent*>& inputEve
 					if(!inputEvent)
 						continue;
 					
-					const std::vector<size_t>* userInputs = mApplication.getPlatform()->getSampleUserInput()->getUserInputs(inputEvent->m_Id);
-					if(userInputs && !userInputs->empty())
+					const std::vector<size_t>* userInputs = sampleUserInput->getUserInputs(inputEvent->m_Id);
+					const char* name = sampleUserInput->translateInputEventIdToName(inputEvent->m_Id);
+					if(userInputs && !userInputs->empty() && name)
 					{
-						fputs(inputEvent->m_Name,file);
+						fputs(name,file);
 						fputs("\n",file);
 					}
 				}
@@ -1301,12 +1497,16 @@ void PhysXSample::parseSampleOutputAsset(const char* sampleName,PxU32 userInputC
 	char name[256];
 	char sBuffer[512];
 
+	SampleUserInput* sampleUserInput = mApplication.getPlatform()->getSampleUserInput();
+	if(!sampleUserInput)
+		return;
+
 	sprintf(name, "input/%s/%sInputMapping.ods", sampleName,mApplication.getPlatform()->getPlatformName());
 	if(getSampleOutputDirManager().getFilePath(name, sBuffer, false))
 	{
 		SampleInputMappingAsset* inputAsset = NULL;
-		FILE* fp = NULL;
-		physx::fopen_s(&fp, sBuffer, "r");
+		SampleFramework::File* fp = NULL;
+		physx::shdfnd::fopen_s(&fp, sBuffer, "r");
 		if(fp)
 		{
 			inputAsset = SAMPLE_NEW(SampleInputMappingAsset)(fp,sBuffer, false, userInputCS, inputEventCS);
@@ -1324,9 +1524,9 @@ void PhysXSample::parseSampleOutputAsset(const char* sampleName,PxU32 userInputC
 			{
 				const SampleInputData& data = inputAsset->getSampleInputData()[i];
 				size_t userInputIndex;
-				PxI32 userInputId = mApplication.getPlatform()->getSampleUserInput()->translateUserInputNameToId(data.m_UserInputName,userInputIndex);
+				PxI32 userInputId = sampleUserInput->translateUserInputNameToId(data.m_UserInputName,userInputIndex);
 				size_t inputEventIndex;
-				PxI32 inputEventId = mApplication.getPlatform()->getSampleUserInput()->translateInputEventNameToId(data.m_InputEventName, inputEventIndex);
+				PxI32 inputEventId = sampleUserInput->translateInputEventNameToId(data.m_InputEventName, inputEventIndex);
 				if(userInputId >= 0 && inputEventId >= 0)
 				{
 					SampleInputMapping mapping;
@@ -1338,19 +1538,19 @@ void PhysXSample::parseSampleOutputAsset(const char* sampleName,PxU32 userInputC
 				}
 				else
 				{
-					PX_ASSERT(0);
+					//if we get here we read a command mapping from file that is no longer supported in code ... it should be ignored.	
 				}
 			}
 
 			for (size_t i = inputMappings.size(); i--;)
 			{
 				const SampleInputMapping& mapping = inputMappings[i];
-				mApplication.getPlatform()->getSampleUserInput()->unregisterInputEvent(mapping.m_InputEventId);
+				sampleUserInput->unregisterInputEvent(mapping.m_InputEventId);
 			}
 
 			//now I have the default keys definition left, save it to the mapping
-			const std::vector<UserInput>& userInputs = mApplication.getPlatform()->getSampleUserInput()->getUserInputList();
-			const std::map<physx::PxU16, std::vector<size_t> >& inputEventUserInputMap = mApplication.getPlatform()->getSampleUserInput()->getInputEventUserInputMap();
+			const std::vector<UserInput>& userInputs = sampleUserInput->getUserInputList();
+			const std::map<physx::PxU16, std::vector<size_t> >& inputEventUserInputMap = sampleUserInput->getInputEventUserInputMap();
 			std::map<physx::PxU16, std::vector<size_t> >::const_iterator it = inputEventUserInputMap.begin();
 			std::map<physx::PxU16, std::vector<size_t> >::const_iterator itEnd = inputEventUserInputMap.end();
 			while (it != itEnd)
@@ -1360,10 +1560,10 @@ void PhysXSample::parseSampleOutputAsset(const char* sampleName,PxU32 userInputC
 				for (size_t j = 0; j < uis.size(); j++)
 				{
 					const UserInput& ui = userInputs[uis[j]];
-					const InputEvent* ie = mApplication.getPlatform()->getSampleUserInput()->getInputEventSlow(inputEventId);
-					if(ie)
+					const char* eventName = sampleUserInput->translateInputEventIdToName(inputEventId);
+					if(eventName)
 					{
-						inputAsset->addMapping(ui.m_IdName, ie->m_Name);							
+						inputAsset->addMapping(ui.m_IdName, eventName);							
 					}
 				}
 				++it;
@@ -1372,20 +1572,20 @@ void PhysXSample::parseSampleOutputAsset(const char* sampleName,PxU32 userInputC
 			for (size_t i = inputMappings.size(); i--;)
 			{
 				const SampleInputMapping& mapping = inputMappings[i];
-				mApplication.getPlatform()->getSampleUserInput()->registerInputEvent(mapping);
+				sampleUserInput->registerInputEvent(mapping);
 			}
 		}
 		else
 		{
 			// the file does not exist create one
-			FILE* fp = NULL;
-			physx::fopen_s(&fp, sBuffer, "w");
+			SampleFramework::File* fp = NULL;
+			physx::shdfnd::fopen_s(&fp, sBuffer, "w");
 			if(fp)
 			{
 				inputAsset = SAMPLE_NEW(SampleInputMappingAsset)(fp,sBuffer,true,userInputCS, inputEventCS);	
 
-				const std::vector<UserInput>& userInputs = mApplication.getPlatform()->getSampleUserInput()->getUserInputList();
-				const std::map<physx::PxU16, std::vector<size_t> >& inputEventUserInputMap = mApplication.getPlatform()->getSampleUserInput()->getInputEventUserInputMap();
+				const std::vector<UserInput>& userInputs = sampleUserInput->getUserInputList();
+				const std::map<physx::PxU16, std::vector<size_t> >& inputEventUserInputMap = sampleUserInput->getInputEventUserInputMap();
 				std::map<physx::PxU16, std::vector<size_t> >::const_iterator it = inputEventUserInputMap.begin();
 				std::map<physx::PxU16, std::vector<size_t> >::const_iterator itEnd = inputEventUserInputMap.end();
 				while (it != itEnd)
@@ -1395,10 +1595,10 @@ void PhysXSample::parseSampleOutputAsset(const char* sampleName,PxU32 userInputC
 					for (size_t j = 0; j < uis.size(); j++)
 					{
 						const UserInput& ui = userInputs[uis[j]];
-						const InputEvent* ie = mApplication.getPlatform()->getSampleUserInput()->getInputEventSlow(inputEventId);
-						if(ie)
+						const char* eventName = sampleUserInput->translateInputEventIdToName(inputEventId);
+						if(eventName)
 						{
-							inputAsset->addMapping(ui.m_IdName, ie->m_Name);							
+							inputAsset->addMapping(ui.m_IdName, eventName);							
 						}
 					}
 					++it;
@@ -1416,6 +1616,10 @@ void PhysXSample::parseSampleOutputAsset(const char* sampleName,PxU32 userInputC
 
 void PhysXSample::prepareInputEventUserInputInfo(const char* sampleName,PxU32 &userInputCS, PxU32 &inputEventCS)
 {
+	SampleUserInput* sampleUserInput = mApplication.getPlatform()->getSampleUserInput();
+	if(!sampleUserInput)
+		return;
+
 	saveUserInputs();
 
 	std::vector<const InputEvent*> inputEvents;
@@ -1426,19 +1630,19 @@ void PhysXSample::prepareInputEventUserInputInfo(const char* sampleName,PxU32 &u
 		const InputEvent* ie = inputEvents[i];
 		inputEventCS += ie->m_Id;
 
-		const std::vector<size_t>* userInputs = mApplication.getPlatform()->getSampleUserInput()->getUserInputs(ie->m_Id);
+		const std::vector<size_t>* userInputs = sampleUserInput->getUserInputs(ie->m_Id);
 		if(userInputs)
 		{
 			for (size_t j = userInputs->size(); j--;)
 			{
-				const UserInput& ui = mApplication.getPlatform()->getSampleUserInput()->getUserInputList()[ (*userInputs)[j] ];
+				const UserInput& ui = sampleUserInput->getUserInputList()[ (*userInputs)[j] ];
 				userInputCS += (ui.m_Id + ie->m_Id);
 			}
 		}
 	}
 
-	inputEventCS = inputEventCS + ((PxU16)mApplication.getPlatform()->getSampleUserInput()->getInputEventList().size() << 16);
-	userInputCS = userInputCS + ((PxU16)mApplication.getPlatform()->getSampleUserInput()->getUserInputList().size() << 16);
+	inputEventCS = inputEventCS + ((PxU16)sampleUserInput->getInputEventList().size() << 16);
+	userInputCS = userInputCS + ((PxU16)sampleUserInput->getUserInputList().size() << 16);
 
 	saveInputEvents(inputEvents);
 
@@ -1465,6 +1669,10 @@ void PhysXSample::unregisterInputEvents()
 void PhysXSample::registerInputEvents(bool ignoreSaved)
 {
 	const char* sampleName = mApplication.mRunning->getName();
+
+	SampleUserInput* sampleUserInput = mApplication.getPlatform()->getSampleUserInput();
+	if(!sampleUserInput)
+		return;
 		
 	PxU32 inputEventCS = 0;
 	PxU32 userInputCS = 0;
@@ -1478,9 +1686,9 @@ void PhysXSample::registerInputEvents(bool ignoreSaved)
 		{
 			const SampleInputData& data = mSampleInputAsset->GetSampleInputData()[i];
 			size_t userInputIndex;
-			PxI32 userInputId = mApplication.getPlatform()->getSampleUserInput()->translateUserInputNameToId(data.m_UserInputName,userInputIndex);
+			PxI32 userInputId = sampleUserInput->translateUserInputNameToId(data.m_UserInputName,userInputIndex);
 			size_t inputEventIndex;
-			PxI32 inputEventId = mApplication.getPlatform()->getSampleUserInput()->translateInputEventNameToId(data.m_InputEventName, inputEventIndex);
+			PxI32 inputEventId = sampleUserInput->translateInputEventNameToId(data.m_InputEventName, inputEventIndex);
 			if(userInputId >= 0 && inputEventId >= 0)
 			{
 				SampleInputMapping mapping;
@@ -1499,11 +1707,11 @@ void PhysXSample::registerInputEvents(bool ignoreSaved)
 		for (size_t i = inputMappings.size(); i--;)
 		{
 			const SampleInputMapping& mapping = inputMappings[i];
-			mApplication.getPlatform()->getSampleUserInput()->registerInputEvent(mapping);
+			sampleUserInput->registerInputEvent(mapping);
 		}
 	}
 
-#if !defined(RENDERER_ANDROID) && !defined(RENDERER_IOS)
+#if !defined(RENDERER_TABLET)
 	if (!ignoreSaved)
 		parseSampleOutputAsset(sampleName, inputEventCS, userInputCS);
 #endif
@@ -1516,41 +1724,42 @@ void PhysXSample::onKeyDownEx(SampleFramework::SampleUserInput::KeyCode keyCode,
 void PhysXSample::collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents)
 {
 	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(SPAWN_DEBUG_OBJECT,				WKEY_1,			XKEY_1,			PS3KEY_1,		AKEY_UNKNOWN,	OSXKEY_1,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_1		);
-	DIGITAL_INPUT_EVENT_DEF(PAUSE_SAMPLE,					WKEY_P,			XKEY_P,			PS3KEY_P,		AKEY_UNKNOWN,	OSXKEY_P,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_P		);
-	DIGITAL_INPUT_EVENT_DEF(STEP_ONE_FRAME,					WKEY_O,			XKEY_O,			PS3KEY_O,		AKEY_UNKNOWN,	OSXKEY_O,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_O		);
-	DIGITAL_INPUT_EVENT_DEF(TOGGLE_VISUALIZATION,			WKEY_V,			XKEY_V,			PS3KEY_V,		AKEY_UNKNOWN,	OSXKEY_V,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_V		);
-	DIGITAL_INPUT_EVENT_DEF(DECREASE_DEBUG_RENDER_SCALE,	WKEY_F7,		XKEY_F7,		PS3KEY_F7,		AKEY_UNKNOWN,	OSXKEY_F7,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_F7		);
-	DIGITAL_INPUT_EVENT_DEF(INCREASE_DEBUG_RENDER_SCALE,	WKEY_F8,		XKEY_F8,		PS3KEY_F8,		AKEY_UNKNOWN,	OSXKEY_F8,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_F8		);
-	DIGITAL_INPUT_EVENT_DEF(HIDE_GRAPHICS,					WKEY_G,			XKEY_G,			PS3KEY_G,		AKEY_UNKNOWN,	OSXKEY_G,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_G		);
-	DIGITAL_INPUT_EVENT_DEF(WIREFRAME,						WKEY_N,			XKEY_N,			PS3KEY_N,		AKEY_UNKNOWN,	OSXKEY_N,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_N		);
-	DIGITAL_INPUT_EVENT_DEF(SWEPT_INTEGRATION,				WKEY_I,			XKEY_I,			PS3KEY_I,		AKEY_UNKNOWN,	OSXKEY_I,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_I		);
-	DIGITAL_INPUT_EVENT_DEF(TOGGLE_PVD_CONNECTION,			WKEY_F5,		XKEY_F5,		PS3KEY_F5,		AKEY_UNKNOWN,	OSXKEY_F5,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_F5		);
-	DIGITAL_INPUT_EVENT_DEF(SHOW_HELP,						WKEY_H,			XKEY_H,			PS3KEY_H,		AKEY_UNKNOWN,	OSXKEY_H,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_H		);
-	DIGITAL_INPUT_EVENT_DEF(SHOW_DESCRIPTION,				WKEY_F,			XKEY_F,			PS3KEY_F,		AKEY_UNKNOWN,	OSXKEY_F,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_F		);
-	DIGITAL_INPUT_EVENT_DEF(VARIABLE_TIMESTEP,				WKEY_T,			XKEY_T,			PS3KEY_T,		AKEY_UNKNOWN,	OSXKEY_T,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_T		);
-	DIGITAL_INPUT_EVENT_DEF(NEXT_PAGE,						WKEY_NEXT,		XKEY_UNKNOWN,	PS3KEY_NEXT,	AKEY_UNKNOWN,	OSXKEY_RIGHT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NEXT	);
-	DIGITAL_INPUT_EVENT_DEF(PREVIOUS_PAGE,					WKEY_PRIOR,		XKEY_UNKNOWN,	PS3KEY_PRIOR,	AKEY_UNKNOWN,	OSXKEY_LEFT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_PRIOR	);	
-	DIGITAL_INPUT_EVENT_DEF(PROFILE_ONLY_PVD,				WKEY_9,			XKEY_UNKNOWN,	PS3KEY_UNKNOWN,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(SPAWN_DEBUG_OBJECT,				WKEY_1,			XKEY_1,			X1KEY_1,		PS3KEY_1,		PS4KEY_1,		AKEY_UNKNOWN,	OSXKEY_1,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_1,			WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(PAUSE_SAMPLE,					WKEY_P,			XKEY_P,			X1KEY_P,		PS3KEY_P,		PS4KEY_P,		AKEY_UNKNOWN,	OSXKEY_P,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_P,			WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(STEP_ONE_FRAME,					WKEY_O,			XKEY_O,			X1KEY_O,		PS3KEY_O,		PS4KEY_O,		AKEY_UNKNOWN,	OSXKEY_O,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_O,			WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(TOGGLE_VISUALIZATION,			WKEY_V,			XKEY_V,			X1KEY_V,		PS3KEY_V,		PS4KEY_V,		AKEY_UNKNOWN,	OSXKEY_V,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_V,			WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(DECREASE_DEBUG_RENDER_SCALE,	WKEY_F7,		XKEY_F7,		X1KEY_F7,		PS3KEY_F7,		PS4KEY_F7,		AKEY_UNKNOWN,	OSXKEY_F7,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_F7,		WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(INCREASE_DEBUG_RENDER_SCALE,	WKEY_F8,		XKEY_F8,		X1KEY_F8,		PS3KEY_F8,		PS4KEY_F8,		AKEY_UNKNOWN,	OSXKEY_F8,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_F8,		WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(HIDE_GRAPHICS,					WKEY_G,			XKEY_G,			X1KEY_G,		PS3KEY_G,		PS4KEY_G,		AKEY_UNKNOWN,	OSXKEY_G,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_G,			WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(WIREFRAME,						WKEY_N,			XKEY_N,			X1KEY_N,		PS3KEY_N,		PS4KEY_N,		AKEY_UNKNOWN,	OSXKEY_N,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_N,			WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(TOGGLE_PVD_CONNECTION,			WKEY_F5,		XKEY_F5,		X1KEY_F5,		PS3KEY_F5,		PS4KEY_F5,		AKEY_UNKNOWN,	OSXKEY_F5,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_F5,		WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(SHOW_HELP,						WKEY_H,			XKEY_H,			X1KEY_H,		PS3KEY_H,		PS4KEY_H,		AKEY_UNKNOWN,	OSXKEY_H,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_H,			WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(SHOW_DESCRIPTION,				WKEY_F,			XKEY_F,			X1KEY_F,		PS3KEY_F,		PS4KEY_F,		AKEY_UNKNOWN,	OSXKEY_F,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_F,			WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(VARIABLE_TIMESTEP,				WKEY_T,			XKEY_T,			X1KEY_T,		PS3KEY_T,		PS4KEY_T,		AKEY_UNKNOWN,	OSXKEY_T,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_T,			WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(NEXT_PAGE,						WKEY_NEXT,		XKEY_UNKNOWN,	X1KEY_UNKNOWN,	PS3KEY_NEXT,	PS4KEY_NEXT,	AKEY_UNKNOWN,	OSXKEY_RIGHT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NEXT,		WIIUKEY_UNKNOWN		);
+	DIGITAL_INPUT_EVENT_DEF(PREVIOUS_PAGE,					WKEY_PRIOR,		XKEY_UNKNOWN,	X1KEY_UNKNOWN,	PS3KEY_PRIOR,	PS4KEY_PRIOR,	AKEY_UNKNOWN,	OSXKEY_LEFT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_PRIOR,		WIIUKEY_UNKNOWN		);	
+	DIGITAL_INPUT_EVENT_DEF(PROFILE_ONLY_PVD,				WKEY_9,			XKEY_UNKNOWN,	X1KEY_UNKNOWN,	PS3KEY_UNKNOWN,	PS4KEY_UNKNOWN,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	WIIUKEY_UNKNOWN		);
+	//DIGITAL_INPUT_EVENT_DEF(PAUSE_SAMPLE,					WKEY_P,			XKEY_UNKNOWN,	X1KEY_UNKNOWN,	PS3KEY_UNKNOWN,	PS4KEY_UNKNOWN,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
+	//DIGITAL_INPUT_EVENT_DEF(STEP_ONE_FRAME,				WKEY_O,			XKEY_UNKNOWN,	X1KEY_UNKNOWN,	PS3KEY_UNKNOWN,	PS4KEY_UNKNOWN,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
 
 	//digital gamepad events
-	DIGITAL_INPUT_EVENT_DEF(SHOW_HELP,						GAMEPAD_SELECT,	GAMEPAD_SELECT,	GAMEPAD_SELECT,	AKEY_UNKNOWN,	GAMEPAD_SELECT,	GAMEPAD_SELECT,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(SPAWN_DEBUG_OBJECT,				GAMEPAD_NORTH,	GAMEPAD_NORTH,	GAMEPAD_NORTH,	AKEY_UNKNOWN,	GAMEPAD_NORTH,	GAMEPAD_NORTH,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(SHOW_HELP,						GAMEPAD_SELECT,	GAMEPAD_SELECT,	GAMEPAD_SELECT,	GAMEPAD_SELECT,	GAMEPAD_SELECT,	AKEY_UNKNOWN,	GAMEPAD_SELECT,	GAMEPAD_SELECT,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_SELECT);
+	DIGITAL_INPUT_EVENT_DEF(SPAWN_DEBUG_OBJECT,				GAMEPAD_NORTH,	GAMEPAD_NORTH,	GAMEPAD_NORTH,	GAMEPAD_NORTH,	GAMEPAD_NORTH,	AKEY_UNKNOWN,	GAMEPAD_NORTH,	GAMEPAD_NORTH,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_NORTH);
 
 	//digital mouse events (are registered in the individual samples as needed)
 
     //touch events (reserve first 4 buttons for common use, individual samples start from 5)
-	TOUCH_INPUT_EVENT_DEF(PAUSE_SAMPLE,		"Pause",		ABUTTON_1,		IBUTTON_1);
-	TOUCH_INPUT_EVENT_DEF(STEP_ONE_FRAME,	"Single Step",	ABUTTON_2,		IBUTTON_2);
+	TOUCH_INPUT_EVENT_DEF(PAUSE_SAMPLE,		"Pause",		ABUTTON_1,		IBUTTON_1, TOUCH_BUTTON_1);
+	TOUCH_INPUT_EVENT_DEF(STEP_ONE_FRAME,	"Single Step",	ABUTTON_2,		IBUTTON_2, TOUCH_BUTTON_2);
 }
 
 void PhysXSample::onAnalogInputEvent(const SampleFramework::InputEvent& , float val)
 {
 }
 
-bool PhysXSample::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
+void PhysXSample::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
 {
-	if (!mScene) return true;
+	if (!mScene) return;
 
 	if (val)
 	{
@@ -1570,7 +1779,7 @@ bool PhysXSample::onDigitalInputEvent(const SampleFramework::InputEvent& ie, boo
 				}
 				break;
 			}
-			return false;
+			return;
 		}
 
 		switch (ie.m_Id)
@@ -1608,26 +1817,6 @@ bool PhysXSample::onDigitalInputEvent(const SampleFramework::InputEvent& ie, boo
 				mWireFrame = !mWireFrame;
 				break;
 			}
-		case SWEPT_INTEGRATION:
-			{
-				if(mScene)
-				{
-					PxScene& s = getActiveScene();
-					if (s.getFlags() & PxSceneFlag::eENABLE_SWEPT_INTEGRATION)
-					{
-						s.setFlag(PxSceneFlag::eENABLE_SWEPT_INTEGRATION, false);
-						updateSweepSettingForShapes();
-						printf("PxSceneFlag::eENABLE_SWEPT_INTEGRATION disabled.\n" );
-					}
-					else
-					{
-						s.setFlag(PxSceneFlag::eENABLE_SWEPT_INTEGRATION, true);
-						updateSweepSettingForShapes();
-						printf("PxSceneFlag::eENABLE_SWEPT_INTEGRATION enabled.\n" );
-					}
-				}
-				break;
-			}
 		case TOGGLE_PVD_CONNECTION:
 			{
 				togglePvdConnection();
@@ -1642,16 +1831,14 @@ bool PhysXSample::onDigitalInputEvent(const SampleFramework::InputEvent& ie, boo
 				if(mShowDescription) mShowHelp=false;
 			break;
 		case VARIABLE_TIMESTEP:
-			mUseFixedStepper = !mUseFixedStepper;
+			mStepperType = (mStepperType == VARIABLE_STEPPER) ? FIXED_STEPPER : VARIABLE_STEPPER;
+			//mUseFixedStepper = !mUseFixedStepper;
 			mFixedStepper.reset();
 			mVariableStepper.reset();		
 			break;
 		case DELETE_PICKED:
 			if(mPicked && mPicking)
 			{
-				//sschirm: this seems to be incomplete. RenderActors that are linked aren't take care 
-				//of all the time and we should have a callback for Samples and Tests that have references 
-				//to the actors.
 				PxActor* pickedActor = mPicking->letGo();
 				if(pickedActor)
 					pickedActor->release();
@@ -1671,10 +1858,10 @@ bool PhysXSample::onDigitalInputEvent(const SampleFramework::InputEvent& ie, boo
 			}
 			break;
 		case PROFILE_ONLY_PVD:
-			if (mUseFullPvdConnection && NULL != mPhysics->getPvdConnectionManager())
+			if (mPvdParams.useFullPvdConnection && NULL != mPhysics->getPvdConnectionManager())
 			{
 				mPhysics->getPvdConnectionManager()->disconnect();
-				mUseFullPvdConnection = false;
+				mPvdParams.useFullPvdConnection = false;
 				createPvdConnection();
 			}
 			break;
@@ -1685,7 +1872,7 @@ bool PhysXSample::onDigitalInputEvent(const SampleFramework::InputEvent& ie, boo
 	{
 		if (mShowExtendedHelp)
 		{
-			return false;
+			return;
 		}
 
 		if (ie.m_Id == PICKUP)
@@ -1697,12 +1884,30 @@ bool PhysXSample::onDigitalInputEvent(const SampleFramework::InputEvent& ie, boo
 			}
 		}
 	}
-	return true;
+}
+
+void PhysXSample::toggleFlyCamera()
+{
+	mIsFlyCamera = !mIsFlyCamera;
+	if (mIsFlyCamera)
+	{
+		mSavedCameraController = getCurrentCameraController();
+		mApplication.saveCameraState();
+		mFlyCameraController.init(getCamera().getViewMatrix());
+		mFlyCameraController.setMouseLookOnMouseButton(false);
+		mFlyCameraController.setMouseSensitivity(0.2f);
+		setCameraController(&mFlyCameraController);
+	}
+	else
+	{
+		mApplication.restoreCameraState();
+		setCameraController(mSavedCameraController);
+	}
 }
 
 void PhysXSample::togglePause()
 {
-	unregisterInputEvents();
+	//unregisterInputEvents();
 	mPause = !mPause;
 	if (mEnableAutoFlyCamera)
 	{
@@ -1719,7 +1924,7 @@ void PhysXSample::togglePause()
 			setCameraController(mSavedCameraController);
 		}
 	}
-	registerInputEvents(true);
+	//registerInputEvents(true);
 }
 
 void PhysXSample::showExtendedInputEventHelp(PxU32 x, PxU32 y)
@@ -1740,6 +1945,7 @@ void PhysXSample::showExtendedInputEventHelp(PxU32 x, PxU32 y)
 	PxU16 numIe = (height - y)/yInc - 8;
 
 	const std::vector<InputEvent> inputEventList = getApplication().getPlatform()->getSampleUserInput()->getInputEventList();
+	const std::vector<InputEventName> inputEventNameList = getApplication().getPlatform()->getSampleUserInput()->getInputEventNameList();
 
 	size_t maxHelpPage = inputEventList.size()/numIe;
 	if(maxHelpPage < mExtendedHelpPage)
@@ -1758,7 +1964,7 @@ void PhysXSample::showExtendedInputEventHelp(PxU32 x, PxU32 y)
 				continue;
 
 			strcpy(message,msg);
-			strcat(message,ie.m_Name);
+			strcat(message, inputEventNameList[i].m_Name);
 			renderer->print(x, y, message,								scale, shadowOffset, textColor);
 			y += yInc;
 
@@ -1784,7 +1990,7 @@ void PhysXSample::showExtendedInputEventHelp(PxU32 x, PxU32 y)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RenderBaseActor* PhysXSample::createRenderBoxFromShape(PxShape* shape, RenderMaterial* material, const PxReal* uvs)
+RenderBaseActor* PhysXSample::createRenderBoxFromShape(PxRigidActor* actor, PxShape* shape, RenderMaterial* material, const PxReal* uvs)
 {
 	RenderBaseActor* shapeRenderActor = NULL;
 	Renderer* renderer = getRenderer();
@@ -1800,7 +2006,7 @@ RenderBaseActor* PhysXSample::createRenderBoxFromShape(PxShape* shape, RenderMat
 			PxBoxGeometry geometry;
 			bool status = shape->getBoxGeometry(geometry);
 			PX_ASSERT(status);
-
+			PX_UNUSED(status);
 			// Create render object
 			shapeRenderActor = SAMPLE_NEW(RenderBoxActor)(*renderer, geometry.halfExtents, uvs);
 		}
@@ -1810,17 +2016,19 @@ RenderBaseActor* PhysXSample::createRenderBoxFromShape(PxShape* shape, RenderMat
 
 	if(shapeRenderActor)
 	{
-		link(shapeRenderActor, shape);
+		link(shapeRenderActor, shape, actor);
 		mRenderActors.push_back(shapeRenderActor);
 		shapeRenderActor->setRenderMaterial(material);
+		shapeRenderActor->setEnableCameraCull(true);
 	}
 	return shapeRenderActor;
 }
 
 
-RenderBaseActor* PhysXSample::createRenderObjectFromShape(PxShape* shape, RenderMaterial* material)
+RenderBaseActor* PhysXSample::createRenderObjectFromShape(PxRigidActor* actor, PxShape* shape, RenderMaterial* material)
 {
 	PX_ASSERT(getRenderer());
+
 	RenderBaseActor* shapeRenderActor = NULL;
 	Renderer& renderer = *getRenderer();
 
@@ -1832,7 +2040,7 @@ RenderBaseActor* PhysXSample::createRenderObjectFromShape(PxShape* shape, Render
 		shapeRenderActor = SAMPLE_NEW(RenderSphereActor)(renderer, geom.sphere().radius);
 		break;
 	case PxGeometryType::ePLANE:
-		shapeRenderActor = SAMPLE_NEW(RenderGridActor)(renderer, 50, 1.f, PxShapeExt::getGlobalPose(*shape).q);
+		shapeRenderActor = SAMPLE_NEW(RenderGridActor)(renderer, 50, 1.f, PxShapeExt::getGlobalPose(*shape, *actor).q);
 		break;
 	case PxGeometryType::eCAPSULE:
 		shapeRenderActor = SAMPLE_NEW(RenderCapsuleActor)(renderer, geom.capsule().radius, geom.capsule().halfHeight);
@@ -1846,6 +2054,7 @@ RenderBaseActor* PhysXSample::createRenderObjectFromShape(PxShape* shape, Render
 
 			// ### doesn't support scale
 			PxU32 nbVerts = convexMesh->getNbVertices();
+			PX_UNUSED(nbVerts);
 			const PxVec3* convexVerts = convexMesh->getVertices();
 			const PxU8* indexBuffer = convexMesh->getIndexBuffer();
 			PxU32 nbPolygons = convexMesh->getNbPolygons();
@@ -1857,6 +2066,7 @@ RenderBaseActor* PhysXSample::createRenderObjectFromShape(PxShape* shape, Render
 				PxHullPolygon data;
 				bool status = convexMesh->getPolygonData(i, data);
 				PX_ASSERT(status);
+				PX_UNUSED(status);
 				totalNbVerts += data.mNbVerts;
 				totalNbTris += data.mNbVerts - 2;
 			}
@@ -1876,6 +2086,7 @@ RenderBaseActor* PhysXSample::createRenderObjectFromShape(PxShape* shape, Render
 				PxHullPolygon face;
 				bool status = convexMesh->getPolygonData(i, face);
 				PX_ASSERT(status);
+				PX_UNUSED(status);
 	
 				const PxU8* faceIndices = indexBuffer+face.mIndexBase;
 				for(PxU32 j=0;j<face.mNbVerts;j++)
@@ -1922,7 +2133,7 @@ RenderBaseActor* PhysXSample::createRenderObjectFromShape(PxShape* shape, Render
 			}
 
 			PX_ASSERT(offset==totalNbVerts);
-			shapeRenderActor = SAMPLE_NEW(RenderMeshActor)(renderer, vertices, totalNbVerts, normals, UVs, faces, totalNbTris);
+			shapeRenderActor = SAMPLE_NEW(RenderMeshActor)(renderer, vertices, totalNbVerts, normals, UVs, faces, NULL, totalNbTris);
 			shapeRenderActor->setMeshScale(geom.convexMesh().scale);
 
 			SAMPLE_FREE(faces);
@@ -1940,10 +2151,10 @@ RenderBaseActor* PhysXSample::createRenderObjectFromShape(PxShape* shape, Render
 			const PxVec3* verts = tm->getVertices();
 			const PxU32 nbTris = tm->getNbTriangles();
 			const void* tris = tm->getTriangles();
-			const bool has16bitIndices = tm->has16BitTriangleIndices();
-			PX_ASSERT(has16bitIndices);
-
-			shapeRenderActor = SAMPLE_NEW(RenderMeshActor)(renderer, verts, nbVerts, NULL, NULL, (const PxU16*)tris, nbTris, true);			
+			const bool has16bitIndices = tm->getTriangleMeshFlags() & PxTriangleMeshFlag::eHAS_16BIT_TRIANGLE_INDICES ? true : false;
+			const PxU16* faces16 = has16bitIndices ? (const PxU16*)tris : NULL;
+			const PxU32* faces32 = has16bitIndices ? NULL : (const PxU32*)tris;
+			shapeRenderActor = SAMPLE_NEW(RenderMeshActor)(renderer, verts, nbVerts, NULL, NULL, faces16, faces32, nbTris, true);			
 			shapeRenderActor->setMeshScale(geom.triangleMesh().scale);
 
 			if (!material)
@@ -2016,7 +2227,7 @@ RenderBaseActor* PhysXSample::createRenderObjectFromShape(PxShape* shape, Render
 				indices_16bit[i*3+2] = indices[i*3+1];
 			}
 		
-			shapeRenderActor = SAMPLE_NEW(RenderMeshActor)(renderer, vertexes, nbVerts, NULL, NULL, indices_16bit, nbFaces);
+			shapeRenderActor = SAMPLE_NEW(RenderMeshActor)(renderer, vertexes, nbVerts, NULL, NULL, indices_16bit, NULL, nbFaces);
 			SAMPLE_FREE(indices_16bit);
 			SAMPLE_FREE(indices);
 			DELETEARRAY(sampleBuffer);
@@ -2031,14 +2242,15 @@ RenderBaseActor* PhysXSample::createRenderObjectFromShape(PxShape* shape, Render
 
 	if(shapeRenderActor)
 	{
-		link(shapeRenderActor, shape);
+		link(shapeRenderActor, shape, actor);
 		mRenderActors.push_back(shapeRenderActor);
 		shapeRenderActor->setRenderMaterial(material);
+		shapeRenderActor->setEnableCameraCull(true);
 	}
 	return shapeRenderActor;
 }
 
-void PhysXSample::updateRenderObjectsFromRigidActor(PxRigidActor& actor)
+void PhysXSample::updateRenderObjectsFromRigidActor(PxRigidActor& actor, RenderMaterial* mat)
 {
 	PxU32 nbShapes = actor.getNbShapes();
 	if(nbShapes > 0)
@@ -2051,29 +2263,34 @@ void PhysXSample::updateRenderObjectsFromRigidActor(PxRigidActor& actor)
 
 		for(PxU32 i = 0; i < nbShapes; ++i)
 		{
-			RenderBaseActor* renderActor = reinterpret_cast<RenderBaseActor*>(shapes[i]->userData);
+			RenderBaseActor* renderActor = getRenderActor(&actor, shapes[i]);
 			if(renderActor != NULL)
+			{
 				renderActor->mActive = true;
+				if (mat != NULL)
+					renderActor->setRenderMaterial(mat);
+			}
 			else 
-				createRenderObjectFromShape(shapes[i]);
+				createRenderObjectFromShape(&actor, shapes[i], mat);
 		}
 
 		if(nbShapes > nbShapesOnStack)
 			delete[] shapes;
 	}
 }
+
 void PhysXSample::createRenderObjectsFromScene()
 {
 	PxScene& scene = getActiveScene();
 
-	PxActorTypeSelectionFlags types = PxActorTypeSelectionFlag::eRIGID_STATIC | PxActorTypeSelectionFlag::eRIGID_DYNAMIC;
+	PxActorTypeFlags types = PxActorTypeFlag::eRIGID_STATIC | PxActorTypeFlag::eRIGID_DYNAMIC;
 
 #if PX_USE_PARTICLE_SYSTEM_API
-	types |= PxActorTypeSelectionFlag::ePARTICLE_SYSTEM | PxActorTypeSelectionFlag::ePARTICLE_FLUID;
+	types |= PxActorTypeFlag::ePARTICLE_SYSTEM | PxActorTypeFlag::ePARTICLE_FLUID;
 #endif
 
 #if PX_USE_CLOTH_API
-	types |= PxActorTypeSelectionFlag::eCLOTH;
+	types |= PxActorTypeFlag::eCLOTH;
 #endif
 
 		PxU32 nbActors = scene.getNbActors(types);
@@ -2140,9 +2357,10 @@ void PhysXSample::createRenderObjectsFromActor(PxRigidActor* rigidActor, RenderM
 	PxShape** shapes = (PxShape**)SAMPLE_ALLOC(sizeof(PxShape*)*nbShapes);
 	PxU32 nb = rigidActor->getShapes(shapes, nbShapes);
 	PX_ASSERT(nb==nbShapes);
+	PX_UNUSED(nb);
 	for(PxU32 i=0;i<nbShapes;i++)
 	{
-		createRenderObjectFromShape(shapes[i], material);
+		createRenderObjectFromShape(rigidActor, shapes[i], material);
 	}
 	SAMPLE_FREE(shapes);
 }
@@ -2171,11 +2389,38 @@ void PhysXSample::updateRenderObjectsDebug(float dtime)
 			}
 		}
 #endif
+#ifdef VISUALIZE_PICKING_TRIANGLES
+		if(mPicking && mPicking->pickedTriangleIsValid())
+		{
+			PxTriangle touchedTri = mPicking->getPickedTriangle();
+			RendererColor color(255, 255, 255);
+			debugRenderer->addLine(touchedTri.verts[0], touchedTri.verts[1], color);
+			debugRenderer->addLine(touchedTri.verts[1], touchedTri.verts[2], color);
+			debugRenderer->addLine(touchedTri.verts[2], touchedTri.verts[0], color);
+			for(PxU32 i=0;i<3;i++)
+			{
+				if(mPicking->pickedTriangleAdjacentIsValid(i))
+				{
+					touchedTri = mPicking->getPickedTriangleAdjacent(i);
+					if(i==0)
+						color = RendererColor(255, 0, 0);
+					else if(i==1)
+						color = RendererColor(0, 255, 0);
+					else if(i==2)
+						color = RendererColor(0, 0, 255);
+					debugRenderer->addLine(touchedTri.verts[0], touchedTri.verts[1], color);
+					debugRenderer->addLine(touchedTri.verts[1], touchedTri.verts[2], color);
+					debugRenderer->addLine(touchedTri.verts[2], touchedTri.verts[0], color);
+				}
+			}
+		}
+#endif
 	}
 }
 
 void PhysXSample::initRenderObjects()
 {
+	PxSceneWriteLock scopedLock(*mScene);
 	for (PxU32 i = 0; i < mRenderActors.size(); ++i)
 	{
 		mRenderActors[i]->update(0.0f);
@@ -2184,23 +2429,61 @@ void PhysXSample::initRenderObjects()
 
 void PhysXSample::updateRenderObjectsSync(float dtime)
 {
+	PxSceneWriteLock scopedLock(*mScene);
 #if PX_USE_CLOTH_API
+
+#if defined(RENDERER_ENABLE_CUDA_INTEROP)
+
+	// map interop resources
+	shdfnd::Array<RendererClothShape*> shapes;
+
+	if (mCudaContextManager)
+	{		
+		for(PxU32 i = 0; i < mRenderClothActors.size(); ++i)
+		{
+			if (mRenderClothActors[i]->getCloth()->getClothFlags()&PxClothFlag::eGPU && 
+				mRenderClothActors[i]->getRenderClothShape()->isInteropEnabled())
+			{
+				shapes.pushBack(mRenderClothActors[i]->getRenderClothShape());
+			}
+		}	
+
+		if (shapes.size())
+		{
+			mCudaContextManager->acquireContext();
+			RendererClothShape::mapShapes(&shapes[0], shapes.size());
+		}
+	}
+#endif // RENDERER_ENABLE_CUDA_INTEROP
+
+	// update shapes
 	for(PxU32 i = 0; i < mRenderClothActors.size(); ++i)
 		mRenderClothActors[i]->update(dtime);
-#endif
+
+#if defined(RENDERER_ENABLE_CUDA_INTEROP)
+
+	// unmap interop resources
+	if (mCudaContextManager && shapes.size())
+	{
+		RendererClothShape::unmapShapes(&shapes[0], shapes.size());
+		mCudaContextManager->releaseContext();
+	}
+
+#endif // RENDERER_ENABLE_CUDA_INTEROP
+
+#endif // PX_USE_CLOTH_API
 
 #if PX_USE_PARTICLE_SYSTEM_API
 	for(PxU32 i = 0; i < mRenderParticleSystemActors.size(); ++i)
 		mRenderParticleSystemActors[i]->update(dtime);
-#endif
+#endif // PX_USE_PARTICLE_SYSTEM_API
 }
 
 void PhysXSample::updateRenderObjectsAsync(float dtime)
 {
 	if(mActiveTransformCount)
 	{
-		void* cct = (void*)PX_MAKE_FOURCC('C','C','T','S'); // Mark as a "CCT Shape"
-		
+		PxSceneWriteLock scopedLock(*mScene);
 		PxU32 nbActiveTransforms = mActiveTransformCount;
 		PxActiveTransform* currentTransform = mBufferedActiveTransforms;
 		while(nbActiveTransforms--)
@@ -2231,12 +2514,10 @@ void PhysXSample::updateRenderObjectsAsync(float dtime)
 					PxShape* shape;
 					PxU32 n = rigidActor->getShapes(&shape, 1, i);
 					PX_ASSERT(n==1);
-
-					if(shape->userData && shape->userData != cct)
-					{
-						RenderBaseActor* renderActor = reinterpret_cast<RenderBaseActor*>(shape->userData);
+					PX_UNUSED(n);
+					RenderBaseActor* renderActor = getRenderActor(rigidActor, shape);
+					if (NULL != renderActor)
 						renderActor->update(dtime);
-					}
 				}
 			}
 		}
@@ -2247,6 +2528,7 @@ void PhysXSample::updateRenderObjectsAsync(float dtime)
 
 void PhysXSample::bufferActiveTransforms()
 {
+	PxSceneReadLock scopedLock(*mScene);
 	// buffer active transforms to perform render object update parallel to simulation
 
 	const PxActiveTransform* activeTransforms = mScene->getActiveTransforms(mActiveTransformCount);
@@ -2257,39 +2539,25 @@ void PhysXSample::bufferActiveTransforms()
 		mBufferedActiveTransforms = (PxActiveTransform*)SAMPLE_ALLOC(sizeof(PxActiveTransform) * mActiveTransformCapacity);
 	}
 	if(mActiveTransformCount)
-		Ps::memCopy(mBufferedActiveTransforms, activeTransforms, sizeof(PxActiveTransform) * mActiveTransformCount);
+		PxMemCopy(mBufferedActiveTransforms, activeTransforms, sizeof(PxActiveTransform) * mActiveTransformCount);
+
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 #if PX_USE_CLOTH_API
 
 PxCloth* PhysXSample::createClothFromMeshDesc(
-	PxClothMeshDesc& meshDesc, const PxTransform& pose, PxClothCollisionData* collData, const PxVec3& gravityDir, const PxReal* uv, const char* textureFile, const PxVec3& color, PxReal scale)
+	const PxClothMeshDesc& meshDesc, const PxTransform& pose, const PxVec3& gravityDir, const PxVec2* uv, const char* textureFile, PxReal scale)
 {
-	PxClothFabric* clothFabric = Test::ClothHelpers::createFabric(getPhysics(), getCooking(), meshDesc, gravityDir);
-	if (!clothFabric)
-		return 0;
-
-	// create cloth particle to set initial position and inverse mass (constraint)
-	SampleArray<PxClothParticle> clothParticles(meshDesc.points.count);
-	Test::ClothHelpers::createDefaultParticles(meshDesc, clothParticles.begin());
-
-	// flags to set GPU solver, CCD, etc.
-	PxClothFlags flags;
+	PxClothFabric* clothFabric = PxClothFabricCreate(getPhysics(), meshDesc, gravityDir);
+	PX_ASSERT(meshDesc.points.stride == sizeof(PxVec4));
 
 	// create the cloth actor
-	PxCloth* cloth;	
-	if (collData)
-		cloth = getPhysics().createCloth( pose, *clothFabric, &clothParticles[0], *collData, flags);
-	else
-	{
-		PxClothCollisionData collisionData;
-		cloth = getPhysics().createCloth( pose, *clothFabric, &clothParticles[0], collisionData, flags);
-	}
+	const PxClothParticle* particles = (const PxClothParticle*)meshDesc.points.data;
+	PxCloth* cloth = getPhysics().createCloth( pose, *clothFabric, particles, PxClothFlags());
+	PX_ASSERT(cloth);	
 
 	cloth->setSolverFrequency(60.0f); // don't know how to get target simulation frequency, just hardcode for now
-
-	PX_ASSERT(cloth);	
 
 	// add this cloth into the scene
 	getActiveScene().addActor(*cloth);
@@ -2298,7 +2566,7 @@ PxCloth* PhysXSample::createClothFromMeshDesc(
 	RenderMaterial* clothMaterial = createRenderMaterialFromTextureFile(textureFile);
 
 	// create the render object in sample framework
-	createRenderObjectsFromCloth(*cloth, meshDesc, clothMaterial, uv, true, color, scale);
+	createRenderObjectsFromCloth(*cloth, meshDesc, clothMaterial, uv, true, scale);
 
 	return cloth;
 }
@@ -2306,33 +2574,32 @@ PxCloth* PhysXSample::createClothFromMeshDesc(
 ///////////////////////////////////////////////////////////////////////////////
 // create cloth from obj file
 PxCloth* PhysXSample::createClothFromObj(
-	const char* objFileName, const PxTransform& pose, PxClothCollisionData* collData, const char* textureFile)
+	const char* objFileName, const PxTransform& pose, const char* textureFile)
 {
 	// create a mesh grid
-	PxClothMeshDesc meshDesc;
-	SampleArray<PxVec3> vertices;
+	SampleArray<PxVec4> vertices;
 	SampleArray<PxU32> primitives;
-	SampleArray<PxReal> textures;
-	Test::ClothHelpers::createMeshFromObj(objFileName, 1.0f, NULL, NULL, vertices, primitives, &textures, meshDesc);
+	SampleArray<PxVec2> uvs;
+	PxClothMeshDesc meshDesc = Test::ClothHelpers::createMeshFromObj(objFileName, 1.0f, 
+		PxQuat(PxIdentity), PxVec3(0.0f), vertices, primitives, uvs);
 
-	return createClothFromMeshDesc(meshDesc, pose, collData, PxVec3(0,0,-1), textures.begin(), textureFile);
+	return createClothFromMeshDesc(meshDesc, pose, PxVec3(0,0,-1), uvs.begin(), textureFile);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // create cloth grid in XZ plane
 PxCloth* PhysXSample::createGridCloth(
     PxReal sizeX, PxReal sizeZ, PxU32 numX, PxU32 numZ,
-	const PxTransform& pose, PxClothCollisionData* collData,
-	const char* textureFile)
+	const PxTransform& pose, const char* textureFile)
 {
 	// create a mesh grid
-	PxClothMeshDesc meshDesc;
-	SampleArray<PxVec3> vertices;
+	SampleArray<PxVec4> vertices;
 	SampleArray<PxU32> primitives;
-	SampleArray<PxReal> uvs;
-	Test::ClothHelpers::createMeshGrid(sizeX, sizeZ, numX, numZ, vertices, primitives, uvs, meshDesc);
+	SampleArray<PxVec2> uvs;
+	PxClothMeshDesc meshDesc = Test::ClothHelpers::createMeshGrid(PxVec3(sizeX, 0, 0), 
+		PxVec3(0, 0, sizeZ), numX, numZ, vertices, primitives, uvs);
 
-	return createClothFromMeshDesc(meshDesc, pose, collData, PxVec3(0,0,-1), uvs.begin(), textureFile);
+	return createClothFromMeshDesc(meshDesc, pose, PxVec3(0,0,-1), uvs.begin(), textureFile);
 }
 
 #endif // PX_USE_CLOTH_API
@@ -2356,27 +2623,29 @@ RenderMaterial* PhysXSample::createRenderMaterialFromTextureFile(const char* fil
 ///////////////////////////////////////////////////////////////////////////////
 #if PX_USE_CLOTH_API
 
-void PhysXSample::createRenderObjectsFromCloth(const PxCloth& cloth, const PxClothMeshDesc& meshDesc, RenderMaterial* material, const PxReal* uv, bool enableDebugRender, const PxVec3& color, PxReal scale)
+void PhysXSample::createRenderObjectsFromCloth(const PxCloth& cloth, const PxClothMeshDesc& meshDesc, RenderMaterial* material, const PxVec2* uv, bool enableDebugRender, PxReal scale)
 {
-    RenderClothActor* clothActor = SAMPLE_NEW (RenderClothActor)(*getRenderer(), cloth, meshDesc,uv, color, scale );
+    RenderClothActor* clothActor = SAMPLE_NEW (RenderClothActor)
+		(*getRenderer(), cloth, meshDesc,uv, scale );
 	if(!clothActor)
 		return;
 
     if (material)
         clothActor->setRenderMaterial(material);
 
-	clothActor->setEnableDebugRender(enableDebugRender);
-
 	mRenderClothActors.push_back(clothActor);
 	mRenderActors.push_back(clothActor);
-	
-	const RenderClothActor::CollisionActorArray& spheres = clothActor->getSphereActors();
-	for (PxU32 i=0; i < spheres.size(); ++i)
-		mRenderActors.push_back(spheres[i]);
+}
 
-	const RenderClothActor::CollisionActorArray& capsules = clothActor->getCapsuleActors();
-	for (PxU32 i=0; i < capsules.size(); ++i)
-		mRenderActors.push_back(capsules[i]);
+void PhysXSample::removeRenderClothActor(RenderClothActor& renderActor)
+{
+	std::vector<RenderBaseActor*>::iterator baseActorIter = std::find(mRenderActors.begin(), mRenderActors.end(), (RenderBaseActor*)(&renderActor));
+	if(baseActorIter != mRenderActors.end())
+		mRenderActors.erase(baseActorIter);
+
+	std::vector<RenderClothActor*>::iterator clothActorIter = std::find(mRenderClothActors.begin(), mRenderClothActors.end(), &renderActor);
+	if(clothActorIter != mRenderClothActors.end())
+		mRenderClothActors.erase(clothActorIter);
 }
 
 #endif // PX_USE_CLOTH_API
@@ -2385,6 +2654,7 @@ void PhysXSample::createRenderObjectsFromCloth(const PxCloth& cloth, const PxClo
 
 PxRigidActor* PhysXSample::createGrid(RenderMaterial* material)
 {
+	PxSceneWriteLock scopedLock(*mScene);
 	Renderer* renderer = getRenderer();
 	PX_ASSERT(renderer);
 
@@ -2398,8 +2668,8 @@ PxRigidActor* PhysXSample::createGrid(RenderMaterial* material)
 	plane->getShapes(&shape, 1);
 
 	RenderGridActor* actor = SAMPLE_NEW(RenderGridActor)(*renderer, 20, 10.0f);
-	link(actor, shape);
-	actor->setTransform(PxTransform::createIdentity());
+	link(actor, shape, plane);
+	actor->setTransform(PxTransform(PxIdentity));
 	mRenderActors.push_back(actor);
 	actor->setRenderMaterial(material);
 	return plane;
@@ -2409,6 +2679,7 @@ PxRigidActor* PhysXSample::createGrid(RenderMaterial* material)
 
 void PhysXSample::spawnDebugObject()
 {
+	PxSceneWriteLock scopedLock(*mScene);
 	PxU32 types = getDebugObjectTypes();
 
 	if (!types)
@@ -2425,6 +2696,7 @@ void PhysXSample::spawnDebugObject()
 	const PxVec3 vel = getCamera().getViewDir() * getDebugObjectsVelocity();
 
 	PxRigidDynamic* actor = NULL;
+
 	switch (mDebugObjectType)
 	{
 	case DEBUG_OBJECT_SPHERE:
@@ -2457,15 +2729,13 @@ void PhysXSample::spawnDebugObject()
 
 PxRigidDynamic* PhysXSample::createBox(const PxVec3& pos, const PxVec3& dims, const PxVec3* linVel, RenderMaterial* material, PxReal density)
 {
-	Renderer* renderer = getRenderer();
-	PX_ASSERT(renderer);
-
+	PxSceneWriteLock scopedLock(*mScene);
 	PxRigidDynamic* box = PxCreateDynamic(*mPhysics, PxTransform(pos), PxBoxGeometry(dims), *mMaterial, density);
 	PX_ASSERT(box);
 
 	SetupDefaultRigidDynamic(*box);
 	mScene->addActor(*box);
-	mPhysicsActors.push_back(box);
+	addPhysicsActors(box);
 
 	if(linVel)
 		box->setLinearVelocity(*linVel);
@@ -2479,15 +2749,13 @@ PxRigidDynamic* PhysXSample::createBox(const PxVec3& pos, const PxVec3& dims, co
 
 PxRigidDynamic* PhysXSample::createSphere(const PxVec3& pos, PxReal radius, const PxVec3* linVel, RenderMaterial* material, PxReal density)
 {
-	Renderer* renderer = getRenderer();
-	PX_ASSERT(renderer);
-	
+	PxSceneWriteLock scopedLock(*mScene);
 	PxRigidDynamic* sphere = PxCreateDynamic(*mPhysics, PxTransform(pos), PxSphereGeometry(radius), *mMaterial, density);
 	PX_ASSERT(sphere);
 
 	SetupDefaultRigidDynamic(*sphere);
 	mScene->addActor(*sphere);
-	mPhysicsActors.push_back(sphere);
+	addPhysicsActors(sphere);
 
 	if(linVel)
 		sphere->setLinearVelocity(*linVel);
@@ -2501,17 +2769,16 @@ PxRigidDynamic* PhysXSample::createSphere(const PxVec3& pos, PxReal radius, cons
 
 PxRigidDynamic* PhysXSample::createCapsule(const PxVec3& pos, PxReal radius, PxReal halfHeight, const PxVec3* linVel, RenderMaterial* material, PxReal density)
 {
-	Renderer* renderer = getRenderer();
-	PX_ASSERT(renderer);
-
-	const PxQuat rot = PxQuat::createIdentity();
+	PxSceneWriteLock scopedLock(*mScene);
+	const PxQuat rot = PxQuat(PxIdentity);
+	PX_UNUSED(rot);
 
 	PxRigidDynamic* capsule = PxCreateDynamic(*mPhysics, PxTransform(pos), PxCapsuleGeometry(radius, halfHeight), *mMaterial, density);
 	PX_ASSERT(capsule);
 
 	SetupDefaultRigidDynamic(*capsule);
 	mScene->addActor(*capsule);
-	mPhysicsActors.push_back(capsule);
+	addPhysicsActors(capsule);
 
 	if(linVel)
 		capsule->setLinearVelocity(*linVel);
@@ -2525,9 +2792,7 @@ PxRigidDynamic* PhysXSample::createCapsule(const PxVec3& pos, PxReal radius, PxR
 
 PxRigidDynamic* PhysXSample::createConvex(const PxVec3& pos, const PxVec3* linVel, RenderMaterial* material, PxReal density)
 {
-	Renderer* renderer = getRenderer();
-	PX_ASSERT(renderer);
-
+	PxSceneWriteLock scopedLock(*mScene);
 	PxConvexMesh* convexMesh = GenerateConvex(*mPhysics, *mCooking, getDebugConvexObjectScale(), false, true);
 	PX_ASSERT(convexMesh);
 
@@ -2536,7 +2801,7 @@ PxRigidDynamic* PhysXSample::createConvex(const PxVec3& pos, const PxVec3* linVe
 
 	SetupDefaultRigidDynamic(*convex);
 	mScene->addActor(*convex);
-	mPhysicsActors.push_back(convex);
+	addPhysicsActors(convex);
 
 	if(linVel)
 		convex->setLinearVelocity(*linVel);
@@ -2550,11 +2815,10 @@ PxRigidDynamic* PhysXSample::createConvex(const PxVec3& pos, const PxVec3* linVe
 
 PxRigidDynamic* PhysXSample::createCompound(const PxVec3& pos, const std::vector<PxTransform>& localPoses, const std::vector<const PxGeometry*>& geometries, const PxVec3* linVel, RenderMaterial* material, PxReal density)
 {
-	Renderer* renderer = getRenderer();
-	PX_ASSERT(renderer);
+	PxSceneWriteLock scopedLock(*mScene);
+	PxRigidDynamic* compound = GenerateCompound(*mPhysics, mScene, mMaterial, pos, PxQuat(PxIdentity), localPoses, geometries, false, density);
 
-	PxRigidDynamic* compound = GenerateCompound(*mPhysics, mScene, mMaterial, pos, PxQuat::createIdentity(), localPoses, geometries, false, density);
-	mPhysicsActors.push_back(compound);
+	addPhysicsActors(compound);
 	if(linVel)
 		compound->setLinearVelocity(*linVel);
 
@@ -2565,16 +2829,17 @@ PxRigidDynamic* PhysXSample::createCompound(const PxVec3& pos, const std::vector
 
 PxRigidDynamic* PhysXSample::createTestCompound(const PxVec3& pos, PxU32 nbBoxes, float boxSize, float amplitude, const PxVec3* vel, RenderMaterial* material, PxReal density, bool makeSureVolumeEmpty)
 {
+	PxSceneWriteLock scopedLock(*mScene);
 	if (makeSureVolumeEmpty)
 	{
 		// Kai: a little bigger than amplitude + boxSize * sqrt(3)
 		PxSphereGeometry geometry(amplitude + boxSize + boxSize);
 		PxTransform pose(pos);
-		PxShape* hit = NULL;
-		PxI32 retVal = getActiveScene().overlapMultiple(geometry, pose,&hit,1);
-		if (retVal != 0)
-		{
-//			printf("desination volume is not empty!!!\n");
+		PxOverlapBuffer buf;
+		getActiveScene().overlap(geometry, pose, buf,
+			PxQueryFilterData(PxQueryFlag::eANY_HIT|PxQueryFlag::eSTATIC|PxQueryFlag::eDYNAMIC));
+		if (buf.hasBlock) {
+//			shdfnd::printFormatted("desination volume is not empty!!!\n");
 			return NULL;
 		}
 	}
@@ -2613,17 +2878,20 @@ struct FindRenderActor
 	PxShape* mPxShape;
 };
 
-void PhysXSample::removeRenderObject(RenderBaseActor* renderAcotr)
+void PhysXSample::removeRenderObject(RenderBaseActor* renderActor)
 {
-		std::vector<RenderBaseActor*>::iterator renderIter = std::find(mRenderActors.begin(), mRenderActors.end(), renderAcotr);
-		if(renderIter != mRenderActors.end())
-		{
-			mDeletedRenderActors.push_back((*renderIter));
-			mRenderActors.erase(renderIter);
-		}
+	std::vector<RenderBaseActor*>::iterator renderIter = std::find(mRenderActors.begin(), mRenderActors.end(), renderActor);
+	if(renderIter != mRenderActors.end())
+	{
+		// ######### PT: TODO: unlink call missing here!!!
+		mDeletedRenderActors.push_back((*renderIter));
+		mRenderActors.erase(renderIter);
+	}
 }
 
-void PhysXSample::removeActor(PxRigidActor* actor)
+//////////////////////////////////////////////////////////////////////////
+
+void PhysXSample::removeRenderActorsFromPhysicsActor(const PxRigidActor* actor)
 {
 	const PxU32 numShapes = actor->getNbShapes();
 	PxShape** shapes = (PxShape**)SAMPLE_ALLOC(sizeof(PxShape*)*numShapes);
@@ -2634,7 +2902,8 @@ void PhysXSample::removeActor(PxRigidActor* actor)
 		FindRenderActor findRenderActor(shape);
 		std::vector<RenderBaseActor*>::iterator renderIter = std::find_if(mRenderActors.begin(), mRenderActors.end(), findRenderActor);
 		if(renderIter != mRenderActors.end())
-		{			
+		{
+			unlink((*renderIter), shape, const_cast<PxRigidActor*>(actor));
 			mDeletedRenderActors.push_back((*renderIter));
 			mRenderActors.erase(renderIter);
 		}
@@ -2652,8 +2921,17 @@ void PhysXSample::removeActor(PxRigidActor* actor)
 				break;
 			}
 		}
-		mDeletedActors.push_back(actor);
+		mDeletedActors.push_back(const_cast<PxRigidActor*>(actor));
 	}
+
+	SAMPLE_FREE(shapes);
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+void PhysXSample::removeActor(PxRigidActor* actor)
+{
+	removeRenderActorsFromPhysicsActor(actor);
 
 	std::vector<PxRigidActor*>::iterator actorIter = std::find(mPhysicsActors.begin(), mPhysicsActors.end(), actor);
 	if(actorIter != mPhysicsActors.end())
@@ -2661,7 +2939,6 @@ void PhysXSample::removeActor(PxRigidActor* actor)
 		mPhysicsActors.erase(actorIter);
 		actor->release();
 	}
-	SAMPLE_FREE(shapes);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2703,9 +2980,9 @@ void PhysXSample::importRAWFile(const char* relativePath, PxReal scale, bool rec
 
 #if PX_USE_PARTICLE_SYSTEM_API
 
-RenderParticleSystemActor* PhysXSample::createRenderObjectFromParticleSystem(ParticleSystem& ps, RenderMaterial* material)
+RenderParticleSystemActor* PhysXSample::createRenderObjectFromParticleSystem(ParticleSystem& ps, RenderMaterial* material, bool useMeshInstancing, bool useFading, PxReal fadingPeriod, PxReal instancingScale)
 {
-	RenderParticleSystemActor* renderActor = SAMPLE_NEW(RenderParticleSystemActor)(*getRenderer(), &ps, false, true);
+	RenderParticleSystemActor* renderActor = SAMPLE_NEW(RenderParticleSystemActor)(*getRenderer(), &ps, useMeshInstancing, useFading, fadingPeriod, instancingScale);
 	if(material) renderActor->setRenderMaterial(material);
 
 	mRenderActors.push_back(renderActor);
@@ -2729,6 +3006,16 @@ void PhysXSample::removeRenderParticleSystemActor(RenderParticleSystemActor& ren
 	if(psActorIter != mRenderParticleSystemActors.end())
 		mRenderParticleSystemActors.erase(psActorIter);
 }
+
+void PhysXSample::project(const PxVec3& v, int& x, int& y, float& depth)
+{
+	mPicking->project(v, x, y, depth);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+#if PX_USE_CLOTH_API
+#endif // PX_USE_CLOTH_API
+
 
 #endif // PX_USE_PARTICLE_SYSTEM_API
 

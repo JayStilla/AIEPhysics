@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -33,13 +33,21 @@
 
 #include "ExtJoint.h"
 #include "PxSphericalJoint.h"
+#include "CmUtils.h"
 
 namespace physx
 {
+struct PxSphericalJointGeneratedValues;
 namespace Ext
 {
 	struct SphericalJointData: public JointData
 	{
+	//= ATTENTION! =====================================================================================
+	// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+	// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+	// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+	// accordingly.
+	//==================================================================================================
 		PxJointLimitCone		limit;
 		PxReal					tanQYLimit;
 		PxReal					tanQZLimit;
@@ -48,47 +56,51 @@ namespace Ext
 		PxReal					projectionLinearTolerance;
 
 		PxSphericalJointFlags	jointFlags;
-		EXPLICIT_PADDING(	PxU16					paddingFromFlags);
 		// forestall compiler complaints about not being able to generate a constructor
 	private:
 		SphericalJointData(const PxJointLimitCone &cone):
 			limit(cone) {}
 	};
-
-typedef Joint<PxSphericalJoint, PxJointType::eSPHERICAL> SphericalJointT;
-
+    
+    typedef Joint<PxSphericalJoint, PxSphericalJointGeneratedValues> SphericalJointT;
+   
 	class SphericalJoint : public SphericalJointT
 	{
+	//= ATTENTION! =====================================================================================
+	// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+	// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+	// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+	// accordingly.
+	//==================================================================================================
 	public:
 // PX_SERIALIZATION
-									SphericalJoint(PxRefResolver& v)	: SphericalJointT(v)	{}
-									DECLARE_SERIAL_CLASS(SphericalJoint, SphericalJointT)
-		virtual		void			exportExtraData(PxSerialStream& stream);
-		virtual		char*			importExtraData(char* address, PxU32& totalPadding);
-		virtual		bool			resolvePointers(PxRefResolver&, void*);
-		static		void			getMetaData(PxSerialStream& stream);
+									SphericalJoint(PxBaseFlags baseFlags) : SphericalJointT(baseFlags) {}
+		virtual		void			exportExtraData(PxSerializationContext& context);
+					void			importExtraData(PxDeserializationContext& context);
+					void			resolveReferences(PxDeserializationContext& context);
+		static		SphericalJoint*	createObject(PxU8*& address, PxDeserializationContext& context);
+		static		void			getBinaryMetaData(PxOutputStream& stream);
 //~PX_SERIALIZATION
 		virtual						~SphericalJoint()
 		{
-			if(getSerialFlags()&PxSerialFlag::eOWNS_MEMORY)
+			if(getBaseFlags()&PxBaseFlag::eOWNS_MEMORY)
 				PX_FREE(mData);
 		}
 
-		SphericalJoint(const PxTolerancesScale& scale,
+		SphericalJoint(const PxTolerancesScale& /*scale*/,
 					   PxRigidActor* actor0, const PxTransform& localFrame0, 
 					   PxRigidActor* actor1, const PxTransform& localFrame1)
-		 {
-// PX_SERIALIZATION
-			setSerialType(PxConcreteType::eUSER_SPHERICAL_JOINT);
-//~PX_SERIALIZATION
+		: SphericalJointT(PxJointConcreteType::eSPHERICAL, PxBaseFlag::eOWNS_MEMORY | PxBaseFlag::eIS_RELEASABLE)
+		{
 			SphericalJointData* data = reinterpret_cast<SphericalJointData*>(PX_ALLOC(sizeof(SphericalJointData), PX_DEBUG_EXP("SphericalJointData")));
+			Cm::markSerializedMem(data, sizeof(SphericalJointData));
 			mData = data;
 
 			initCommonData(*data,actor0, localFrame0, actor1, localFrame1);
 			data->projectionLinearTolerance = 1e10f;
-			data->limit = PxJointLimitCone(PxPi/2, PxPi/2, 0.05f);
+			data->limit = PxJointLimitCone(PxPi/2, PxPi/2);
 			data->jointFlags = PxSphericalJointFlags();
-		 }
+		}
 
 		void					setProjectionLinearTolerance(PxReal distance);
 		PxReal					getProjectionLinearTolerance() const;
@@ -120,6 +132,7 @@ namespace Ext
 	extern "C"  PxU32 SphericalJointSolverPrep(Px1DConstraint* constraints,
 		PxVec3& body0WorldOffset,
 		PxU32 maxConstraints,
+		PxConstraintInvMassScale& invMassScale,
 		const void* constantBlock,							  
 		const PxTransform& bA2w,
 		const PxTransform& bB2w);

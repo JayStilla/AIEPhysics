@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -33,7 +33,6 @@
 
 #include "PxAllocatorCallback.h"
 #include "PsMutex.h"
-#include "PsNoCopy.h"
 #include "CmFreeListAllocatorInternals.h"
 
 namespace physx
@@ -61,8 +60,9 @@ namespace Cm
 	class Block;
 
 	// todo: port to new format of Ps::Allocator
-	class FreeListAllocator : public PxAllocatorCallback, private Ps::NoCopy
+	class FreeListAllocator : public PxAllocatorCallback
 	{
+		PX_NOCOPY(FreeListAllocator)
 	public:
 		static const PxU32 MAX_CHUNK_SIZE = Block::QWORD_CAPACITY * 16;
 		static const PxU32 STATS_COUNT = Block::QWORD_CAPACITY;
@@ -91,6 +91,7 @@ namespace Cm
 			void* allocate(size_t size, const char* filename, int line)	{	return mAllocator.allocate(size, "FreeListAllocatorMutex", filename, line); }
 			void deallocate(void* ptr)									{	mAllocator.deallocate(ptr); }
 		private:
+			MutexAllocator& operator=(const MutexAllocator&);
 			PxAllocatorCallback &mAllocator;
 		};
 

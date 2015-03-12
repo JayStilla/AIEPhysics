@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -36,14 +36,14 @@
 #include "PxVehicleComponents.h"
 #include "PxSimpleTypes.h"
 #include "PxVec3.h"
-
+#include "PxVec4.h"
+#include "PxBatchQueryDesc.h"
 
 #ifndef PX_DOXYGEN
 namespace physx
 {
 #endif
 
-struct PxRaycastQueryResult;
 class PxVehicleConstraintShader;
 class PxMaterial;
 class PxShape;
@@ -52,11 +52,21 @@ class PxShape;
 
 class PxVehicleWheels4SimData
 {
+//= ATTENTION! =====================================================================================
+// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+// accordingly.
+//==================================================================================================
 public:
+
+	friend class PxVehicleUpdate;
 
 	PxVehicleWheels4SimData();
 
 	bool isValid(const PxU32 id) const;
+
+	static void getBinaryMetaData(PxOutputStream& stream);
 
 public:
 
@@ -67,16 +77,20 @@ public:
 	PX_FORCE_INLINE const PxVec3&						getSuspForceAppPointOffset(const PxU32 id)	const {return mSuspForceAppPointOffsets[id];}
 	PX_FORCE_INLINE const PxVec3&						getTireForceAppPointOffset(const PxU32 id)	const {return mTireForceAppPointOffsets[id];}
 	PX_FORCE_INLINE const PxVec3&						getWheelCentreOffset(const PxU32 id)		const {return mWheelCentreOffsets[id];}
+	PX_FORCE_INLINE		  PxI32							getWheelShapeMapping(const PxU32 id)		const {return (PX_MAX_U8 != mWheelShapeMap[id]) ? mWheelShapeMap[id] : -1;}
+	PX_FORCE_INLINE	const PxFilterData&					getSceneQueryFilterData(const PxU32 id)		const {return mSqFilterData[id];}
 	PX_FORCE_INLINE const PxReal*						getTireRestLoadsArray()						const {return mTireRestLoads;}
 	PX_FORCE_INLINE const PxReal*						getRecipTireRestLoadsArray()				const {return mRecipTireRestLoads;}
 
-					void setSuspensionData				(const PxVehicleSuspensionData& susp, const PxU32 id);
-					void setWheelData					(const PxVehicleWheelData& susp, const PxU32 id);
-					void setTireData					(const PxVehicleTireData& tire, const PxU32 id);
-					void setSuspTravelDirection			(const PxVec3& dir, const PxU32 id);
-					void setSuspForceAppPointOffset		(const PxVec3& offset, const PxU32 id);
-					void setTireForceAppPointOffset		(const PxVec3& offset, const PxU32 id);
-					void setWheelCentreOffset			(const PxVec3& offset, const PxU32 id);
+					void setSuspensionData				(const PxU32 id, const PxVehicleSuspensionData& susp);
+					void setWheelData					(const PxU32 id, const PxVehicleWheelData& susp);
+					void setTireData					(const PxU32 id, const PxVehicleTireData& tire);
+					void setSuspTravelDirection			(const PxU32 id, const PxVec3& dir);
+					void setSuspForceAppPointOffset		(const PxU32 id, const PxVec3& offset);
+					void setTireForceAppPointOffset		(const PxU32 id, const PxVec3& offset);
+					void setWheelCentreOffset			(const PxU32 id, const PxVec3& offset);
+					void setWheelShapeMapping			(const PxU32 id, const PxI32 shapeId);
+					void setSceneQueryFilterData		(const PxU32 id, const PxFilterData& sqFilterData);
 
 private:
 
@@ -127,16 +141,44 @@ private:
 	\brief Reciprocal normalized tire load on each tire at zero suspension jounce under gravity.
 	*/
 	PxReal							mRecipTireRestLoads[4];	
+
+	/**
+	\brief Scene query filter data used by each suspension line.
+	Anything relating to the actor belongs in PxVehicleWheels.
+	*/
+	PxFilterData					mSqFilterData[4];
+
+	/**
+	\brief Mapping between wheel id and shape id.
+	The PxShape that corresponds to the ith wheel can be found with 
+	If mWheelShapeMap[i]<0 then the wheel has no corresponding shape.
+	Otherwise, the shape corresponds to:
+	PxShape* shapeBuffer[1];
+	mActor->getShapes(shapeBuffer,1,mWheelShapeMap[i]);
+	Anything relating to the actor belongs in PxVehicleWheels.
+	*/
+	PxU8							mWheelShapeMap[4];
+
+	PxU32							mPad[3];
 };
+PX_COMPILE_TIME_ASSERT(0 == (sizeof(PxVehicleWheels4SimData) & 15));
 
 class PxVehicleWheels4DynData
 {
+//= ATTENTION! =====================================================================================
+// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+// accordingly.
+//==================================================================================================
 public:
+
+	friend class PxVehicleUpdate;
 
 	PxVehicleWheels4DynData()
 		:	mSqResults(NULL)
 	{
-		setToRestState();	
+		setToRestState();
 	}
 	~PxVehicleWheels4DynData()
 	{
@@ -144,30 +186,22 @@ public:
 
 	bool isValid() const {return true;}
 
+	static void getBinaryMetaData(PxOutputStream& stream);
+
 	void setToRestState()
 	{
 		for(PxU32 i=0;i<4;i++)
 		{
 			mWheelSpeeds[i]=0.0f;
 			mCorrectedWheelSpeeds[i]=0;
-			mTireLowForwardSpeedTimers[i]=0.0f;
 			mWheelRotationAngles[i]=0.0f;
-			mSuspJounces[i]=0.0f;
-			mLongSlips[i]=0.0f;
-			mLatSlips[i]=0.0f;
-			mTireFrictions[i]=0.0f;
-			mTireSurfaceTypes[i]=0;
-			mTireSurfaceMaterials[i]=NULL;
-			mTireContactPoints[i]=PxVec3(0,0,0);
-			mTireContactNormals[i]=PxVec3(0,0,0);
-			mTireLongitudinalDirs[i]=PxVec3(0,0,0);
-			mTireLateralDirs[i]=PxVec3(0,0,0);
-			mSuspensionSpringForces[i]=0.0f;
-			mTireContactShapes[i]=NULL;
-			mSuspLineStarts[i]=PxVec3(0,0,0);
-			mSuspLineDirs[i]=PxVec3(0,0,0);
-			mSuspLineLengths[i]=0.0f;
+			mTireLowForwardSpeedTimers[i]=0.0f;
+			mTireLowSideSpeedTimers[i]=0.0f;
 		}
+		PxMemZero(&mRaycastsOrCachedHitResults, sizeof(SuspLineRaycast));
+
+		mSqResults = NULL;
+		mHasCachedRaycastHitPlane = false;
 	}
 
 	/**
@@ -175,12 +209,6 @@ public:
 	@see PxVehicle4WSetToRestState, PxVehicle4WGetWheelRotationSpeed, PxVehicle4WGetEngineRotationSpeed
 	*/	
 	PxReal mWheelSpeeds[4];
-
-	/**
-	\brief Timers used to trigger sticky friction to hold the car perfectly at rest. 
-	\brief Used only internally.
-	*/
-	PxReal mTireLowForwardSpeedTimers[4];
 
 	/**
 	\brief Rotation speeds of wheels used to update the wheel rotation angles.
@@ -194,93 +222,72 @@ public:
 	PxReal mWheelRotationAngles[4];
 
 	/**
-	\brief Reported steer angle about up vector
-	*/	
-	PxReal mSteerAngles[4];
-
-	/**
-	\brief Reported compression of each suspension spring
-	@see PxVehicle4WGetSuspJounce
-	*/	
-	PxReal mSuspJounces[4];
-
-	/**
-	\brief Reported longitudinal slip of each tire
-	@see PxVehicle4WGetTireLongSlip
-	*/	
-	PxReal mLongSlips[4];
-
-	/**
-	\brief Reported lateral slip of each tire
-	@see PxVehicle4WGetTireLatSlip
-	*/	
-	PxReal mLatSlips[4];
-
-	/**
-	\brief Reported friction experienced by each tire
-	@see PxVehicle4WGetTireFriction
-	*/	
-	PxReal mTireFrictions[4];
-
-	/**
-	\brief Reported surface type experienced by each tire.
-	@see PxVehicle4WGetTireDrivableSurfaceType
-	*/	
-	PxU32 mTireSurfaceTypes[4];
-
-	/**
-	\brief Reported PxMaterial experienced by each tire.
-	@see PxVehicle4WGetTireDrivableSurfaceMaterial
-	*/	
-	const PxMaterial* mTireSurfaceMaterials[4];
-
-	/**
-	\brief Reported contact point of each wheel.
+	\brief Timers used to trigger sticky friction to hold the car perfectly at rest. 
+	\brief Used only internally.
 	*/
-	PxVec3 mTireContactPoints[4];
+	PxReal mTireLowForwardSpeedTimers[4];
 
 	/**
-	\brief Reported contact normal of each wheel.
+	\brief Timers used to trigger sticky friction to hold the car perfectly at rest. 
+	\brief Used only internally.
 	*/
-	PxVec3 mTireContactNormals[4];
+	PxReal mTireLowSideSpeedTimers[4];
+
+	struct SuspLineRaycast
+	{
+		/**
+		\brief Reported start point of suspension line raycasts used in most recent scene query.
+		@see PxVehicle4WSuspensionRaycasts, PxVehicle4WGetSuspRaycast
+		*/
+		PxVec3 mStarts[4];
+
+		/**
+		\brief Reported directions of suspension line raycasts used in most recent scene query.
+		@see PxVehicle4WSuspensionRaycasts, PxVehicle4WGetSuspRaycast
+		*/
+		PxVec3 mDirs[4];
+
+		/**
+		\brief Reported lengths of suspension line raycasts used in most recent scene query.
+		@see PxVehicle4WSuspensionRaycasts, PxVehicle4WGetSuspRaycast
+		*/
+		PxReal mLengths[4];
+	};
+
+	struct CachedSuspLineRaycastHitResult
+	{
+		/**
+		\brief Cached raycast hit planes. These are the planes found from the last raycasts.
+		@see PxVehicle4WSuspensionRaycasts, PxVehicle4WGetSuspRaycast
+		*/
+		PxVec4 mPlanes[4];
+
+		/**
+		\brief Cached friction.
+		@see PxVehicle4WSuspensionRaycasts, PxVehicle4WGetSuspRaycast
+		*/
+		PxF32 mFrictionMultipliers[4];
+
+		/**
+		\brief Cached raycast hit distance. These are the hit distances found from the last raycasts.
+		*/
+		PxF32 mDistances[4];
+
+		/**
+		\brief Cached raycast hit counts. These are the hit counts found from the last raycasts.
+		@see PxVehicle4WSuspensionRaycasts, PxVehicle4WGetSuspRaycast
+		*/
+		PxU16 mCounts[4];
+
+		
+		PxU16 mPad1[4];
+	};
+	PX_COMPILE_TIME_ASSERT((0 == (sizeof(SuspLineRaycast) & 0x0f)) && (sizeof(SuspLineRaycast) == sizeof(CachedSuspLineRaycastHitResult)));
 
 	/**
-	\brief Forward direction of each wheel projected on to the contact plane.
+	\brief We either have a fresh raycast that was just performed or a cached raycast result that will be used if no raycast was just performed.
 	*/
-	PxVec3 mTireLongitudinalDirs[4];
-
-	/**
-	\brief Forward direction of each wheel projected on to the contact plane.
-	*/
-	PxVec3 mTireLateralDirs[4];
-
-	/**
-	\brief Force applied by each suspension spring.
-	*/
-	PxReal mSuspensionSpringForces[4];
-
-	/**
-	\brief The PxShape instance that each tire is driving on.
-	*/
-	PxShape* mTireContactShapes[4];
-
-	/**
-	\brief Reported start point of suspension line raycasts used in more recent scene query.
-	@see PxVehicle4WSuspensionRaycasts, PxVehicle4WGetSuspRaycast
-	*/
-	PxVec3 mSuspLineStarts[4];
-
-	/**
-	\brief Reported directions of suspension line raycasts used in more recent scene query.
-	@see PxVehicle4WSuspensionRaycasts, PxVehicle4WGetSuspRaycast
-	*/
-	PxVec3 mSuspLineDirs[4];
-
-	/**
-	\brief Reported lengths of suspension line raycasts used in more recent scene query.
-	@see PxVehicle4WSuspensionRaycasts, PxVehicle4WGetSuspRaycast
-	*/
-	PxReal mSuspLineLengths[4];
+	PxU8 mRaycastsOrCachedHitResults[sizeof(SuspLineRaycast)];
 
 	/**
 	\brief Used only internally.
@@ -301,8 +308,18 @@ public:
 	*/
 	const PxRaycastQueryResult* mSqResults;
 
+	/**
+	\brief Set true if a raycast hit plane has been recorded and cached.
+	This requires a raycast to be performed and then followed by PxVehicleUpdates
+	at least once.  Reset to false in setToRestState.
+	*/
+	bool mHasCachedRaycastHitPlane;
+
+
 #ifndef PX_X64
-	PxU32 mPad[2];
+	PxU32 mPad[1];
+#else
+	PxU32 mPad[3];
 #endif
 };
 PX_COMPILE_TIME_ASSERT(0==(sizeof(PxVehicleWheels4DynData) & 15));

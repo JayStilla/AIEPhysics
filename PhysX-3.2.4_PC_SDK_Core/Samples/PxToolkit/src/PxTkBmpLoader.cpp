@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,6 +32,7 @@
 #include <assert.h>
 #include "PxTkBmpLoader.h"
 #include "PsFile.h"
+
 
 using namespace PxToolkit;
 
@@ -107,7 +108,7 @@ BmpLoader::~BmpLoader()
 }
 
 // -------------------------------------------------------------------
-bool BmpLoader::loadBmp(FILE* f)
+bool BmpLoader::loadBmp(PxFileHandle f)
 {
 	if (!f) return false;
 
@@ -120,14 +121,14 @@ bool BmpLoader::loadBmp(FILE* f)
 
 	size_t num;
 	BMPHEADER header;
-	num = fread(&header, sizeof(BMPHEADER), 1, f);
+	num = fread(&header, 1, sizeof(BMPHEADER), f);
 	if(isBigEndian()) header.Type = endianSwap(header.Type);
-	if (num != 1) { fclose(f); return false; }
+	if (num != sizeof(BMPHEADER)) { fclose(f); return false; }
 	if (header.Type != MAKETWOCC('B','M')) { fclose(f); return false; }
 
 	BMPINFO info;
-	num = fread(&info, sizeof(BMPINFO), 1, f);
-	if (num != 1) { fclose(f); return false; }
+	num = fread(&info, 1, sizeof(BMPINFO), f);
+	if (num != sizeof(BMPINFO)) { fclose(f); return false; }
 	if(isBigEndian()) info.Size = endianSwap(info.Size);
 	if(isBigEndian()) info.BitCount = endianSwap(info.BitCount);
 	if(isBigEndian()) info.Compression = endianSwap(info.Compression);
@@ -161,8 +162,8 @@ bool BmpLoader::loadBmp(FILE* f)
 
 	for(int i = info.Height-1; i >= 0; i--)
 	{
-		num = fread(line, lineLen, 1, f);
-		if (num != 1) { fclose(f); return false; }
+		num = fread(line, 1, (size_t)lineLen, f);
+		if (num != (size_t)lineLen) { fclose(f); return false; }
 		unsigned char* src = line;
 		unsigned char* dest = mRGB + i*info.Width*bytesPerPixel;
 		for(unsigned int j = 0; j < info.Width; j++)
@@ -186,7 +187,7 @@ bool BmpLoader::loadBmp(FILE* f)
 // -------------------------------------------------------------------
 bool BmpLoader::loadBmp(const char *filename)
 {
-	FILE *f = NULL;
+	PxFileHandle f = NULL;
 	physx::shdfnd::fopen_s(&f, filename, "rb");
 	bool ret = loadBmp(f); 
 	if(f) fclose(f);

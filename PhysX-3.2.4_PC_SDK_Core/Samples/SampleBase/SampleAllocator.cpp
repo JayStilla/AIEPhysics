@@ -23,23 +23,26 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-#include "SampleAllocator.h"
-#include "RendererMemoryMacros.h"
 #include <stdio.h>
 #include <assert.h>
+#include "SampleAllocator.h"
+#include "RendererMemoryMacros.h"
 #include "foundation/PxAssert.h"
 #include "foundation/PxErrorCallback.h"
+#include "PsPrintString.h"
 
 PxErrorCallback& getSampleErrorCallback();
 
-#if defined(WIN32)
+#if defined(WIN32) || defined(PX_WINMODERN)
 // on win32 we only have 8-byte alignment guaranteed, but the CRT provides special aligned allocation
 // fns
 #include <malloc.h>
+#include <crtdbg.h>
+
 	static void* platformAlignedAlloc(size_t size)
 	{
 		return _aligned_malloc(size, 16);	
@@ -58,6 +61,28 @@ PxErrorCallback& getSampleErrorCallback();
 	static void platformAlignedFree(void* ptr)
 	{
 		::free(ptr);
+	}
+#elif defined(PX_WIIU)
+	static void* platformAlignedAlloc(size_t size)
+	{
+		size_t pad = 15 + sizeof(size_t); // store offset for delete.
+		PxU8* base = (PxU8*)::malloc(size+pad);
+		if(!base)
+			return NULL;
+
+		PxU8* ptr = (PxU8*)(size_t(base + pad) & ~(15)); // aligned pointer
+		((size_t*)ptr)[-1] = ptr - base; // store offset
+
+		return ptr;
+	}
+
+	static void platformAlignedFree(void* ptr)
+	{
+		if(ptr == NULL)
+			return;
+
+		PxU8* base = ((PxU8*)ptr) - ((size_t*)ptr)[-1];
+		::free(base);
 	}
 #else
 
@@ -81,17 +106,17 @@ PxErrorCallback& getSampleErrorCallback();
 #define	INVALID_ID			0xffffffff
 #define MEMBLOCKSTART		64
 
-#if defined(_DEBUG) || defined(PX_PROFILE)
+#if defined(PX_DEBUG) || defined(PX_PROFILE)
 static void print(const char* buffer)
 {
-	printf("%s", buffer);
-#ifdef PX_WINDOWS
+	shdfnd::printFormatted("%s", buffer);
+#if defined PX_WINDOWS && !defined PX_WINMODERN
 	if(buffer)	{ _RPT0(_CRT_WARN, buffer); }
 #endif
 }
 #endif
 
-#if defined(_DEBUG) || defined(PX_PROFILE)
+#if defined(PX_DEBUG) || defined(PX_PROFILE)
 	struct DebugBlock
 	{
 #ifdef PX_X64
@@ -126,7 +151,7 @@ PxSampleAllocator::PxSampleAllocator() :
 	mTotalNbAllocs		(0),
 	mNbAllocs			(0)
 {
-#if defined(_DEBUG) || defined(PX_PROFILE)
+#if defined(PX_DEBUG) || defined(PX_PROFILE)
 	// Initialize the Memory blocks list (DEBUG mode only)
 	mMemBlockList = (void**)::malloc(MEMBLOCKSTART*sizeof(void*));
 	memset(mMemBlockList, 0, MEMBLOCKSTART*sizeof(void*));
@@ -136,7 +161,7 @@ PxSampleAllocator::PxSampleAllocator() :
 
 PxSampleAllocator::~PxSampleAllocator()
 {
-#if defined(_DEBUG) || defined(PX_PROFILE)
+#if defined(PX_DEBUG) || defined(PX_PROFILE)
 	char buffer[4096];
 	if(mNbAllocatedBytes)
 	{
@@ -186,7 +211,7 @@ void* PxSampleAllocator::allocate(size_t size, const char* typeName, const char*
 	if(!size)
 		return NULL;
 
-#if defined(_DEBUG) || defined(PX_PROFILE)
+#if defined(PX_DEBUG) || defined(PX_PROFILE)
 	Ps::MutexT<Ps::RawAllocator>::ScopedLock lock(mMutex);
 
 	// Allocate one debug block in front of each real allocation
@@ -265,7 +290,7 @@ void PxSampleAllocator::deallocate(void* memory)
 	if(!memory)
 		return;
 
-#if defined(_DEBUG) || defined(PX_PROFILE)
+#if defined(PX_DEBUG) || defined(PX_PROFILE)
 	Ps::MutexT<Ps::RawAllocator>::ScopedLock lock(mMutex);
 
 	DebugBlock* DB = ((DebugBlock*)memory)-1;
@@ -273,7 +298,7 @@ void PxSampleAllocator::deallocate(void* memory)
 	// Check we allocated it
 	if(DB->mCheckValue!=DEBUG_IDENTIFIER)
 	{
-		printf("Error: free unknown memory!!\n");
+		shdfnd::printFormatted("Error: free unknown memory!!\n");
 		// ### should we really continue??
 		return;
 	}

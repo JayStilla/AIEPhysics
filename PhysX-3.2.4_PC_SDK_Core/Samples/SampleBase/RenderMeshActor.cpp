@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -40,18 +40,18 @@ RenderMeshActor::RenderMeshActor(	Renderer& renderer,
 									const PxVec3* verts, PxU32 numVerts,
 									const PxVec3* vertexNormals,
 									const PxReal* uvs,
-									const PxU16* faces, PxU32 numFaces, bool flipWinding
+									const PxU16* faces16, const PxU32* faces32, PxU32 numFaces, bool flipWinding
 								 )
 {
 	PxVec3Alloc* normals = NULL;
 	if(!vertexNormals)
 	{
 		normals = SAMPLE_NEW(PxVec3Alloc)[numVerts];
-		bool status = PxBuildSmoothNormals(numFaces, numVerts, verts, NULL, faces, normals, flipWinding);
+		PxBuildSmoothNormals(numFaces, numVerts, verts, faces32, faces16, normals, flipWinding);
 		vertexNormals = normals;
 	}
 
-	RendererShape* rs = new RendererMeshShape(renderer, verts, numVerts, vertexNormals, uvs, faces, numFaces, flipWinding);
+	RendererShape* rs = new RendererMeshShape(renderer, verts, numVerts, vertexNormals, uvs, faces16, faces32, numFaces, flipWinding);
 	setRenderShape(rs);
 
 	DELETEARRAY(normals);

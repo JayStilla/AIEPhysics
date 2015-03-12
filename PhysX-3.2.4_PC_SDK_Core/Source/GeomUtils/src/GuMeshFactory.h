@@ -23,13 +23,12 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-
-#ifndef PX_PHYSICS_GEOMUTILS_GU_MESH_FACTORY
-#define PX_PHYSICS_GEOMUTILS_GU_MESH_FACTORY
+#ifndef GU_MESH_FACTORY_H
+#define GU_MESH_FACTORY_H
 
 #include "PxTriangleMesh.h"
 #include "PxConvexMesh.h"
@@ -40,7 +39,6 @@
 #include "PsArray.h"
 
 #include "PsUserAllocated.h"
-#include "PsNoCopy.h"
 
 #include "PxIO.h"
 namespace physx
@@ -60,13 +58,16 @@ class GuMeshFactoryListener
 protected:
 	virtual ~GuMeshFactoryListener(){}
 public:
-	virtual void onGuMeshFactoryBufferRelease(PxConvexMesh& data) = 0;
-	virtual void onGuMeshFactoryBufferRelease(PxHeightField& data) = 0;
-	virtual void onGuMeshFactoryBufferRelease(PxTriangleMesh& data) = 0;
+	virtual void onGuMeshFactoryBufferRelease(const PxBase* object, PxType type, bool memRelease) = 0;
 };
 
-class PX_PHYSX_COMMON_API GuMeshFactory : public Ps::UserAllocated, public Ps::NoCopy
+#if defined(PX_VC) 
+    #pragma warning(push)
+	#pragma warning( disable : 4251 ) // class needs to have dll-interface to be used by clients of class
+#endif
+class PX_PHYSX_COMMON_API GuMeshFactory : public Ps::UserAllocated
 {
+	PX_NOCOPY(GuMeshFactory)
 public:
 									GuMeshFactory()	:
 										mTriangleMeshArray	(PX_DEBUG_EXP("meshFactoryTriMesh")),
@@ -80,28 +81,30 @@ public:
 	void							release();
 
 	// Triangle mehes
-	void							addTriangleMesh(Gu::TriangleMesh* np);
+	void							addTriangleMesh(Gu::TriangleMesh* np, bool lock=true);
 	PxTriangleMesh*					createTriangleMesh(PxInputStream&);
 	bool							removeTriangleMesh(PxTriangleMesh&);
 	PxU32							getNbTriangleMeshes()	const;
 	PxU32							getTriangleMeshes(PxTriangleMesh** userBuffer, PxU32 bufferSize, PxU32 startIndex)	const;
 
 	// Convexes
-	void							addConvexMesh(Gu::ConvexMesh* np);
+	void							addConvexMesh(Gu::ConvexMesh* np, bool lock=true);
 	PxConvexMesh*					createConvexMesh(PxInputStream&);
 	bool							removeConvexMesh(PxConvexMesh&);
 	PxU32							getNbConvexMeshes() const;
 	PxU32							getConvexMeshes(PxConvexMesh** userBuffer, PxU32 bufferSize, PxU32 startIndex)	const;
 
 	// Heightfields
-	void							addHeightField(Gu::HeightField* np);
+	void							addHeightField(Gu::HeightField* np, bool lock=true);
 	PxHeightField*					createHeightField(const PxHeightFieldDesc&);
+	PxHeightField*					createHeightField(PxInputStream&);
 	bool							removeHeightField(PxHeightField&);
 	PxU32							getNbHeightFields()	const;
 	PxU32							getHeightFields(PxHeightField** userBuffer, PxU32 bufferSize, PxU32 startIndex)	const;
 
 	void							addFactoryListener( GuMeshFactoryListener& listener );
 	void							removeFactoryListener( GuMeshFactoryListener& listener );
+	void							notifyFactoryListener(const PxBase*, PxType typeID, bool memRelease);
 
 protected:
 #if PX_SUPPORT_GPU_PHYSX
@@ -110,19 +113,17 @@ protected:
 	virtual void					notifyReleaseConvexMesh(const PxConvexMesh&) {}
 #endif
 
+	Ps::Mutex						mTrackingMutex;
 private:
-	Ps::Mutex						mTriangleMeshMutex;
 	Ps::Array<Gu::TriangleMesh*>	mTriangleMeshArray;
-
-	Ps::Mutex						mConvexMeshMutex;
 	Ps::Array<Gu::ConvexMesh*>		mConvexMeshArray;
-
-	Ps::Mutex						mHeightFieldMutex;
 	Ps::Array<Gu::HeightField*>		mHeightFieldArray;
 
 	Ps::Array<GuMeshFactoryListener*>			mFactoryListeners;
 };
-
+#if defined(PX_VC) 
+     #pragma warning(pop) 
+#endif
 }
 
 #endif

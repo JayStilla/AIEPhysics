@@ -23,10 +23,13 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
+#include <errno.h>
+#include "PsFoundation.h"
+#include "foundation/PxPreprocessor.h"
 #include "PxDefaultStreams.h"
 #include "PxAllocatorCallback.h"
 #include "PxAssert.h"
@@ -107,6 +110,15 @@ PxDefaultFileOutputStream::PxDefaultFileOutputStream(const char* filename)
 {
 	mFile = NULL;
 	Ps::fopen_s(&mFile, filename, "wb");
+	// PT: when this fails, check that:
+	// - the path is correct
+	// - the file does not already exist. If it does, check that it is not write protected.
+	if(NULL == mFile)
+	{
+		Ps::getFoundation().error(PxErrorCode::eINTERNAL_ERROR, __FILE__, __LINE__, 
+			"Unable to open file %s, errno 0x%x\n",filename,errno);
+	}
+	PX_ASSERT(mFile);
 }
 
 PxDefaultFileOutputStream::~PxDefaultFileOutputStream()
@@ -135,7 +147,7 @@ PxDefaultFileInputData::PxDefaultFileInputData(const char* filename)
 	if(mFile)
 	{
 		fseek(mFile, 0, SEEK_END);
-		mLength = ftell(mFile);
+		mLength = (PxU32)ftell(mFile);
 		fseek(mFile, 0, SEEK_SET);
 	}
 	else
@@ -154,7 +166,7 @@ PxU32 PxDefaultFileInputData::read(void* dest, PxU32 count)
 {
 	PX_ASSERT(mFile);
 	const size_t size = fread(dest, 1, count, mFile);
-	PX_ASSERT(PxU32(size)==count);
+	// there should be no assert here since by spec of PxInputStream we can read fewer bytes than expected
 	return PxU32(size);
 }
 
@@ -165,12 +177,12 @@ PxU32 PxDefaultFileInputData::getLength() const
 
 void PxDefaultFileInputData::seek(PxU32 pos)
 {
-	fseek(mFile, pos, SEEK_SET);
+	fseek(mFile, (long)pos, SEEK_SET);
 }
 
 PxU32 PxDefaultFileInputData::tell() const
 {
-	return ftell(mFile);
+	return (PxU32)ftell(mFile);
 }
 
 bool PxDefaultFileInputData::isValid() const

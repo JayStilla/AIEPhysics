@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -46,7 +46,7 @@ namespace physx { namespace profile {
 	struct MemoryEventRecorder : public PxAllocationListener
 	{
 		typedef WrapperReflectionAllocator<PxU8> TAllocatorType;
-		typedef HashMap<PxU64,FullAllocationEvent,Hash<PxU64>,TAllocatorType> THashMapType;
+		typedef shdfnd::HashMap<PxU64,FullAllocationEvent,shdfnd::Hash<PxU64>,TAllocatorType> THashMapType;
 
 		FoundationWrapper		mWrapper;
 		THashMapType			mOutstandingAllocations;
@@ -60,7 +60,7 @@ namespace physx { namespace profile {
 		}
 
 		static PxU64 ToU64( void* inData ) { return PX_PROFILE_POINTER_TO_U64( inData ); }
-		static void* ToVoidPtr( PxU64 inData ) { return reinterpret_cast<void*>( inData ); }
+		static void* ToVoidPtr( PxU64 inData ) { return (void*)(size_t)inData; }
 		virtual void onAllocation( size_t size, const char* typeName, const char* filename, int line, void* allocatedMemory )
 		{
 			onAllocation( size, typeName, filename, (PxU32)line, ToU64( allocatedMemory ) );
@@ -73,7 +73,7 @@ namespace physx { namespace profile {
 			FullAllocationEvent theEvent;
 			theEvent.init( size, typeName, filename, line, allocatedMemory );
 			mOutstandingAllocations.insert( allocatedMemory, theEvent );
-			if ( mListener != NULL ) mListener->onAllocation( size, typeName, filename, line, ToVoidPtr(allocatedMemory) );
+			if ( mListener != NULL ) mListener->onAllocation( size, typeName, filename, (int)line, ToVoidPtr(allocatedMemory) );
 		}
 		
 		virtual void onDeallocation( void* allocatedMemory )
@@ -101,13 +101,13 @@ namespace physx { namespace profile {
 					++iter )
 				{
 					const FullAllocationEvent& evt( iter->second );
-					mListener->onAllocation( evt.mSize, evt.mType, evt.mFile, evt.mLine, ToVoidPtr( evt.mAddress ) );
+					mListener->onAllocation( evt.mSize, evt.mType, evt.mFile, (int)evt.mLine, ToVoidPtr( evt.mAddress ) );
 				}
 			}
 		}
 	};
 
-	class PxProfileMemoryEventRecorderImpl : public UserAllocated
+	class PxProfileMemoryEventRecorderImpl : public shdfnd::UserAllocated
 											, public PxProfileMemoryEventRecorder
 	{
 		MemoryEventRecorder mRecorder;

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -37,11 +37,8 @@
 
 
 namespace physx
-{
-	namespace pxtask
-	{
-		class BaseTask;
-	}
+{	
+	class PxBaseTask;
 }
 
 namespace physx
@@ -54,12 +51,12 @@ namespace Ext
 	class TaskQueueHelper
 	{
 	public:
-		static pxtask::BaseTask* fetchTask(Ps::SList& taskQueue, Ext::SharedQueueEntryPool<>& entryPool)
+		static PxBaseTask* fetchTask(Ps::SList& taskQueue, Ext::SharedQueueEntryPool<>& entryPool)
 		{
 			SharedQueueEntry* entry = static_cast<SharedQueueEntry*>(taskQueue.pop());
 			if (entry)
 			{
-				pxtask::BaseTask* task = reinterpret_cast<pxtask::BaseTask*>(entry->mObjectRef);
+				PxBaseTask* task = reinterpret_cast<PxBaseTask*>(entry->mObjectRef);
 				entryPool.putEntry(*entry);
 				return task;
 			}

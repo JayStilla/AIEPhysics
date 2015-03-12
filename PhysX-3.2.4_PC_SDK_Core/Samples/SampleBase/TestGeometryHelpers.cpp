@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -37,14 +37,7 @@
 #include "geometry/PxTriangleMeshGeometry.h"
 #include "geometry/PxHeightFieldGeometry.h"
 
-bool Test::GeometryHelpers::testForOverlap(const PxShape& s0, const PxShape& s1)
-{
-	return PxGeometryQuery::overlap(s0.getGeometry().any(), PxShapeExt::getGlobalPose(s0),
-									s1.getGeometry().any(), PxShapeExt::getGlobalPose(s1));
-}
-
-
 bool Test::GeometryHelpers::testForOverlap(const PxShape& s0, const PxGeometry& g1, const PxTransform& globalPose1)
 {
-	return PxGeometryQuery::overlap(g1, globalPose1, s0.getGeometry().any(), PxShapeExt::getGlobalPose(s0));
+	return PxGeometryQuery::overlap(g1, globalPose1, s0.getGeometry().any(), PxShapeExt::getGlobalPose(s0, *s0.getActor()));
 }

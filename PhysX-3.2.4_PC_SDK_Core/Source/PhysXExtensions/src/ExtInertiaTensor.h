@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -98,6 +98,11 @@ namespace Ext
 					mInertia = scaleInertia(mInertia, s.rotation, s.scale);
 					break;
 				}
+			case PxGeometryType::eHEIGHTFIELD:
+			case PxGeometryType::ePLANE:
+			case PxGeometryType::eTRIANGLEMESH:
+			case PxGeometryType::eINVALID:
+			case PxGeometryType::eGEOMETRY_COUNT:
 			default:
 				break;
 			}
@@ -115,7 +120,7 @@ namespace Ext
 		{
 			PxReal	mass = 0;
 			PxVec3	com(0);
-			PxMat33 inertia = PxMat33::createZero();
+			PxMat33 inertia = PxMat33(PxZero);
 			
 			Ps::InlineArray<PxVec3, 16> comArray; 
 			comArray.reserve(count);
@@ -344,7 +349,7 @@ Ext::InertiaTensorComputer::~InertiaTensorComputer()
 PX_INLINE void Ext::InertiaTensorComputer::zero()
 {
 	mMass = 0.0f;
-	mI = PxMat33::createZero();
+	mI = PxMat33(PxZero);
 	mG = PxVec3(0);
 }
 

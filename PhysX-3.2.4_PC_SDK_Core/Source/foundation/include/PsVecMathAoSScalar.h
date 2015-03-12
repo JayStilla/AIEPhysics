@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -46,18 +46,20 @@ struct VecU32V;
 struct Vec4V;
 typedef Vec4V QuatV;
 
+PX_ALIGN_PREFIX(16)
 struct FloatV
 {
 	PxF32 x;
 	PxF32 pad[3];
 	FloatV(){}
-	FloatV(const Vec4V& a);
 	FloatV(const PxF32 _x)
 		: x(_x)
 	{
 	}
-};
+}
+PX_ALIGN_SUFFIX(16);
 
+PX_ALIGN_PREFIX(16)
 struct Vec4V
 {
 	PxF32 x, y, z, w;
@@ -69,16 +71,10 @@ struct Vec4V
 		  w(_w)
 	{
 	}
-	Vec4V(const FloatV& f)
-		: x(f.x), y(f.x), z(f.x), w(f.x)
-	{
-	}
+}
+PX_ALIGN_SUFFIX(16);
 
-	Vec4V(const VecU16V& a);
-	Vec4V(const VecI32V& a);
-	Vec4V(const VecU32V& a);
-};
-    
+PX_ALIGN_PREFIX(16)
 struct Vec3V
 {
 	PxF32 x,y,z;
@@ -91,24 +87,14 @@ struct Vec3V
 		  pad(0.0f)
 	{
 	}
-	Vec3V(const FloatV& f)
-		: x(f.x), y(f.x), z(f.x), pad(0.0f)
-	{
-	}
-	Vec3V(const Vec4V& v)
-		: x(v.x),
-		  y(v.y),
-		  z(v.z),
-		  pad(0.0f)
-	{
-	}
-};
+}
+PX_ALIGN_SUFFIX(16);
 
+PX_ALIGN_PREFIX(16)
 struct BoolV
 {
 	PxU32 ux, uy, uz, uw;
 	BoolV(){}
-	BoolV(const VecU32V& a);
 	BoolV(const PxU32 _x, const PxU32 _y, const PxU32 _z, const PxU32 _w)
 		: ux(_x),
 		  uy(_y),
@@ -116,7 +102,8 @@ struct BoolV
 		  uw(_w)
 	{
 	}
-};
+}
+PX_ALIGN_SUFFIX(16);
 
 struct Mat33V
 {
@@ -178,49 +165,52 @@ struct Mat44V
 	Vec4V col3;
 };
 
+PX_ALIGN_PREFIX(16)
 struct VecU32V
 {
 	PxU32 u32[4];
 	PX_FORCE_INLINE VecU32V() {}
 	PX_FORCE_INLINE VecU32V(PxU32 a, PxU32 b, PxU32 c, PxU32 d) { u32[0] = a; u32[1] = b; u32[2] = c; u32[3] = d; }
-	PX_FORCE_INLINE VecU32V(const Vec4V& val);
-	PX_FORCE_INLINE VecU32V(const VecU16V& val);
-	PX_FORCE_INLINE VecU32V(const VecI32V& val);
-};
+}
+PX_ALIGN_SUFFIX(16);
 
+PX_ALIGN_PREFIX(16)
 struct VecI32V
 {
 	PxI32 i32[4];
 	PX_FORCE_INLINE VecI32V() {}
 	PX_FORCE_INLINE VecI32V(PxI32 a, PxI32 b, PxI32 c, PxI32 d) { i32[0] = a; i32[1] = b; i32[2] = c; i32[3] = d; }
-};
+}
+PX_ALIGN_SUFFIX(16);
 
+PX_ALIGN_PREFIX(16)
 struct VecI16V
 {
 	PxI16 i16[8];
 	PX_FORCE_INLINE VecI16V() {}
 	PX_FORCE_INLINE VecI16V(PxI16 a, PxI16 b, PxI16 c, PxI16 d, PxI16 e, PxI16 f, PxI16 g, PxI16 h)
 		{ i16[0] = a; i16[1] = b; i16[2] = c; i16[3] = d; i16[4] = e; i16[5] = f; i16[6] = g; i16[7] = h; }
-};
+}
+PX_ALIGN_SUFFIX(16);
 
+PX_ALIGN_PREFIX(16)
 struct VecU16V
 {
 	union { PxU16 u16[8]; PxI16 i16[8]; };
 	PX_FORCE_INLINE VecU16V() {}
 	PX_FORCE_INLINE VecU16V(PxU16 a, PxU16 b, PxU16 c, PxU16 d, PxU16 e, PxU16 f, PxU16 g, PxU16 h)
 		{ u16[0] = a; u16[1] = b; u16[2] = c; u16[3] = d; u16[4] = e; u16[5] = f; u16[6] = g; u16[7] = h; }
-	PX_FORCE_INLINE VecU16V(const Vec4V &a)
-		{ *this = *reinterpret_cast<const VecU16V*>(&a); }
-	PX_FORCE_INLINE VecU16V(const VecI16V& a)
-		{ *this = *reinterpret_cast<const VecU16V*>(&a); }
-};
+}
+PX_ALIGN_SUFFIX(16);
 
+PX_ALIGN_PREFIX(16)
 struct VecU8V
 {
 	PxU8 u8[8];
 	PX_FORCE_INLINE VecU8V() {}
 	PX_FORCE_INLINE VecU8V(PxU8 a, PxU8 b, PxU8 c, PxU8 d) { u8[0] = a; u8[1] = b; u8[2] = c; u8[3] = d; }
-};
+}
+PX_ALIGN_SUFFIX(16);
 
 
 #define FloatVArg	FloatV&
@@ -234,45 +224,10 @@ struct VecU8V
 #define VecU8VArg   VecU8V&
 #define QuatVArg	QuatV&
 
-PX_FORCE_INLINE Vec4V::Vec4V(const VecU16V& a)
-{
-	*this = *reinterpret_cast<const Vec4V*>(&a);
-}
+#define VecCrossV Vec3V
 
-PX_FORCE_INLINE Vec4V::Vec4V(const VecI32V& a)
-{
-	*this = *reinterpret_cast<const Vec4V*>(&a);
-}
-
-PX_FORCE_INLINE Vec4V::Vec4V(const VecU32V& a)
-{
-	*this = *reinterpret_cast<const Vec4V*>(&a);
-}
-
-PX_FORCE_INLINE VecU32V::VecU32V(const Vec4V& a)
-{
-	*this = *reinterpret_cast<const VecU32V*>(&a);
-}
-
-PX_FORCE_INLINE VecU32V::VecU32V(const VecU16V& a)
-{
-	*this = *reinterpret_cast<const VecU32V*>(&a);
-}
-
-PX_FORCE_INLINE VecU32V::VecU32V(const VecI32V& a)
-{
-	*this = *reinterpret_cast<const VecU32V*>(&a);
-}
-
-PX_FORCE_INLINE BoolV::BoolV(const VecU32V& a)
-{
-	*this = *reinterpret_cast<const BoolV*>(&a);
-}
-
-PX_FORCE_INLINE FloatV::FloatV(const Vec4V& a)
-{
-	*this = *reinterpret_cast<const FloatV*>(&a);
-}
+typedef VecI32V VecShiftV;
+#define VecShiftVArg VecShiftV&
 
 #endif //PX_PHYSICS_COMMON_VECMATH_INLINE_SCALAR
 

@@ -23,13 +23,15 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 
 #ifndef PX_PHYSICS_NX_CLIENT
 #define PX_PHYSICS_NX_CLIENT
+
+#include "foundation/PxFlags.h"
 
 #ifndef PX_DOXYGEN
 namespace physx
@@ -38,46 +40,109 @@ namespace physx
 
 /**
 \brief An ID to identify different clients for multiclient support.
+
+@see PxScene::createClient() 
 */
 typedef PxU8 PxClientID;
 
 /**
 \brief The predefined default PxClientID value.
+
+@see PxClientID PxScene::createClient() 
 */
 static const PxClientID PX_DEFAULT_CLIENT = 0;
 
 /**
 \brief The maximum number of clients we support.
+
+@see PxClientID PxScene::createClient() 
 */
 static const PxClientID PX_MAX_CLIENTS = 128;
 
 /**
-\brief Multiclient behavior bit flags for clients.
+\brief Behavior bit flags for simulation clients.
+
+@see PxClientBehaviorFlags PxScene::setClientBehaviorFlags() 
 */
-struct PxClientBehaviorBit 
+struct PxClientBehaviorFlag
 { 
 	enum Enum 
 	{
-		eREPORT_FOREIGN_OBJECTS_TO_TRIGGER_NOTIFY = 1,
-		eREPORT_FOREIGN_OBJECTS_TO_CONTACT_NOTIFY = 2,
-		eREPORT_FOREIGN_OBJECTS_TO_CONSTRAINT_BREAK_NOTIFY = 4,
-		eREPORT_FOREIGN_OBJECTS_TO_SCENE_QUERY = 8,
+		/**
+		\brief Report actors belonging to other clients to the trigger callback of this client.
+
+		@see PxSimulationEventCallback::onTrigger()
+		*/
+		eREPORT_FOREIGN_OBJECTS_TO_TRIGGER_NOTIFY			= (1<<0),
+		/**
+		\brief Report actors belonging to other clients to the contact callback of this client.
+
+		@see PxSimulationEventCallback::onContact()
+		*/
+		eREPORT_FOREIGN_OBJECTS_TO_CONTACT_NOTIFY			= (1<<1),
+		/**
+		\brief Report actors belonging to other clients to the constraint break callback of this client.
+
+		@see PxSimulationEventCallback::onConstraintBreak()
+		*/
+		eREPORT_FOREIGN_OBJECTS_TO_CONSTRAINT_BREAK_NOTIFY	= (1<<2),
+		/**
+		\brief Report actors belonging to other clients to scene queries of this client.
+		*/
+		eREPORT_FOREIGN_OBJECTS_TO_SCENE_QUERY				= (1<<3)
 	};
 };
 
 /**
-\brief Multiclient behavior bit flags for actors.
+\brief Bitfield that contains a set of raised flags defined in PxClientBehaviorFlag.
+
+@see PxClientBehaviorFlag PxScene::setClientBehaviorFlags() 
 */
-struct PxActorClientBehaviorBit 
+typedef PxFlags<PxClientBehaviorFlag::Enum, PxU8> PxClientBehaviorFlags;
+PX_FLAGS_OPERATORS(PxClientBehaviorFlag::Enum, PxU8)
+
+
+/**
+\brief Multiclient behavior bit flags for actors.
+
+@see PxActorClientBehaviorFlags PxActor::setClientBehaviorFlags()
+*/
+struct PxActorClientBehaviorFlag
 { 
 	enum Enum
 	{
-		eREPORT_TO_FOREIGN_CLIENTS_TRIGGER_NOTIFY = 1,
-		eREPORT_TO_FOREIGN_CLIENTS_CONTACT_NOTIFY = 2,
-		eREPORT_TO_FOREIGN_CLIENTS_CONSTRAINT_BREAK_NOTIFY = 4,
-		eREPORT_TO_FOREIGN_CLIENTS_SCENE_QUERY = 8,
+		/**
+		\brief Report this actor to trigger callbacks of other clients.
+
+		@see PxSimulationEventCallback::onTrigger()
+		*/
+		eREPORT_TO_FOREIGN_CLIENTS_TRIGGER_NOTIFY			= (1<<0),
+		/**
+		\brief Report this actor to contact callbacks of other clients.
+
+		@see PxSimulationEventCallback::onContact()
+		*/
+		eREPORT_TO_FOREIGN_CLIENTS_CONTACT_NOTIFY			= (1<<1),
+		/**
+		\brief Report this actor to constraint break callbacks of other clients.
+
+		@see PxSimulationEventCallback::onConstraintBreak()
+		*/
+		eREPORT_TO_FOREIGN_CLIENTS_CONSTRAINT_BREAK_NOTIFY	= (1<<2),
+		/**
+		\brief Report this actor to scene queries of other clients.
+		*/
+		eREPORT_TO_FOREIGN_CLIENTS_SCENE_QUERY				= (1<<3)
 	};
 };
+
+/**
+\brief Bitfield that contains a set of raised flags defined in PxActorClientBehaviorFlag.
+
+@see PxActorClientBehaviorFlag PxActor::setClientBehaviorFlags()
+*/
+typedef PxFlags<PxActorClientBehaviorFlag::Enum, PxU8> PxActorClientBehaviorFlags;
+PX_FLAGS_OPERATORS(PxActorClientBehaviorFlag::Enum, PxU8)
 
 #ifndef PX_DOXYGEN
 } // namespace physx

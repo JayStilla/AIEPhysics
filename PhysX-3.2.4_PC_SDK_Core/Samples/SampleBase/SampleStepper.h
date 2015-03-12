@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -48,29 +48,52 @@ class Stepper: public SampleAllocateable
 	virtual	bool			advance(PxScene* scene, PxReal dt, void* scratchBlock, PxU32 scratchBlockSize)	= 0;
 	virtual	void			wait(PxScene* scene)				= 0;
 	virtual void			substepStrategy(const PxReal stepSize, PxU32& substepCount, PxReal& substepSize) = 0;
+	virtual void			postRender(const PxReal stepSize) = 0;
 	
 	virtual void			setSubStepper(const PxReal stepSize, const PxU32 maxSteps)	{}
 	virtual	void			renderDone()							{}
 	virtual	void			shutdown()								{}
 
 	PxReal					getSimulationTime()	const				{ return mSimulationTime; }
-	PhysXSample*			mSample;
 
+	PhysXSample&			getSample()								{ return *mSample; }
+	const PhysXSample&		getSample()	const						{ return *mSample; }
+	void					setSample(PhysXSample* sample)			{ mSample = sample; }
 
 protected:
+	PhysXSample*			mSample;
 	Ps::Time				mTimer;
 	PxReal					mSimulationTime;
+
 };
 
 class MultiThreadStepper;
-class StepperTask : public physx::pxtask::LightCpuTask
+class StepperTask : public physx::PxLightCpuTask
 {
 public:
-	void setStepper(MultiThreadStepper* stepper) { mStepper = stepper; }
-	const char* getName() const { return "Stepper Task"; }
-	void run();
-private:
+	void						setStepper(MultiThreadStepper* stepper) { mStepper = stepper; }
+	MultiThreadStepper*			getStepper()							{ return mStepper; }
+	const MultiThreadStepper*	getStepper() const 						{ return mStepper; }
+	const char*					getName() const							{ return "Stepper Task"; }
+	void						run();
+protected:
 	MultiThreadStepper*	mStepper;
+};
+
+class StepperTaskCollide : public StepperTask
+{
+	
+public:
+	StepperTaskCollide(){}
+	void run();
+};
+
+class StepperTaskSolve : public StepperTask
+{
+	
+public:
+	StepperTaskSolve(){}
+	void run();
 };
 
 class MultiThreadStepper : public Stepper
@@ -85,13 +108,16 @@ public:
 	{
 		mCompletion0.setStepper(this);
 		mCompletion1.setStepper(this);
-	};
+		mCollideTask.setStepper(this);
+		mSolveTask.setStepper(this);
+	}
 
 	~MultiThreadStepper()	{}
 
 	virtual bool			advance(PxScene* scene, PxReal dt, void* scratchBlock, PxU32 scratchBlockSize);
 	virtual void			substepDone(StepperTask* ownerTask);
 	virtual void			renderDone();
+	virtual void			postRender(const PxReal stepSize){}
 	
 	// if mNbSubSteps is 0 then the sync will never 
 	// be set so waiting would cause a deadlock
@@ -99,23 +125,27 @@ public:
 	virtual void			shutdown()				{	DELETESINGLE(mSync);	}
 	virtual void			reset() = 0;
 	virtual void			substepStrategy(const PxReal stepSize, PxU32& substepCount, PxReal& substepSize) = 0;
+	virtual void			solveStep(physx::PxBaseTask* ownerTask);
+	virtual void			collisionStep(physx::PxBaseTask* ownerTask);
+	PxReal					getSubStepSize() const	{ return mSubStepSize; }
 
-private:
-	
-	void substep(StepperTask& completionTask);
+protected:
+	void					substep(StepperTask& completionTask);
 
 	// we need two completion tasks because when multistepping we can't submit completion0 from the
 	// substepDone function which is running inside completion0
-	bool			mFirstCompletionPending;
-	StepperTask		mCompletion0, mCompletion1;
-	PxScene*		mScene;
-	PsSyncAlloc*	mSync;
+	bool				mFirstCompletionPending;
+	StepperTaskCollide	mCollideTask;
+	StepperTaskSolve	mSolveTask;
+	StepperTask			mCompletion0, mCompletion1;
+	PxScene*			mScene;
+	PsSyncAlloc*		mSync;
 
-	PxU32			mCurrentSubStep;
-	PxU32			mNbSubSteps;
-	PxReal			mSubStepSize;
-	void*			mScratchBlock;
-	PxU32			mScratchBlockSize;
+	PxU32				mCurrentSubStep;
+	PxU32				mNbSubSteps;
+	PxReal				mSubStepSize;
+	void*				mScratchBlock;
+	PxU32				mScratchBlockSize;
 };
 
 class DebugStepper : public Stepper
@@ -129,11 +159,10 @@ public:
 		substepSize = mStepSize;
 	}
 
-	virtual bool advance(PxScene* scene, PxReal dt, void* scratchBlock, PxU32 scratchBlockSize)
+	virtual bool advance(PxScene* scene, PxReal dt, void* scratchBlock, PxU32 scratchBlockSize);
+
+	virtual void			postRender(const PxReal stepSize)
 	{
-		mTimer.getElapsedSeconds();
-		scene->simulate(mStepSize, NULL, scratchBlock, scratchBlockSize);
-		return true;
 	}
 
 	virtual void setSubStepper(const PxReal stepSize, const PxU32 maxSteps)
@@ -176,9 +205,30 @@ public:
 	
 	virtual void	setSubStepper(const PxReal stepSize, const PxU32 maxSteps) { mFixedSubStepSize = stepSize; mMaxSubSteps = maxSteps;}
 
+	virtual void			postRender(const PxReal stepSize)
+	{
+	}
+
 	PxReal	mAccumulator;
 	PxReal	mFixedSubStepSize;
 	PxU32	mMaxSubSteps;
+};
+
+class InvertedFixedStepper : public FixedStepper
+{
+public:
+	InvertedFixedStepper(const PxReal subStepSize, const PxU32 maxSubSteps)
+		: FixedStepper(subStepSize, maxSubSteps)
+		, mIsCollideRunning(false)
+	{
+	}
+
+	virtual bool			advance(PxScene* scene, PxReal dt, void* scratchBlock, PxU32 scratchBlockSize);
+	virtual void			substepDone(StepperTask* ownerTask);
+
+	virtual void			postRender(const PxReal stepSize);
+
+	bool mIsCollideRunning;
 };
 
 class VariableStepper : public MultiThreadStepper
@@ -197,6 +247,7 @@ public:
 	virtual void	reset() { mAccumulator = 0.0f; }
 
 private:
+	VariableStepper& operator=(const VariableStepper&);
 			PxReal	mAccumulator;
 	const	PxReal	mMinSubStepSize;
 	const	PxReal	mMaxSubStepSize;

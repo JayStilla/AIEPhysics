@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,7 @@
 @{
 */
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 #include "geometry/PxSimpleTriangleMesh.h"
 
 #ifndef PX_DOXYGEN
@@ -74,13 +74,14 @@ public:
 	PxTypedStridedData<PxMaterialTableIndex> materialIndices;
 
 	/**
+	\deprecated
 	The SDK computes convex edges of a mesh and use them for collision detection. This parameter allows you to
 	setup a tolerance for the convex edge detector.
 
-	<b>Range:</b> (0,inf)<br>
+	<b>Range:</b> (0, PX_MAX_F32)<br>
 	<b>Default:</b> 0.001
 	*/
-	PxReal					convexEdgeThreshold;
+	PX_DEPRECATED PxReal					convexEdgeThreshold;
 
 	/**
 	\brief Constructor sets to default.

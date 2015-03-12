@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -76,6 +76,13 @@ namespace shdfnd
 		{
 			return first == p.first && second == p.second;
 		}
+		bool operator<(const Pair &p) const
+		{
+			if (first < p.first)
+				return true;
+			else
+				return !(p.first < first) && (second < p.second);
+		}
 	};
 
 	template<unsigned int A>	struct LogTwo	{	static const unsigned int value  = LogTwo<(A>>1)>::value + 1; };
@@ -83,6 +90,9 @@ namespace shdfnd
 
 	template<typename T> struct UnConst	{ typedef T Type; };
 	template<typename T> struct UnConst<const T> { typedef T Type; };
+
+	template<typename T> T pointerOffset(void *p, ptrdiff_t offset) { return reinterpret_cast<T>(reinterpret_cast<char *>(p)+offset); }
+	template<typename T> T pointerOffset(const void *p, ptrdiff_t offset) { return reinterpret_cast<T>(reinterpret_cast<const char *>(p)+offset); }
 
 } // namespace shdfnd
 } // namespace physx

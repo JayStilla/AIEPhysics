@@ -23,15 +23,12 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
-// Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
+// Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
 
 #ifndef SAMPLE_PREPROCESSOR_H
 #define SAMPLE_PREPROCESSOR_H
 
-	//#if defined PX_WINDOWS || defined PX_X360
-	#pragma warning(disable:4530)
-	//#endif
- 
+
 #endif

@@ -23,13 +23,15 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #include "SamplePreprocessor.h"
 #include "KinematicPlatform.h"
 #include "RendererMemoryMacros.h"
+#include "PxScene.h"
+#include "PxSceneLock.h"
 #include "PxRigidDynamic.h"
 #include "PxTkMatrixUtils.h"
 
@@ -38,7 +40,7 @@ PlatformState::PlatformState() :
 	mCurrentRotationTime(0.0f),
 	mFlip				(false)
 {
-	mPrevPose	= PxTransform::createIdentity();
+	mPrevPose	= PxTransform(PxIdentity);
 }
 
 KinematicPlatform::KinematicPlatform() :
@@ -195,14 +197,15 @@ void KinematicPlatform::updateState(PlatformState& state, PxObstacleContext* obs
 		const PxTransform tr(wp, mLocalRot * rotation);
 
 //PxVec3 delta = wp - state.mPrevPos;
-//printf("Kine: %f | %f | %f\n", delta.x, delta.y, delta.z);
+//shdfnd::printFormatted("Kine: %f | %f | %f\n", delta.x, delta.y, delta.z);
 state.mPrevPose = tr;
 		if(updateActor)
 		{
+			PxSceneWriteLock scopedLock(*mActor->getScene());
 			mActor->setKinematicTarget(tr);	// *
 /*PxVec3 test = mActor->getGlobalPose().p;
 test -= tr.p;
-printf("%f | %f | %f\n", test.x, test.y, test.z);*/
+shdfnd::printFormatted("%f | %f | %f\n", test.x, test.y, test.z);*/
 		}
 		else if(obstacleContext && mBoxObstacle)
 		{

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -42,8 +42,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#if defined(PX_LINUX) || defined(PX_ANDROID) || defined(PX_PSP2)
-#include <stdint.h> // uintptr_t
+#if defined(PX_LINUX) || defined(PX_ANDROID) || defined(PX_PSP2) || defined (PX_WIIU) || defined(PX_PS4)
+#include <stdint.h> // uintptr_t, intptr_t
 #endif
 
 #ifndef PX_DOXYGEN
@@ -64,7 +64,8 @@ namespace physx
 
 		class PxFoundation;
 
-		class PxEmpty;
+		/** enum for empty constructor tag*/
+	    enum PxEMPTY			{	PxEmpty		};
 
 #ifndef PX_DOXYGEN
 } // namespace physx

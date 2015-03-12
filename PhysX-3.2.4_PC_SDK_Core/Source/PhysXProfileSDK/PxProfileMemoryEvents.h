@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -43,7 +43,7 @@ namespace physx { namespace profile {
 			StringTableEvent, //introduce a new mapping of const char* -> integer
 			AllocationEvent,
 			DeallocationEvent,
-			FullAllocationEvent,
+			FullAllocationEvent
 		};
 	};
 
@@ -83,7 +83,7 @@ namespace physx { namespace profile {
 	struct BitMaskSetter
 	{
 		//Create a mask that masks out the orginal value shift into place
-		static TDataType createOffsetMask() { return createMask() << TOffset; }
+		static TDataType createOffsetMask() { return TDataType(createMask() << TOffset); }
 		//Create a mask of TNumBits number of tis
 		static TDataType createMask() { return static_cast<TDataType>((1 << TNumBits) - 1); }
 		void setValue( TDataType& inCurrent, TInputType inData )
@@ -91,13 +91,13 @@ namespace physx { namespace profile {
 			PX_ASSERT( inData < ( 1 << TNumBits ) );
 			
 			//Create a mask to remove the current value.
-			TDataType theMask = ~(createOffsetMask());
+			TDataType theMask = TDataType(~(createOffsetMask()));
 			//Clear out current value.
-			inCurrent = inCurrent & theMask;
+			inCurrent = TDataType(inCurrent & theMask);
 			//Create the new value.
 			TDataType theAddition = (TDataType)( inData << TOffset );
 			//or it into the existing value.
-			inCurrent = inCurrent | theAddition;
+			inCurrent = TDataType(inCurrent | theAddition);
 		}
 
 		TInputType getValue( TDataType inCurrent )
@@ -138,11 +138,11 @@ namespace physx { namespace profile {
 	void set##name( EventStreamCompressionFlags::Enum inEnum ) { T##name##Bitmask().setValue( mValue, convertToTwoBits( inEnum ) ); }	\
 		EventStreamCompressionFlags::Enum get##name() const { return fromNumber( T##name##Bitmask().getValue( mValue ) ); }
 
-		DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR( AddrCompress );
-		DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR( TypeCompress );
-		DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR( FnameCompress );
-		DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR( SizeCompress );
-		DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR( LineCompress );
+		DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR( AddrCompress )
+		DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR( TypeCompress )
+		DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR( FnameCompress )
+		DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR( SizeCompress )
+		DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR( LineCompress )
 
 #undef DEFINE_MEMORY_HEADER_COMPRESSION_ACCESSOR
 
@@ -375,7 +375,7 @@ namespace physx { namespace profile {
 		TDataType& getValue() { PX_ASSERT( mHeader.getType() == getMemoryEventType<TDataType>() ); return mData.toType<TDataType>(); }
 
 		template<typename TRetVal, typename TOperator>
-		TRetVal visit( TOperator inOp ) const;
+		inline TRetVal visit( TOperator inOp ) const;
 
 		bool operator==( const MemoryEvent& inOther ) const
 		{
@@ -395,6 +395,7 @@ namespace physx { namespace profile {
 		case MemoryEventTypes::AllocationEvent:			return inOperator( inData.toType( Type2Type<AllocationEvent>() ) );
 		case MemoryEventTypes::DeallocationEvent:		return inOperator( inData.toType( Type2Type<DeallocationEvent>() ) );
 		case MemoryEventTypes::FullAllocationEvent:		return inOperator( inData.toType( Type2Type<FullAllocationEvent>() ) );
+		case MemoryEventTypes::Unknown:
 		default: 										return inOperator( static_cast<PxU8>( inEventType ) );
 		}
 	}

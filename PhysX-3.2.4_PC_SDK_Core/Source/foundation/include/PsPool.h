@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,6 +34,7 @@
 #include "PsArray.h"
 #include "PsSort.h"
 #include "PsBasicTemplates.h"
+#include "PsUtilities.h"
 
 namespace physx
 {
@@ -78,10 +79,18 @@ namespace shdfnd
 		{
 			if(mFreeElement == 0)
 				allocateSlab();
-			T* p = reinterpret_cast<T*>(mFreeElement);
+			T* p = reinterpret_cast<T*>(mFreeElement);			
 			mFreeElement = mFreeElement->mNext;
 			mUsed++;
 			mUnReleasedFree--;
+/**
+Mark a specified amount of memory with 0xcd pattern. This is used to check that the meta data 
+definition for serialized classes is complete in checked builds.
+*/
+#if defined(PX_CHECKED)
+			for (PxU32 i = 0; i < sizeof(T); ++i)
+               reinterpret_cast<PxU8*>(p)[i] = 0xcd;
+#endif
 			return p;
 		}
 

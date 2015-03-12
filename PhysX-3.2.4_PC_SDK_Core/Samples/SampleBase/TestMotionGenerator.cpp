@@ -23,29 +23,25 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #include "TestMotionGenerator.h"
 
 //----------------------------------------------------------------------------//
-MotionGenerator::MotionGenerator() :
-	mLinear(0.0f),
+MotionGenerator::MotionGenerator() 
+:	mLinear(0.0f),
 	mAngular(0.0f),
-	mCenter(0.0f),
-	mTransform(PxVec3(0.0f), PxQuat::createIdentity()),
-	mAnimationSpeed(1.0f)
+	mTransform(PxTransform(PxIdentity))
 {
 }
 
 //----------------------------------------------------------------------------//
-MotionGenerator::MotionGenerator(const PxTransform &pose, const PxVec3& linear, const PxVec3& angular, PxReal animationSpeed) :
-	mLinear(linear),
+MotionGenerator::MotionGenerator(const PxTransform &pose, const PxVec3& linear, const PxVec3& angular) 
+:	mLinear(linear),
 	mAngular(angular),
-	mCenter(0.0f),
-	mTransform(pose),
-	mAnimationSpeed(animationSpeed)
+	mTransform(pose)
 {
 }
 
@@ -84,7 +80,7 @@ static PxQuat computeQuatFromAngularVelocity(const PxVec3 &omega)
 
 	if (angle < 1e-5f) 
 	{
-		return PxQuat::createIdentity();
+		return PxQuat(PxIdentity);
 	} else {
 		PxReal s = sin( 0.5f * angle ) / angle;
 		PxReal x = omega[0] * s;
@@ -97,20 +93,11 @@ static PxQuat computeQuatFromAngularVelocity(const PxVec3 &omega)
 //----------------------------------------------------------------------------//
 const PxTransform& MotionGenerator::update(float time, float dt)
 {
-	float transformedTime = mAnimationSpeed * time;
-	float transformedDt = mAnimationSpeed * dt;
+	PxVec3 dw = dt * getAngularVelocity(time);
+	PxQuat dq = computeQuatFromAngularVelocity(dw);
 
-	mTransform.p += mCenter;
-
-	PxVec3 omega = transformedDt * getAngularVelocity(transformedTime);
-
-	PxQuat qw = computeQuatFromAngularVelocity(omega);
-	mTransform.q = qw * mTransform.q;
-	mTransform.q.normalize();
-
-	mTransform.p -= mCenter;
-
-	mTransform.p += transformedDt * getLinearVelocity(transformedTime);
+	mTransform.q = (dq * mTransform.q).getNormalized();
+	mTransform.p += dt * getLinearVelocity(time);
 	
 	return mTransform;
 }

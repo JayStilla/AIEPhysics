@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,7 +32,7 @@
 
 #include "foundation/Px.h"
 #include "foundation/PxSimpleTypes.h"
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "pxtask/PxTask.h"
 #include "SampleAllocator.h"
 #include <vector>
@@ -98,9 +98,11 @@ struct SqRayBuffer: public SampleAllocateable
 	PxU32 							mQueryResultSize; 
 	PxU32 							mHitSize;
 	void*							mOrigAddresses[2];
+private:
+	SqRayBuffer& operator=(const SqRayBuffer&);
 };
 
-class Crab: public ClassType, public physx::pxtask::LightCpuTask, public SampleAllocateable
+class Crab: public ClassType, public physx::PxLightCpuTask, public SampleAllocateable
 {
 public:
 	Crab(SampleSubmarine& sample, const PxVec3& crabPos, RenderMaterial* material);

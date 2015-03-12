@@ -23,18 +23,17 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #ifndef SAMPLEVEHICLE_UTILSCENEQUERY_H
 #define SAMPLEVEHICLE_UTILSCENEQUERY_H
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "vehicle/PxVehicleSDK.h"
 #include "foundation/PxPreprocessor.h"
 #include "PxScene.h"
-#include "PxSweepCache.h"
 #include "PxBatchQueryDesc.h"
 
 using namespace physx;
@@ -50,11 +49,11 @@ static PxSceneQueryHitType::Enum SampleVehicleWheelRaycastPreFilter(
 	PxFilterData filterData0, 
 	PxFilterData filterData1,
 	const void* constantBlock, PxU32 constantBlockSize,
-	PxSceneQueryFilterFlags& filterFlags)
+	PxSceneQueryFlags& queryFlags)
 {
 	//filterData0 is the vehicle suspension raycast.
 	//filterData1 is the shape potentially hit by the raycast.
-	PX_UNUSED(filterFlags);
+	PX_UNUSED(queryFlags);
 	PX_UNUSED(constantBlockSize);
 	PX_UNUSED(constantBlock);
 	PX_UNUSED(filterData0);
@@ -105,6 +104,7 @@ private:
 
 	//One result for each wheel.
 	PxRaycastQueryResult* mSqResults;
+	PxU32 mNbSqResults;
 
 	//One hit for each wheel.
 	PxRaycastHit* mSqHitBuffer;
@@ -123,12 +123,6 @@ private:
 	//Maximum number of suspension raycasts that can be supported by the allocated buffers 
 	//assuming a single query and hit per suspension line.
 	PxU32 mNumQueries;
-
-#ifndef PX_X64
-	PxU32 mPad[2];
-#else
-	PxU32 mPad[2];
-#endif
 
 	void init()
 	{

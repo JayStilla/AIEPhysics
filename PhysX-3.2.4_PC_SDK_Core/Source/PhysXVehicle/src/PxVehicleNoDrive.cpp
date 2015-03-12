@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -39,6 +39,8 @@
 #include "PsUtilities.h"
 #include "CmPhysXCommon.h"
 #include "PxScene.h"
+#include "PxMemory.h"
+#include "CmUtils.h"
 
 namespace physx
 {
@@ -55,27 +57,30 @@ PxVehicleNoDrive* PxVehicleNoDrive::allocate(const PxU32 numWheels)
 
 	//Compute the bytes needed.
 	const PxU32 numWheels4 = (((numWheels + 3) & ~3) >> 2);
-	const PxU32 inputByteSize = sizeof(PxReal)*numWheels4*4;
-	const PxU32 inputByteSize16 = (inputByteSize + 15) & ~15;
+	const PxU32 inputByteSize16 = sizeof(PxReal)*numWheels4*4;
 	const PxU32 byteSize = sizeof(PxVehicleNoDrive) + 3*inputByteSize16 + PxVehicleWheels::computeByteSize(numWheels4);
 
 	//Allocate the memory.
 	PxVehicleNoDrive* veh = (PxVehicleNoDrive*)PX_ALLOC(byteSize, PX_DEBUG_EXP("PxVehicleNoDrive"));
+	Cm::markSerializedMem(veh, byteSize);
+	new(veh) PxVehicleNoDrive();
 
 	//Patch up the pointers.
 	PxU8* ptr = (PxU8*)veh + sizeof(PxVehicleNoDrive);
+	ptr=PxVehicleWheels::patchupPointers(veh,ptr,numWheels4,numWheels);
 	veh->mSteerAngles = (PxReal*)ptr;
-	ptr+=inputByteSize16;
-	veh->mBrakeTorques = (PxReal*)ptr;
 	ptr+=inputByteSize16;
 	veh->mDriveTorques = (PxReal*)ptr;
 	ptr+=inputByteSize16;
-	PxVehicleWheels::patchupPointers(veh,ptr,numWheels4,numWheels);
+	veh->mBrakeTorques = (PxReal*)ptr;
+	ptr+=inputByteSize16;
 
-	Ps::memZero(veh->mSteerAngles, 3*inputByteSize16);
+	PxMemZero(veh->mSteerAngles, inputByteSize16);
+	PxMemZero(veh->mDriveTorques, inputByteSize16);
+	PxMemZero(veh->mBrakeTorques, inputByteSize16);
 
 	//Set the vehicle type.
-	veh->mType = eVEHICLE_TYPE_NODRIVE;
+	veh->mType = PxVehicleTypes::eNODRIVE;
 
 	return veh;
 }
@@ -89,24 +94,24 @@ void PxVehicleNoDrive::setup
 (PxPhysics* physics, PxRigidDynamic* vehActor, const PxVehicleWheelsSimData& wheelsData)
 {
 	//Set up the wheels.
-	PxVehicleWheels::setup(physics,vehActor,wheelsData,0,wheelsData.getNumWheels());
+	PxVehicleWheels::setup(physics,vehActor,wheelsData,0,wheelsData.getNbWheels());
 }
 
 PxVehicleNoDrive* PxVehicleNoDrive::create
 (PxPhysics* physics, PxRigidDynamic* vehActor, 
  const PxVehicleWheelsSimData& wheelsData)
 {
-	PxVehicleNoDrive* veh=PxVehicleNoDrive::allocate(wheelsData.getNumWheels());
+	PxVehicleNoDrive* veh=PxVehicleNoDrive::allocate(wheelsData.getNbWheels());
 	veh->setup(physics,vehActor,wheelsData);
 	return veh;
 }
 
 void PxVehicleNoDrive::setToRestState()
 {
-	const PxU32 numWheels4 = (((mWheelsSimData.getNumWheels() + 3) & ~3) >> 2);
+	const PxU32 numWheels4 = (((mWheelsSimData.getNbWheels() + 3) & ~3) >> 2);
 	const PxU32 inputByteSize = sizeof(PxReal)*numWheels4*4;
 	const PxU32 inputByteSize16 = (inputByteSize + 15) & ~15;
-	Ps::memZero(mSteerAngles, 3*inputByteSize16);
+	PxMemZero(mSteerAngles, 3*inputByteSize16);
 
 	//Set core to rest state.
 	PxVehicleWheels::setToRestState();
@@ -114,52 +119,40 @@ void PxVehicleNoDrive::setToRestState()
 
 void PxVehicleNoDrive::setBrakeTorque(const PxU32 id, const PxReal brakeTorque)
 {
-	PX_CHECK_AND_RETURN(id < mWheelsSimData.getNumWheels(), "PxVehicleNoDrive::setBrakeTorque - Illegal wheel");
+	PX_CHECK_AND_RETURN(id < mWheelsSimData.getNbWheels(), "PxVehicleNoDrive::setBrakeTorque - Illegal wheel");
 	PX_CHECK_AND_RETURN(brakeTorque>=0, "PxVehicleNoDrive::setBrakeTorque - negative brake torques are illegal");
 	mBrakeTorques[id] = brakeTorque;
 }
 
 void PxVehicleNoDrive::setDriveTorque(const PxU32 id, const PxReal driveTorque)
 {
-	PX_CHECK_AND_RETURN(id < mWheelsSimData.getNumWheels(), "PxVehicleNoDrive::setDriveTorque - Illegal wheel");
+	PX_CHECK_AND_RETURN(id < mWheelsSimData.getNbWheels(), "PxVehicleNoDrive::setDriveTorque - Illegal wheel");
 	mDriveTorques[id] = driveTorque;
 }
 
 void PxVehicleNoDrive::setSteerAngle(const PxU32 id, const PxReal steerAngle)
 {
-	PX_CHECK_AND_RETURN(id < mWheelsSimData.getNumWheels(), "PxVehicleNoDrive::setSteerAngle - Illegal wheel");
+	PX_CHECK_AND_RETURN(id < mWheelsSimData.getNbWheels(), "PxVehicleNoDrive::setSteerAngle - Illegal wheel");
 	mSteerAngles[id] = steerAngle;
 }
 
 PxReal PxVehicleNoDrive::getBrakeTorque(const PxU32 id) const
 {
-	PX_CHECK_AND_RETURN_VAL(id < mWheelsSimData.getNumWheels(), "PxVehicleNoDrive::getBrakeTorque - Illegal wheel", 0);
+	PX_CHECK_AND_RETURN_VAL(id < mWheelsSimData.getNbWheels(), "PxVehicleNoDrive::getBrakeTorque - Illegal wheel", 0);
 	return mBrakeTorques[id];
 }
 
 PxReal PxVehicleNoDrive::getDriveTorque(const PxU32 id) const
 {
-	PX_CHECK_AND_RETURN_VAL(id < mWheelsSimData.getNumWheels(), "PxVehicleNoDrive::getDriveTorque - Illegal wheel",0);
+	PX_CHECK_AND_RETURN_VAL(id < mWheelsSimData.getNbWheels(), "PxVehicleNoDrive::getDriveTorque - Illegal wheel",0);
 	return mDriveTorques[id];
 }
 
 PxReal PxVehicleNoDrive::getSteerAngle(const PxU32 id) const
 {
-	PX_CHECK_AND_RETURN_VAL(id < mWheelsSimData.getNumWheels(), "PxVehicleNoDrive::getSteerAngle - Illegal wheel",0);
+	PX_CHECK_AND_RETURN_VAL(id < mWheelsSimData.getNbWheels(), "PxVehicleNoDrive::getSteerAngle - Illegal wheel",0);
 	return mSteerAngles[id];
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 } //namespace physx
 

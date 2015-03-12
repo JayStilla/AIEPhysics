@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,7 +35,6 @@
 #include "PvdMetaDataPropertyVisitor.h"
 #include "PvdDataStreamHelpers.h"
 #include "PvdDataStream.h"
-#include "PvdDataStreamHelpers.h"
 #include "PxCoreUtilityTypes.h"
 
 namespace physx
@@ -65,8 +64,8 @@ namespace Pvd
 	template<> struct PropertyDefinitionOp<type> { void defineProperty( PvdPropertyDefinitionHelper&, NamespacedName ){} };
 
 	//NOP out these two types.
-	DEFINE_PROPERTY_DEFINITION_OP_NOP( PxStridedData );
-	DEFINE_PROPERTY_DEFINITION_OP_NOP( PxBoundedData );
+	DEFINE_PROPERTY_DEFINITION_OP_NOP( PxStridedData )
+	DEFINE_PROPERTY_DEFINITION_OP_NOP( PxBoundedData )
 
 #define DEFINE_PROPERTY_DEFINITION_OBJECT_REF( type )										\
 	template<> struct PropertyDefinitionOp<type> {											\
@@ -76,9 +75,9 @@ namespace Pvd
 	}																						\
 	};
 
-	DEFINE_PROPERTY_DEFINITION_OBJECT_REF( PxTriangleMesh* );
-	DEFINE_PROPERTY_DEFINITION_OBJECT_REF( PxConvexMesh* );
-	DEFINE_PROPERTY_DEFINITION_OBJECT_REF( PxHeightField* );
+	DEFINE_PROPERTY_DEFINITION_OBJECT_REF( PxTriangleMesh* )
+	DEFINE_PROPERTY_DEFINITION_OBJECT_REF( PxConvexMesh* )
+	DEFINE_PROPERTY_DEFINITION_OBJECT_REF( PxHeightField* )
 
 
 struct PvdClassInfoDefine
@@ -126,16 +125,23 @@ struct PvdClassInfoDefine
 	}
 
 	template<typename TAccessorType>
-	void simpleProperty( PxU32, TAccessorType& inProp )
+	void simpleProperty( PxU32, TAccessorType& /*inProp */)
 	{
 		typedef typename TAccessorType::prop_type TPropertyType;
 		PropertyDefinitionOp<TPropertyType>().defineProperty( mHelper, mClassKey );
 	}
 
+	template<typename TAccessorType, typename TInfoType>
+	void extendedIndexedProperty( PxU32* key, const TAccessorType& inProp, TInfoType&  )
+	{
+		simpleProperty(*key, inProp);
+	}
+
 	template<typename TDataType>
 	static NamespacedName getNameForEnumType()
 	{
-		switch( sizeof( TDataType ) )
+		size_t s = sizeof( TDataType );
+		switch(s)
 		{
 		case 1: return getPvdNamespacedNameForType<PxU8>();
 		case 2: return getPvdNamespacedNameForType<PxU16>();
@@ -145,7 +151,7 @@ struct PvdClassInfoDefine
 	}
 	
 	template<typename TAccessorType>
-	void enumProperty( PxU32 key, TAccessorType& inProp, const PxU32ToName* inConversions )
+	void enumProperty( PxU32 /*key*/, TAccessorType& /*inProp*/, const PxU32ToName* inConversions )
 	{
 		typedef typename TAccessorType::prop_type TPropType;
 		defineNameValueDefs( inConversions );
@@ -153,7 +159,7 @@ struct PvdClassInfoDefine
 	}
 
 	template<typename TAccessorType>
-	void flagsProperty( PxU32 key, const TAccessorType& inAccessor, const PxU32ToName* inConversions )
+	void flagsProperty( PxU32 /*key*/, const TAccessorType& /*inAccessor*/, const PxU32ToName* inConversions )
 	{
 		typedef typename TAccessorType::prop_type TPropType;
 		defineNameValueDefs( inConversions );
@@ -168,6 +174,12 @@ struct PvdClassInfoDefine
 		inInfo.visitInstanceProperties( makePvdPropertyFilter( *this, key, &theOffset ) );
 	}
 	
+	template<typename TAccessorType, typename TInfoType>
+	void bufferCollectionProperty( PxU32* key, const TAccessorType& inAccessor, TInfoType& inInfo )
+	{
+		complexProperty(key, inAccessor, inInfo);
+	}
+
 	template<PxU32 TKey, typename TObjectType, typename TPropertyType, PxU32 TEnableFlag>
 	void handleBuffer( const PxBufferPropertyInfo<TKey, TObjectType, PxStrideIterator< const TPropertyType >, TEnableFlag>& inProp )
 	{
@@ -209,6 +221,9 @@ struct PvdClassInfoDefine
 		defineProperty( getNameForEnumType<TEnumType>(), "Enumeration Value", PropertyType::Array );
 		mHelper.popName();
 	}
+
+private:
+	PvdClassInfoDefine& operator=(const PvdClassInfoDefine&);
 };
 
 template<typename TPropType>
@@ -223,8 +238,8 @@ struct SimplePropertyValueStructOp
 #define DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_OP_NOP( type ) \
 template<> struct SimplePropertyValueStructOp<type> { void addPropertyMessageArg( PvdPropertyDefinitionHelper&, PxU32 ){}};
 
-DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_OP_NOP( PxStridedData );
-DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_OP_NOP( PxBoundedData );
+DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_OP_NOP( PxStridedData )
+DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_OP_NOP( PxBoundedData )
 
 #define DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_VOIDPTR_OP( type )						\
 template<> struct SimplePropertyValueStructOp<type> {								\
@@ -234,13 +249,17 @@ void addPropertyMessageArg( PvdPropertyDefinitionHelper& mHelper, PxU32 inOffset
 }																					\
 };
 
-DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_VOIDPTR_OP( PxTriangleMesh* );
-DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_VOIDPTR_OP( PxConvexMesh* );
-DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_VOIDPTR_OP( PxHeightField* );
+DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_VOIDPTR_OP( PxTriangleMesh* )
+DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_VOIDPTR_OP( PxConvexMesh* )
+DEFINE_SIMPLE_PROPERTY_VALUE_STRUCT_VOIDPTR_OP( PxHeightField* )
 
 
 struct PvdClassInfoValueStructDefine
 {
+private:
+	PvdClassInfoValueStructDefine& operator=(const PvdClassInfoValueStructDefine&);
+public:
+
 	PvdPropertyDefinitionHelper& mHelper;
 
 	PvdClassInfoValueStructDefine( PvdPropertyDefinitionHelper& info )
@@ -282,8 +301,14 @@ struct PvdClassInfoValueStructDefine
 		mHelper.popName();
 	}
 
+    template<typename TAccessorType, typename TInfoType>
+	void bufferCollectionProperty( PxU32* key, const TAccessorType& inAccessor, TInfoType& inInfo )
+	{
+		//complexProperty(key, inAccessor, inInfo);
+	}
+
 	template<typename TAccessorType>
-	void simpleProperty( PxU32 key, TAccessorType& inProp )
+	void simpleProperty( PxU32 /*key*/, TAccessorType& inProp )
 	{
 		typedef typename TAccessorType::prop_type TPropertyType;
 		if ( inProp.mHasValidOffset )
@@ -293,14 +318,14 @@ struct PvdClassInfoValueStructDefine
 	}
 	
 	template<typename TAccessorType>
-	void enumProperty( PxU32 key, TAccessorType& inAccessor, const PxU32ToName* inConversions )
+	void enumProperty( PxU32 /*key*/, TAccessorType& inAccessor, const PxU32ToName* /*inConversions */)
 	{
 		typedef typename TAccessorType::prop_type TPropType;
 		defineValueStructOffset( inAccessor, sizeof( TPropType ) );
 	}
 
 	template<typename TAccessorType>
-	void flagsProperty( PxU32 key, const TAccessorType& inAccessor, const PxU32ToName* inConversions )
+	void flagsProperty( PxU32 /*key*/, const TAccessorType& inAccessor, const PxU32ToName* /*inConversions */)
 	{
 		typedef typename TAccessorType::prop_type TPropType;
 		defineValueStructOffset( inAccessor, sizeof( TPropType ) );
@@ -315,12 +340,17 @@ struct PvdClassInfoValueStructDefine
 	}
 
 	template<PxU32 TKey, typename TObjectType, typename TCollectionType>
-	void handleCollection( const PxReadOnlyCollectionPropertyInfo<TKey, TObjectType, TCollectionType>& prop )
+	void handleCollection( const PxReadOnlyCollectionPropertyInfo<TKey, TObjectType, TCollectionType>& /*prop*/ )
 	{
 	}
 	
 	template<PxU32 TKey, typename TObjectType, typename TEnumType>
-	void handleCollection( const PxReadOnlyCollectionPropertyInfo<TKey, TObjectType, TEnumType>& prop, const PxU32ToName* inConversions )
+	void handleCollection( const PxReadOnlyCollectionPropertyInfo<TKey, TObjectType, TEnumType>& /*prop*/, const PxU32ToName* /*inConversions */)
+	{
+	}
+
+    template<PxU32 TKey, typename TObjectType, typename TInfoType>
+	void handleCollection( const PxBufferCollectionPropertyInfo<TKey, TObjectType, TInfoType>& /*prop*/,  const TInfoType& /*inInfo */)
 	{
 	}
 };

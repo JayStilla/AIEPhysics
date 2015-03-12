@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -49,7 +49,7 @@ namespace shdfnd
 	{
 	public:
 
-		InlineArray(const PxEmpty& v) : Array<T, Alloc>(v) {}
+		InlineArray(const PxEMPTY& v) : Array<T, Alloc>(v) {}
 
 		InlineArray(const Alloc& alloc = Alloc()): 
 			Array<T,Alloc>(reinterpret_cast<T*>(mInlineSpace), 0, N, alloc) {}
@@ -66,9 +66,8 @@ namespace shdfnd
 				Array<T, Alloc>::exportArray(stream, false);
 		}
 
-		char* importExtraData(char* address, PxU32& totalPadding)
+		PxU8* importExtraData(PxU8* address)
 		{
-			PX_UNUSED(totalPadding);
 			if(isInlined())
 				this->mData = reinterpret_cast<T*>(mInlineSpace);
 			else
@@ -88,29 +87,15 @@ namespace shdfnd
 		typedef InlineAllocator<N * sizeof(T), Alloc> Allocator;
 	public:
 
-		InlineArray(const PxEmpty& v) : Array<T, Allocator>(v) {}
+		InlineArray(const PxEMPTY& v) : Array<T, Allocator>(v) 
+		{
+			if(isInlined())
+				this->mData = reinterpret_cast<T*>(Array<T, Allocator>::getInlineBuffer());
+		}
 
 		PX_INLINE bool isInlined()	const
 		{
 			return Allocator::isBufferUsed();
-		}
-
-		template<class Serializer>
-
-		void exportExtraData(Serializer& stream)
-		{
-			if(!isInlined())
-				Array<T, Allocator>::exportArray(stream, false);
-		}
-
-		char* importExtraData(char* address, PxU32& totalPadding)
-		{
-			PX_UNUSED(totalPadding);
-			if(isInlined())
-				this->mData = reinterpret_cast<T*>(Array<T, Allocator>::getInlineBuffer());
-			else
-				address = Array<T, Allocator>::importArray(address);
-			return address;
 		}
 
 		PX_INLINE explicit InlineArray(const Alloc& alloc = Alloc()) 

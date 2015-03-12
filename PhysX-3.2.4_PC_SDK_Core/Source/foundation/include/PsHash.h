@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -36,7 +36,8 @@
 
 #ifdef PX_VC
 #pragma warning(push)
-#pragma warning(disable:4311 4302) // intentionally suppressing 64 bit warning message as we are taking this use case into account.
+#pragma warning(disable:4302)
+//#pragma warning(disable:4311) // intentionally suppressing 64 bit warning message as we are taking this use case into account.
 #endif
 
 /*!
@@ -84,7 +85,7 @@ namespace shdfnd
 		return (PxU32)(PX_MAX_U32 & k);
 	}
 
-#if defined(PX_APPLE) || (defined(PX_LINUX) && defined(PX_X64))
+#if defined(PX_APPLE) || (defined(PX_LINUX) && defined(PX_X64)) || defined(PX_PS4)
 	// hash for size_t, to make gcc happy
 	PX_INLINE PxU32 hash(const size_t key)
 	{

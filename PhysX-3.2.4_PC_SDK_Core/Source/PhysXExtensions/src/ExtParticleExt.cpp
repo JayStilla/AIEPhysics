@@ -23,11 +23,12 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 
+#include "foundation/PxMemory.h"
 #include "PxParticleExt.h"
 #include "PsUserAllocated.h"
 #include "CmPhysXCommon.h"
@@ -42,7 +43,7 @@ using namespace physx;
 
 //----------------------------------------------------------------------------//
 
-const static PxU32 sInvalidIndex = 0xffffffff;
+static const PxU32 sInvalidIndex = 0xffffffff;
 
 //----------------------------------------------------------------------------//
 
@@ -124,7 +125,7 @@ PxU32 PxParticleExt::buildBoundsHash(PxU32* sortedParticleIndices,
 	// initialize cells
 	Ps::Array<Cell> cells PX_DEBUG_EXP("buildBoundsCells");
 	cells.resize(hashSize);
-	Ps::memSet(cells.begin(), sInvalidIndex, sizeof(Cell) * hashSize);
+	PxMemSet(cells.begin(), sInvalidIndex, sizeof(Cell) * hashSize);
 
 	// count number of particles per cell
 	PxU32 entryCounter = 0;
@@ -177,6 +178,7 @@ PxU32 PxParticleExt::buildBoundsHash(PxU32* sortedParticleIndices,
 			counter += cell.size;
 			
 			PxParticleExt::ParticleBounds& cellBounds = particleBounds[numBounds++];
+			PX_ASSERT(cell.aabb.isValid());
 			cellBounds.bounds = cell.aabb;
 			cellBounds.firstParticle = cell.start;
 			cellBounds.numParticles = cell.size;
@@ -308,7 +310,7 @@ void InternalIndexPool::freeIndices(PxU32 num, const PxStrideIterator<const PxU3
 		return;
 	}
 
-#if PX_CHECK
+#ifdef PX_CHECK
 	for (PxU32 i = 0; i < num; ++i)
 	{
 		if (indexBuffer[i] < mIndexCount)

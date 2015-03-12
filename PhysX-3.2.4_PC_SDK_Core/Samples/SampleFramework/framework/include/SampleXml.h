@@ -1,42 +1,35 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #ifndef _SAMPLE_XML_H
 #define	_SAMPLE_XML_H
 
-#include "FastXml.h"
+#include "PsFastXml.h"
+#include "PsPrintString.h"
 #include "SampleTree.h"
 
 namespace FAST_XML
@@ -45,12 +38,17 @@ namespace FAST_XML
 class xml_node : private SampleFramework::Tree::Node
 {
 public:
-	xml_node(const char* name, const char* data, physx::PxI32 argc, const char** argv)
-		: mName(name), mData(data), mArgc(argc)
+	xml_node(const char* name, const char* data, const physx::shdfnd::FastXml::AttributePairs& attr)
+		: mName(name), mData(data)
 	{
-		PX_ASSERT(argc < MAX_ARGS);
-		for (physx::PxI32 i = 0; i < argc; ++i)
-			mArgv[i] = argv[i];
+		PX_ASSERT( (attr.getNbAttr()*2+1) < MAX_ARGS);
+		for(physx::PxI32 i=0; i<attr.getNbAttr(); i++)
+		{
+			mArgv[i*2] = attr.getKey(i);
+			mArgv[i*2+1] = attr.getValue(i);
+		}
+		physx::shdfnd::FastXml::AttributePairs tmp(attr.getNbAttr()*2, mArgv);
+		mAttr = tmp;
 	}
 
 	~xml_node()
@@ -88,29 +86,19 @@ public:
 	const char* value() const { return mData; }
 	const char *getXMLAttribute(const char *attr) const
 	{
-		const char* value = NULL;
-		for (physx::PxI32 i = 0; i < mArgc; i += 2)
-		{
-			if (0 == strcmp(mArgv[i], attr))
-			{
-				value = mArgv[i + 1];
-				break;
-			}
-		}
-
-		return value;
+		return mAttr.get(attr);
 	}
 
 private:
-	static const physx::PxI32 MAX_ARGS = 10;
+	static const physx::PxI32 MAX_ARGS = 50;
 
 	const char*		mName;
-	const char*		mData;
-	physx::PxI32	mArgc;
+	const char*		mData;	
 	const char*		mArgv[MAX_ARGS];
+	physx::shdfnd::FastXml::AttributePairs mAttr;
 };
 
-class XmlBuilder : public FastXml::Callback
+class XmlBuilder : public physx::shdfnd::FastXml::Callback
 {
 public:
 	XmlBuilder() : mRoot(NULL), mThis(NULL) {}
@@ -135,12 +123,11 @@ public:
 
 	virtual bool processElement(
 			const char *elementName,   // name of the element
-			physx::PxI32 argc,         // number of attributes pairs
-			const char **argv,         // list of attributes.
 			const char  *elementData,  // element data, null if none
+			const physx::shdfnd::FastXml::AttributePairs& attr,      // attributes
 			physx::PxI32 lineno)
 	{
-		xml_node* node = new xml_node(elementName, elementData, argc, argv);
+		xml_node* node = new xml_node(elementName, elementData, attr);
 
 		if (NULL != mThis)
 			mThis->append_node(*node);
@@ -148,7 +135,7 @@ public:
 			mRoot = node;
 		else
 		{
-			printf("error: more than 1 root node in xml file\n");
+			physx::shdfnd::printFormatted("error: more than 1 root node in xml file\n");
 			return false;
 		}
 
@@ -156,12 +143,12 @@ public:
 		return true;
 	}
 
-	virtual void*	fastxml_malloc(physx::PxU32 size)
+	virtual void*	allocate(physx::PxU32 size)
 	{
 		return malloc(size);
 	}
 
-	virtual void	fastxml_free(void *mem)
+	virtual void	deallocate(void *mem)
 	{
 		free(mem);
 	}

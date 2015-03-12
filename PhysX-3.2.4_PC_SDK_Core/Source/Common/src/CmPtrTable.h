@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -31,51 +31,113 @@
 #ifndef PX_PHYSICS_COMMON_PTR_TABLE
 #define PX_PHYSICS_COMMON_PTR_TABLE
 
-#include "PxPhysXCommon.h"  // for PX_PHYSX_COMMON_API
+#include "PxPhysXCommonConfig.h"
 #include "CmPhysXCommon.h"
+
+// serialization metadata needs BFF status, so forward declare this
+namespace physx
+{
+	class PxOutputStream;
+}
 
 namespace physx
 {
 
-class PxRefResolver;
-class PxSerialStream;
+class PxSerializationContext;
+class PxDeserializationContext;
+
 
 namespace Cm
 {
-	// PT: specialized class to hold an array of pointers. Similar to an inline array of 1 pointer, but using 8 bytes instead of 20.
-	// PT: please don't templatize this one.
-	struct PX_PHYSX_COMMON_API PtrTable
+
+class PtrTableStorageManager
+{
+	// This will typically be backed by a MultiPool implementation with fallback to the user
+	// allocator. For MultiPool, when deallocating we want to know what the previously requested size was
+	// so we can release into the right pool
+
+public:
+
+	// capacity is in bytes
+
+	virtual void**	allocate(PxU32 capacity)												= 0;
+	virtual void	deallocate(void** addr, PxU32 originalCapacity)							= 0;
+
+	// whether memory allocated at one capacity can (and should) be safely reused at a different capacity
+	// allows realloc-style reuse by clients.
+
+	virtual bool	canReuse(PxU32 originalCapacity, PxU32 newCapacity)		= 0;
+protected:
+	virtual ~PtrTableStorageManager() {}
+};
+
+
+
+// specialized class to hold an array of pointers with extrinsic storage management, 
+// serialization-compatible with 3.3.1 PtrTable
+//
+// note that extrinsic storage implies you *must* clear the table before the destructor runs
+//
+// capacity is implicit: 
+// if the memory is not owned (i.e. came from deserialization) then the capacity is exactly mCount
+// else if mCount==0,  capacity is 0
+// else the capacity is the power of 2 >= mCount
+// 
+// one implication of this is that if we want to add or remove a pointer from unowned memory, we always realloc
+
+struct PX_PHYSX_COMMON_API PtrTable
+{
+//= ATTENTION! =====================================================================================
+// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+// accordingly.
+//==================================================================================================
+
+	PtrTable();
+	~PtrTable();
+
+	void	add(void* ptr, PtrTableStorageManager& sm);
+	void	replaceWithLast(PxU32 index, PtrTableStorageManager& sm);
+	void	clear(PtrTableStorageManager& sm);
+
+	PxU32	find(const void* ptr) const;
+
+	PX_FORCE_INLINE PxU32		getCount()	const	{ return mCount; }
+	PX_FORCE_INLINE	void*const*	getPtrs()	const	{ return mCount == 1 ? &mSingle : mList;	}
+	PX_FORCE_INLINE	void**		getPtrs()			{ return mCount == 1 ? &mSingle : mList;	}
+
+
+	// SERIALIZATION
+
+	// 3.3.1 compatibility fixup: this implementation ALWAYS sets 'ownsMemory' if the size is 0 or 1
+	PtrTable(const PxEMPTY&)
 	{
-// PX_SERIALIZATION
-		PtrTable(PxRefResolver& v) : mOwnsMemory(false)	{}
-//		static	void	getMetaData(PxSerialStream& stream);
-		void	exportExtraData(PxSerialStream& stream);
-		char*	importExtraData(char* address, PxU32& totalPadding);
-//~PX_SERIALIZATION
-		PX_INLINE PtrTable() :
-			mSingle		(NULL),
-			mCount		(0),
-			mOwnsMemory	(true),
-			mBufferUsed	(false)	{}
-		PX_INLINE ~PtrTable()	{ clear();}
+		mOwnsMemory = mCount<2;
+		if(mCount == 0)
+			mList = NULL;
+	}
 
-		void	clear();
-		void	setPtrs(void** ptrs, PxU32 count);
-		void	addPtr(void* ptr);
-		bool	findAndDeletePtr(void* ptr);
+	void	exportExtraData(PxSerializationContext& stream);
+	void	importExtraData(PxDeserializationContext& context);
 
-		PX_FORCE_INLINE	void*const*	getPtrs()	const	{ return mCount == 1 ? &mSingle : mList;	}
+	static void getBinaryMetaData(physx::PxOutputStream& stream);
 
-		union
-		{
-			void*	mSingle;
-			void**	mList;
-		};
+private:
+	void realloc(PxU32 oldCapacity, PxU32 newCapacity, PtrTableStorageManager& sm);
 
-		PxU16	mCount;
-		bool	mOwnsMemory;
-		bool	mBufferUsed;
+	union
+	{
+		void*	mSingle;
+		void**	mList;
 	};
+
+	PxU16	mCount;
+	bool	mOwnsMemory;
+	bool	mBufferUsed;		// dark magic in serialization requires this, otherwise redundant because it's logically equivalent to mCount == 1.
+
+};
+
 } // namespace Cm
 #ifndef PX_X64
 PX_COMPILE_TIME_ASSERT(sizeof(Cm::PtrTable)==8);

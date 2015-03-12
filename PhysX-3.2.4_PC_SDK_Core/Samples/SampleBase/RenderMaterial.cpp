@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -115,7 +115,7 @@ RenderMaterial::RenderMaterial(Renderer& renderer, const PxVec3& diffuseColor, P
 	if(texture)
 	{
 		const RendererMaterial::Variable* var = mRenderMaterialInstance->findVariable("diffuseTexture", RendererMaterial::VARIABLE_SAMPLER2D);
-		PX_ASSERT(var);
+		//PX_ASSERT(var);
 		if(var)
 			mRenderMaterialInstance->writeData(*var, &texture->mTexture);
 	}

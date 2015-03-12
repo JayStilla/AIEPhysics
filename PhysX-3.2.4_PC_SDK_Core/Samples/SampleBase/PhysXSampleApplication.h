@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -43,6 +43,8 @@
 #include "PxVisualizationParameter.h"
 #include "PxTkRandom.h"
 
+#include <PsThread.h>
+#include <PsSync.h>
 #include "PsHashMap.h"
 #include "PsUtilities.h"
 #include "SampleArray.h"
@@ -51,10 +53,10 @@
 #include "pxtask/PxCudaContextManager.h"
 #endif
 
-#define	PHYSX_VERSION_STRING	PX_STRINGIZE(PX_PHYSICS_VERSION_MAJOR)"."PX_STRINGIZE(PX_PHYSICS_VERSION_MINOR)
+#define	PHYSX_VERSION_STRING	PX_STRINGIZE(PX_PHYSICS_VERSION_MAJOR) "." PX_STRINGIZE(PX_PHYSICS_VERSION_MINOR)
 
-#define	SAMPLE_MEDIA_DIR		"/PhysX/"PHYSX_VERSION_STRING"/Samples"
-#define	SAMPLE_OUTPUT_DIR		"media"SAMPLE_MEDIA_DIR"/user"
+#define	SAMPLE_MEDIA_DIR		"/PhysX/" PHYSX_VERSION_STRING "/Samples"
+#define	SAMPLE_OUTPUT_DIR		"media" SAMPLE_MEDIA_DIR "/user"
 
 namespace physx
 {
@@ -77,6 +79,7 @@ namespace physx
 
 	class PhysXSampleApplication;
 	class PhysXSample;
+	class InputEventBuffer;
 
 	namespace Test
 	{
@@ -128,11 +131,31 @@ void releaseAll(Container& container)
 	container.clear();
 }
 
-	class PhysXSampleApplication :	public SampleFramework::SampleApplication,
-						public SampleAllocateable
-	{
-		friend class PhysXSample;
+using namespace physx::shdfnd;
 
+
+class PhysXSampleApplication :	public SampleFramework::SampleApplication, public SampleAllocateable, public ThreadT<RawAllocator>
+	{
+	public:
+		using SampleAllocateable::operator new;
+		using SampleAllocateable::operator delete;
+	private:
+		friend class PhysXSample;
+		struct PvdParameters
+		{
+			char							ip[256];
+			PxU32							port;
+			PxU32							timeout;
+			bool							useFullPvdConnection;
+
+			PvdParameters()
+			: port(5425)
+			, timeout(10)
+			, useFullPvdConnection(true)
+			{
+				PxStrcpy(ip, 256, "127.0.0.1");
+			}
+		};
 		struct MenuKey
 		{
 			enum Enum
@@ -146,7 +169,7 @@ void releaseAll(Container& container)
 				NAVI_RIGHT
 			};
 		};
-		
+
 		// menu events
 		struct MenuType
 		{
@@ -169,9 +192,12 @@ void releaseAll(Container& container)
 		};
 
 		public:
-
 														PhysXSampleApplication(const SampleFramework::SampleCommandLine& cmdline);
 		virtual											~PhysXSampleApplication();
+
+		///////////////////////////////////////////////////////////////////////////////
+		// PsThread interface
+		virtual			void							execute();
 
 		///////////////////////////////////////////////////////////////////////////////
 
@@ -184,10 +210,10 @@ void releaseAll(Container& container)
 		virtual			void							onRender();
 		virtual			void							onTickPostRender(float dtime);
 		
-		virtual			void							onKeyDownEx(SampleFramework::SampleUserInput::KeyCode keyCode, physx::PxU32 wParam);
-		virtual			void							onAnalogInputEvent(const SampleFramework::InputEvent& , float val);
-		virtual			bool							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);        
-		virtual			void							onPointerInputEvent(const SampleFramework::InputEvent&, physx::PxU32 x, physx::PxU32 y, physx::PxReal dx, physx::PxReal dy, bool val);
+						void							onKeyDownEx(SampleFramework::SampleUserInput::KeyCode keyCode, PxU32 wParam);
+						void							onAnalogInputEvent(const SampleFramework::InputEvent& , float val);
+						void							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);        
+						void							onPointerInputEvent(const SampleFramework::InputEvent&, PxU32 x, PxU32 y, PxReal dx, PxReal dy, bool val);
 
 		virtual			void							onResize(PxU32 width, PxU32 height);
 
@@ -207,7 +233,8 @@ void releaseAll(Container& container)
 						void							restoreCameraState();
 
 		// Camera functions
-		PX_FORCE_INLINE	void							setDefaultCameraController()				{ mCurrentCameraController = &mCameraController;	}
+		PX_FORCE_INLINE	void							setDefaultCameraController()				{ mCurrentCameraController = &mCameraController; mCameraController = DefaultCameraController();}
+		PX_FORCE_INLINE	void							resetDefaultCameraController()				{ mCameraController = DefaultCameraController(); }
 		PX_FORCE_INLINE	void							setCameraController(CameraController* c)	{ mCurrentCameraController = c;						}
 
 		PX_FORCE_INLINE	PxReal							getTextAlpha1()						const	{ return mTextAlphaHelp;								}
@@ -215,18 +242,19 @@ void releaseAll(Container& container)
 		PX_FORCE_INLINE	bool							isPaused()							const	{ return mPause;									}
 		PX_FORCE_INLINE	Camera&							getCamera()									{ return mCamera;									}
 		PX_FORCE_INLINE	RenderPhysX3Debug*				getDebugRenderer()					const	{ return mDebugRenderer;							}
-
-						bool							isConsoleActive()					const;
+		PX_FORCE_INLINE	MutexT<RawAllocator>&			getInputMutex()								{ return mInputMutex;								}
+                        bool							isConsoleActive()					const;
 						void							showCursor(bool show);
 						void							setMouseCursorHiding(bool hide);
 						void							setMouseCursorRecentering(bool recenter);
-
-
+						void							handleMouseVisualization();
+						void							updateEngine();
+						void							setPvdParams(const SampleFramework::SampleCommandLine& cmdLine);
 		PX_FORCE_INLINE	void							registerLight(SampleRenderer::RendererLight* light)	{ mLights.push_back(light);					}
 						void							collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents);
-						const char*						inputInfoMsg(const char* firstPart,const char* secondPart, physx::PxI32 inputEventId1, physx::PxI32 inputEventId2);
-						const char*						inputInfoMsg_Aor_BandC(const char* firstPart,const char* secondPart, physx::PxI32 inputEventIdA, physx::PxI32 inputEventIdB, physx::PxI32 inputEventIdC);
-						const char*						inputMoveInfoMsg(const char* firstPart,const char* secondPart, physx::PxI32 inputEventId1, physx::PxI32 inputEventId2,physx::PxI32 inputEventId3,physx::PxI32 inputEventId4);
+						const char*						inputInfoMsg(const char* firstPart,const char* secondPart, PxI32 inputEventId1, PxI32 inputEventId2);
+						const char*						inputInfoMsg_Aor_BandC(const char* firstPart,const char* secondPart, PxI32 inputEventIdA, PxI32 inputEventIdB, PxI32 inputEventIdC);
+						const char*						inputMoveInfoMsg(const char* firstPart,const char* secondPart, PxI32 inputEventId1, PxI32 inputEventId2,PxI32 inputEventId3,PxI32 inputEventId4);
 						void							requestToClose() { mIsCloseRequested = true; }
 						bool							isCloseRequested() { return mIsCloseRequested; }
 						
@@ -257,17 +285,20 @@ void releaseAll(Container& container)
 
 						bool							mPause;
 						bool							mOneFrameUpdate;
+						bool							mSwitchSample;
 
 						bool							mShowHelp;
 						bool							mShowDescription;
 						bool							mShowExtendedHelp;
-						bool							mHideMouseCursor;
-						//
-
+						volatile bool					mHideMouseCursor;
+						InputEventBuffer*				mInputEventBuffer;
+						MutexT<RawAllocator>			mInputMutex;
+        
 						bool							mDrawScreenQuad;
 						SampleRenderer::RendererColor	mScreenQuadTopColor;
 						SampleRenderer::RendererColor	mScreenQuadBottomColor;						
 						
+						PvdParameters					mPvdParams;
 						void							updateCameraViewport(PxU32 w, PxU32 h);
 						bool							initLogo();
 

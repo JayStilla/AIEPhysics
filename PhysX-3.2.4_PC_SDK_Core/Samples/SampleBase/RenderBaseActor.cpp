@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -57,14 +57,16 @@ RenderBaseActor::RenderBaseActor() :
 	mMaterial			(NULL),
 	mEnableCCD			(false),
 	mEnableRender		(true),
-	mEnableDebugRender	(true)
+	mEnableDebugRender	(true),
+	mEnableCameraCull	(false)
 {
-	mTransform			= PxTransform::createIdentity();
+	mTransform			= PxTransform(PxIdentity);
+	mWorldBounds		= PxBounds3(PxVec3(0),PxVec3(0));
 
 	mCCDWitness			= PxVec3(0);
 	mCCDWitnessOffset	= PxVec3(0);
 
-	mPhysicsToGraphicsRot = PxQuat::createIdentity();
+	mPhysicsToGraphicsRot = PxQuat(PxIdentity);
 
 	updateScale();
 }
@@ -74,8 +76,10 @@ RenderBaseActor::RenderBaseActor(const RenderBaseActor& src) : RenderBaseObject(
 	mEnableCCD			= src.mEnableCCD;
 	mEnableRender		= src.mEnableRender;
 	mEnableDebugRender	= src.mEnableDebugRender;
+	mEnableCameraCull	= src.mEnableCameraCull;
 
 	mTransform			= src.getTransform();
+	mWorldBounds		= PxBounds3(PxVec3(0.0f), PxVec3(0.0f));
 	mPhysicsShape		= NULL;	// PT: the physics shape is not cloned for now
 	mDynamicActor		= NULL;	// PT: the physics actor is not cloned for now
 	mArticulationLink	= NULL;	// PT: the articulation link is not cloned for now
@@ -108,18 +112,20 @@ void RenderBaseActor::update(float deltaTime)
 		if(!mArticulationLink && ( !mDynamicActor || mDynamicActor->isSleeping()))
 			return;
 
-		PxTransform newPose = PxShapeExt::getGlobalPose(*mPhysicsShape);
-		PxVec3 newShapeCenter = getShapeCenter(mPhysicsShape, mCCDWitnessOffset);
+		PxTransform newPose = PxShapeExt::getGlobalPose(*mPhysicsShape, *mPhysicsActor);
+		PxVec3 newShapeCenter = getShapeCenter(mPhysicsActor, mPhysicsShape, mCCDWitnessOffset);
 
 		bool updateCCDWitness = true;
 		if(gRaycastCCD && mEnableCCD)
-			updateCCDWitness = doRaycastCCD(mPhysicsShape, newPose, newShapeCenter, mCCDWitness, mCCDWitnessOffset);
+			updateCCDWitness = doRaycastCCD(mPhysicsActor, mPhysicsShape, newPose, newShapeCenter, mCCDWitness, mCCDWitnessOffset);
 
 		// Copy physics pose to graphics pose
 		setTransform(PxTransform(newPose.p, newPose.q * mPhysicsToGraphicsRot));
 
 		if(updateCCDWitness)
 			mCCDWitness = newShapeCenter;
+		
+		setWorldBounds(PxShapeExt::getWorldBounds(*mPhysicsShape, *mPhysicsActor));
 	}
 }
 
@@ -143,10 +149,12 @@ void RenderBaseActor::render(Renderer& renderer, RenderMaterial* material, bool 
 
 PxBounds3 RenderBaseActor::getWorldBounds() const
 {
-	if(mPhysicsShape)
-		return mPhysicsShape->getWorldBounds();
+	return mWorldBounds;
+}
 
-	return PxBounds3(PxVec3(0.0f), PxVec3(0.0f));
+void RenderBaseActor::setWorldBounds(const PxBounds3& bounds)
+{
+	mWorldBounds = bounds;
 }
 
 void RenderBaseActor::updateScale()
@@ -162,20 +170,22 @@ void RenderBaseActor::updateScale()
 	}
 }
 
-void RenderBaseActor::setPhysicsShape(PxShape* shape)
+void RenderBaseActor::setPhysicsShape(PxShape* shape, PxRigidActor* actor)
 {
 	mPhysicsShape = shape;
+	mPhysicsActor = actor;
 
 	if(shape)
 	{
-		mCCDWitness = getShapeCenter(shape, mCCDWitnessOffset);
+		mCCDWitness = getShapeCenter(actor, shape, mCCDWitnessOffset);
 
-		const PxTransform newPose = PxShapeExt::getGlobalPose(*shape);
+		const PxTransform newPose = PxShapeExt::getGlobalPose(*shape, *actor);
 		setTransform(PxTransform(newPose.p, newPose.q * mPhysicsToGraphicsRot));
 
-		PxRigidActor& ra = shape->getActor();
+		PxRigidActor& ra = *actor;
 		mDynamicActor = ra.is<PxRigidDynamic>();
 		mArticulationLink = ra.is<PxArticulationLink>();
+		mWorldBounds = PxShapeExt::getWorldBounds(*mPhysicsShape, *mPhysicsActor);
 	}
 	else
 	{
@@ -185,7 +195,6 @@ void RenderBaseActor::setPhysicsShape(PxShape* shape)
 
 void RenderBaseActor::setRenderMaterial(RenderMaterial* material)
 {
-	PX_ASSERT(!mMaterial);
 	mMaterial = material;
 }
 
@@ -231,16 +240,16 @@ void RenderBaseActor::drawDebug(RenderPhysX3Debug* debug)
 
 	if(0 && mEnableCCD)
 	{
-		const PxBounds3 bounds = mPhysicsShape->getWorldBounds();
+		const PxBounds3 bounds = PxShapeExt::getWorldBounds(*mPhysicsShape, *mPhysicsActor);
 		const PxReal scale = (bounds.maximum - bounds.minimum).magnitude();
 
-		const PxTransform pose = PxShapeExt::getGlobalPose(*mPhysicsShape);
+		const PxTransform pose = PxShapeExt::getGlobalPose(*mPhysicsShape, *mPhysicsActor);
 		debug->addLine(pose.p, pose.p+PxVec3(scale, 0.0f, 0.0f), RendererColor(0, 255, 0));
 		debug->addLine(pose.p, pose.p+PxVec3(0.0f, scale, 0.0f), RendererColor(0, 255, 0));
 		debug->addLine(pose.p, pose.p+PxVec3(0.0f, 0.0f, scale), RendererColor(0, 255, 0));
 
-		const PxVec3 shapeCenter = getShapeCenter(mPhysicsShape, mCCDWitnessOffset);
-//printf("Render: %f | %f | %f\n", shapeCenter.x, shapeCenter.y, shapeCenter.z);
+		const PxVec3 shapeCenter = getShapeCenter(mPhysicsActor, mPhysicsShape, mCCDWitnessOffset);
+//shdfnd::printFormatted("Render: %f | %f | %f\n", shapeCenter.x, shapeCenter.y, shapeCenter.z);
 
 		debug->addLine(shapeCenter, shapeCenter+PxVec3(scale, 0.0f, 0.0f), RendererColor(255, 0, 0));
 		debug->addLine(shapeCenter, shapeCenter+PxVec3(0.0f, scale, 0.0f), RendererColor(255, 0, 0));

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -38,11 +38,15 @@ namespace Ext
 	PxU32 DistanceJointSolverPrep(Px1DConstraint* constraints,
 		PxVec3& body0WorldOffset,
 		PxU32 maxConstraints,
+		PxConstraintInvMassScale &invMassScale,
 		const void* constantBlock,
 		const PxTransform& bA2w,
 		const PxTransform& bB2w)
 	{
+		PX_UNUSED(maxConstraints);
+
 		const DistanceJointData& data = *reinterpret_cast<const DistanceJointData*>(constantBlock);
+		invMassScale = data.invMassScale;
 
 		PxTransform cA2w = bA2w.transform(data.c2b[0]);
 		PxTransform cB2w = bB2w.transform(data.c2b[1]);
@@ -61,7 +65,7 @@ namespace Ext
 #define EPS_REAL 1.192092896e-07F
 
 		if (distance < EPS_REAL)
-			direction = PxVec3(1,0,0);
+			direction = PxVec3(1.f,0,0);
 
 		Px1DConstraint *c = constraints;
 
@@ -75,8 +79,8 @@ namespace Ext
 		if (data.jointFlags & PxDistanceJointFlag::eSPRING_ENABLED)
 		{
 			c->flags |= Px1DConstraintFlag::eSPRING;
-			c->spring	= data.spring;
-			c->damping	= data.damping;
+			c->mods.spring.stiffness= data.stiffness;
+			c->mods.spring.damping	= data.damping;
 		}
 
 		//add tolerance so we don't have contact-style jitter problem.

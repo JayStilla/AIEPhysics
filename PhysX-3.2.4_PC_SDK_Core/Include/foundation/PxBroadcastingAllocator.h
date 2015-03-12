@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -65,8 +65,8 @@ namespace physx
 		virtual void onAllocation( size_t size, const char* typeName, const char* filename, int line, void* allocatedMemory ) = 0;
 
 		/**
-		/brief callback when memory is deallocated.
-		/param allocatedMemory memory just before allocation.
+		\brief callback when memory is deallocated.
+		\param allocatedMemory memory just before allocation.
 		*/
 		virtual void onDeallocation( void* allocatedMemory ) = 0;
 	};

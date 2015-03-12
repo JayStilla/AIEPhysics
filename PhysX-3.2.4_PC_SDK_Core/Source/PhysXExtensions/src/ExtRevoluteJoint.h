@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,22 +34,31 @@
 #include "ExtJoint.h"
 #include "PxRevoluteJoint.h"
 #include "PsIntrinsics.h"
+#include "CmUtils.h"
 
 namespace physx
 {
 
 class PxConstraintSolverPrepKernel;
 class PxConstraintProjectionKernel;
+struct PxRevoluteJointGeneratedValues;
 
 namespace Ext
 {
 	struct RevoluteJointData : public JointData
 	{
+	//= ATTENTION! =====================================================================================
+	// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+	// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+	// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+	// accordingly.
+	//==================================================================================================
+
 							PxReal					driveVelocity;
 							PxReal					driveForceLimit;
 							PxReal					driveGearRatio;
 
-							PxJointLimitPair		limit;
+							PxJointAngularLimitPair	limit;
 							
 							PxReal					tqHigh;
 							PxReal					tqLow;
@@ -59,42 +68,44 @@ namespace Ext
 							PxReal					projectionAngularTolerance;
 							
 							PxRevoluteJointFlags	jointFlags;
-		EXPLICIT_PADDING(	PxU16					paddingFromFlags);
-
 		// forestall compiler complaints about not being able to generate a constructor
 	private:
-		RevoluteJointData(const PxJointLimitPair &pair):
+		RevoluteJointData(const PxJointAngularLimitPair &pair):
 			limit(pair) {}
 	};
 
-typedef Joint<PxRevoluteJoint, PxJointType::eREVOLUTE> RevoluteJointT;
-
+    typedef Joint<PxRevoluteJoint, PxRevoluteJointGeneratedValues> RevoluteJointT;
+    
 	class RevoluteJoint : public RevoluteJointT
 	{
+	//= ATTENTION! =====================================================================================
+	// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+	// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+	// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+	// accordingly.
+	//==================================================================================================
 	public:
 // PX_SERIALIZATION
-									RevoluteJoint(PxRefResolver& v)	: RevoluteJointT(v)	{}
-									DECLARE_SERIAL_CLASS(RevoluteJoint, RevoluteJointT)
-		virtual		bool			resolvePointers(PxRefResolver&, void*);
-		virtual		void			exportExtraData(PxSerialStream& stream);
-		virtual		char*			importExtraData(char* address, PxU32& totalPadding);
-		static		void			getMetaData(PxSerialStream& stream);
+									RevoluteJoint(PxBaseFlags baseFlags) : RevoluteJointT(baseFlags) {}
+					void			resolveReferences(PxDeserializationContext& context);
+		virtual		void			exportExtraData(PxSerializationContext& context);
+					void			importExtraData(PxDeserializationContext& context);
+		static		RevoluteJoint*	createObject(PxU8*& address, PxDeserializationContext& context);
+		static		void			getBinaryMetaData(PxOutputStream& stream);
 //~PX_SERIALIZATION
 		virtual						~RevoluteJoint()
 		{
-			if(getSerialFlags()&PxSerialFlag::eOWNS_MEMORY)
+			if(getBaseFlags()&PxBaseFlag::eOWNS_MEMORY)
 				PX_FREE(mData);
 		}
 
-		RevoluteJoint(const PxTolerancesScale& scale,
+		RevoluteJoint(const PxTolerancesScale& /*scale*/,
 					  PxRigidActor* actor0, const PxTransform& localFrame0, 
 					  PxRigidActor* actor1, const PxTransform& localFrame1)
-		 {
-// PX_SERIALIZATION
-			setSerialType(PxConcreteType::eUSER_REVOLUTE_JOINT);
-//~PX_SERIALIZATION
+		: RevoluteJointT(PxJointConcreteType::eREVOLUTE, PxBaseFlag::eOWNS_MEMORY | PxBaseFlag::eIS_RELEASABLE)
+		{
 			RevoluteJointData* data = reinterpret_cast<RevoluteJointData*>(PX_ALLOC(sizeof(RevoluteJointData), PX_DEBUG_EXP("RevoluteJointData")));
-			Ps::memSet(data, 0, sizeof(RevoluteJointData));
+			Cm::markSerializedMem(data, sizeof(RevoluteJointData));
 			mData = data;
 
 			initCommonData(*data, actor0, localFrame0, actor1, localFrame1);
@@ -104,12 +115,15 @@ typedef Joint<PxRevoluteJoint, PxJointType::eREVOLUTE> RevoluteJointT;
 			data->driveForceLimit = PX_MAX_F32;
 			data->driveVelocity = 0;
 			data->driveGearRatio = 1.0f;
-			data->limit = PxJointLimitPair(-PxPi/2, PxPi/2, 0.05f);
+			data->limit = PxJointAngularLimitPair(-PxPi/2, PxPi/2);
 			data->jointFlags = PxRevoluteJointFlags();
-		 }
+		}
 
-		PxJointLimitPair		getLimit()	const;
-		void					setLimit(const PxJointLimitPair& limit);
+		PxReal					getAngle() const;
+		PxReal					getVelocity() const;
+
+		PxJointAngularLimitPair	getLimit()	const;
+		void					setLimit(const PxJointAngularLimitPair& limit);
 
 		PxReal					getDriveVelocity() const;
 		void					setDriveVelocity(PxReal velocity);
@@ -152,6 +166,7 @@ namespace Ext
 	extern "C"  PxU32 RevoluteJointSolverPrep(Px1DConstraint* constraints,
 		PxVec3& body0WorldOffset,
 		PxU32 maxConstraints,
+		PxConstraintInvMassScale& invMassScale,
 		const void* constantBlock,
 		const PxTransform& bA2w,
 		const PxTransform& bB2w);

@@ -23,16 +23,17 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 
 #if PX_USE_PARTICLE_SYSTEM_API
 
 #include "RenderParticleSystemActor.h"
 #include "RendererParticleSystemShape.h"
+#include "RendererSimpleParticleSystemShape.h"
 #include "ParticleSystem.h"
 #include "RendererMemoryMacros.h"
 
@@ -48,13 +49,25 @@ RenderParticleSystemActor::RenderParticleSystemActor(SampleRenderer::Renderer& r
 																			mUseMeshInstancing(_mesh_instancing),
 																			mFading(_fading)
 {
-	RendererShape* rs = new SampleRenderer::RendererParticleSystemShape(mRenderer, 
-										mPS->getPxParticleBase()->getMaxParticles(), 
-										mUseMeshInstancing,
-										mFading,
-										fadingPeriod,
-										debriScaleFactor);
-	setRenderShape(rs);
+	if(mRenderer.isSpriteRenderingSupported())
+	{
+		RendererShape* rs = new SampleRenderer::RendererParticleSystemShape(mRenderer, 
+											mPS->getPxParticleBase()->getMaxParticles(), 
+											mUseMeshInstancing,
+											mFading,
+											fadingPeriod,
+											debriScaleFactor,
+											mPS->getCudaContextManager());
+		setRenderShape(rs);
+		mUseSpritesMesh = true;
+	}
+	else
+	{
+		RendererShape* rs = new SampleRenderer::RendererSimpleParticleSystemShape(mRenderer, 
+											mPS->getPxParticleBase()->getMaxParticles());
+		setRenderShape(rs);
+		mUseSpritesMesh = false;
+	}
 }
 
 RenderParticleSystemActor::~RenderParticleSystemActor() 
@@ -64,29 +77,96 @@ RenderParticleSystemActor::~RenderParticleSystemActor()
 
 void RenderParticleSystemActor::update(float deltaTime) 
 {
-	setTransform(PxTransform::createIdentity());
-	if(mUseMeshInstancing) 
+	setTransform(PxTransform(PxIdentity));
+
+#if defined(RENDERER_ENABLE_CUDA_INTEROP)
+
+	SampleRenderer::RendererParticleSystemShape* shape = 
+		static_cast<SampleRenderer::RendererParticleSystemShape*>(getRenderShape());
+
+	if (shape->isInteropEnabled() && (mPS->getPxParticleSystem().getParticleBaseFlags()&PxParticleBaseFlag::eGPU))
 	{
-		SampleRenderer::RendererParticleSystemShape* shape = 
-			static_cast<SampleRenderer::RendererParticleSystemShape*>(getRenderShape());
-		shape->update(mPS->getValidParticleRange(),
-						&(mPS->getPositions()[0]), 
-						mPS->getValidity(),
-						&(mPS->getOrientations()[0]));
-	} 
-	else 
-	{
-		SampleRenderer::RendererParticleSystemShape* shape = 
-			static_cast<SampleRenderer::RendererParticleSystemShape*>(getRenderShape());
-		const PxReal* lifetimes = NULL;
-		if(mFading && mPS->useLifetime()) 
+		PxParticleReadData* data = mPS->getPxParticleSystem().lockParticleReadData(PxDataAccessFlag::eREADABLE | PxDataAccessFlag::eDEVICE);
+
+		if(data)
 		{
-			lifetimes = &(mPS->getLifetimes()[0]);
+			if(mUseMeshInstancing) 
+			{
+				shape->updateInstanced(mPS->getValidParticleRange(),
+					reinterpret_cast<CUdeviceptr>(&data->positionBuffer[0]),			
+					mPS->getValiditiesDevice(),
+					mPS->getOrientationsDevice(),
+					data->nbValidParticles);
+			} 
+			else 
+			{
+				CUdeviceptr lifetimes = 0;
+				if(mFading && mPS->useLifetime()) 
+					lifetimes = mPS->getLifetimesDevice();
+
+				shape->updateBillboard(mPS->getValidParticleRange(),
+					reinterpret_cast<CUdeviceptr>(&data->positionBuffer[0]),			
+					mPS->getValiditiesDevice(),
+					lifetimes,
+					data->nbValidParticles);
+			}
+
+			data->unlock();
 		}
-		shape->update(mPS->getValidParticleRange(),
+	}
+	else
+
+#endif
+
+	{
+		PxParticleReadData* data = mPS->getPxParticleSystem().lockParticleReadData(PxDataAccessFlag::eREADABLE);
+
+		if(data)
+		{
+			if(mUseMeshInstancing) 
+			{
+				SampleRenderer::RendererParticleSystemShape* shape = 
+					static_cast<SampleRenderer::RendererParticleSystemShape*>(getRenderShape());
+				shape->updateInstanced(mPS->getValidParticleRange(),
+								&(mPS->getPositions()[0]), 
+								mPS->getValidity(),
+								&(mPS->getOrientations()[0]));
+
+			} 
+			else 
+			{
+				if(mUseSpritesMesh)
+				{
+					SampleRenderer::RendererParticleSystemShape* shape = 
+						static_cast<SampleRenderer::RendererParticleSystemShape*>(getRenderShape());
+					const PxReal* lifetimes = NULL;
+					if(mFading && mPS->useLifetime()) 
+					{
+						lifetimes = &(mPS->getLifetimes()[0]);
+					}
+					shape->updateBillboard(mPS->getValidParticleRange(),
+									&(mPS->getPositions()[0]), 
+									mPS->getValidity(),
+									lifetimes);
+				}
+				else
+				{
+					SampleRenderer::RendererSimpleParticleSystemShape* shape = 
+						static_cast<SampleRenderer::RendererSimpleParticleSystemShape*>(getRenderShape());
+					const PxReal* lifetimes = NULL;
+					if(mFading && mPS->useLifetime()) 
+					{
+						lifetimes = &(mPS->getLifetimes()[0]);
+					}
+					shape->updateBillboard(mPS->getValidParticleRange(),
 						&(mPS->getPositions()[0]), 
 						mPS->getValidity(),
 						lifetimes);
+				}
+			}
+
+			data->unlock();
+		}
 	}
 }
 

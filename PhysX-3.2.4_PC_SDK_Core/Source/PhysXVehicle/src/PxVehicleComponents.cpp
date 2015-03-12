@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,6 +32,8 @@
 #include "PsFoundation.h"
 #include "PsUtilities.h"
 #include "CmPhysXCommon.h"
+#include "CmBitMap.h"
+#include "PxSerialFramework.h"
 
 namespace physx
 {
@@ -51,6 +53,7 @@ bool PxVehicleEngineData::isValid() const
 	PX_CHECK_AND_RETURN_VAL(mDampingRateFullThrottle>0.0f, "PxVehicleEngineData.mDampingRateFullThrottle must be greater than zero", false);
 	PX_CHECK_AND_RETURN_VAL(mDampingRateZeroThrottleClutchEngaged>0.0f, "PxVehicleEngineData.mDampingRateZeroThrottleClutchEngaged must be greater than zero", false);
 	PX_CHECK_AND_RETURN_VAL(mDampingRateZeroThrottleClutchDisengaged>0.0f, "PxVehicleEngineData.mDampingRateZeroThrottleClutchDisengaged must be greater than zero", false);
+	PX_CHECK_AND_RETURN_VAL(mRecipMOI>0.0f, "PxVehicleEngineData.mRecipMOI must be greater than zero", false);
 	PX_CHECK_AND_RETURN_VAL(mRecipMaxOmega>0.0f, "PxVehicleEngineData.mRecipMaxOmega must be greater than zero", false);
 	PX_CHECK_AND_RETURN_VAL(PxAbs((1.0f/mMaxOmega)-mRecipMaxOmega) <= 0.001f, "PxVehicleEngineData.mMaxOmega and PxVehicleEngineData.mRecipMaxOmega don't match", false);
 	return true;
@@ -59,16 +62,16 @@ bool PxVehicleEngineData::isValid() const
 bool PxVehicleGearsData::isValid() const
 {
 	PX_CHECK_AND_RETURN_VAL(mFinalRatio>0, "PxVehicleGearsData.mFinalRatio must be greater than zero", false);
-	PX_CHECK_AND_RETURN_VAL(mNumRatios>=1, "PxVehicleGearsData.mNumRatios must be greater than zero", false);
+	PX_CHECK_AND_RETURN_VAL(mNbRatios>=1, "PxVehicleGearsData.mNbRatios must be greater than zero", false);
 	PX_CHECK_AND_RETURN_VAL(mSwitchTime>=0.0f, "PxVehicleGearsData.mSwitchTime must be greater than or equal to zero", false);
 
 	PX_CHECK_AND_RETURN_VAL(mRatios[PxVehicleGearsData::eREVERSE]<0.0f, "PxVehicleGearsData.mRatios[PxVehicleGearsData::eREVERSE] must be less than zero", false);
 	PX_CHECK_AND_RETURN_VAL(mRatios[PxVehicleGearsData::eNEUTRAL]==0.0f, "PxVehicleGearsData.mRatios[PxVehicleGearsData::eNEUTRAL] must be zero", false);
-	for(PxU32 i=PxVehicleGearsData::eFIRST;i<mNumRatios;i++)
+	for(PxU32 i=PxVehicleGearsData::eFIRST;i<mNbRatios;i++)
 	{
 		PX_CHECK_AND_RETURN_VAL(mRatios[i]>0.0f, "Forward gear ratios must be greater than zero", false);
 	}
-	for(PxU32 i=PxVehicleGearsData::eSECOND;i<mNumRatios;i++)
+	for(PxU32 i=PxVehicleGearsData::eSECOND;i<mNbRatios;i++)
 	{
 		PX_CHECK_AND_RETURN_VAL(mRatios[i]<mRatios[i-1], "Forward gear ratios must be a descending sequence of gear ratios", false);
 	}
@@ -77,7 +80,7 @@ bool PxVehicleGearsData::isValid() const
 
 bool PxVehicleAutoBoxData::isValid() const
 {
-	for(PxU32 i=0;i<PxVehicleGearsData::eMAX_NUM_GEAR_RATIOS;i++)
+	for(PxU32 i=0;i<PxVehicleGearsData::eGEARSRATIO_COUNT;i++)
 	{
 		PX_CHECK_AND_RETURN_VAL(mUpRatios[i]>=0.0f, "PxVehicleAutoBoxData.mUpRatios must be greater than or equal to zero", false);
 		PX_CHECK_AND_RETURN_VAL(mDownRatios[i]>=0.0f, "PxVehicleAutoBoxData.mDownRatios must be greater than or equal to zero", false);
@@ -93,7 +96,63 @@ bool PxVehicleDifferential4WData::isValid() const
 	PX_CHECK_AND_RETURN_VAL(mCentreBias>=1.0f, "PxVehicleDifferential4WData.mCentreBias must be greater than or equal to 1.0f", false);
 	PX_CHECK_AND_RETURN_VAL(mFrontBias>=1.0f, "PxVehicleDifferential4WData.mFrontBias must be greater than or equal to 1.0f", false);
 	PX_CHECK_AND_RETURN_VAL(mRearBias>=1.0f, "PxVehicleDifferential4WData.mRearBias must be greater than or equal to 1.0f", false);
-	PX_CHECK_AND_RETURN_VAL(mType<eMAX_NUM_DIFF_TYPES, "PxVehicleDifferential4WData.mType has illegal value", false);
+	PX_CHECK_AND_RETURN_VAL(mType<PxVehicleDifferential4WData::eMAX_NB_DIFF_TYPES, "PxVehicleDifferential4WData.mType has illegal value", false);
+	return true;
+}
+
+void PxVehicleDifferentialNWData::setDrivenWheel(const PxU32 wheelId, const bool drivenState)
+{
+	Cm::BitMap bitmap;
+	bitmap.setWords(mBitmapBuffer,((PX_MAX_NB_WHEELS + 31) & ~31) >> 5);
+	PxU32 numDrivenWheels=mNbDrivenWheels;
+	if(drivenState)
+	{
+		if(!bitmap.test(wheelId))
+		{
+			numDrivenWheels++;
+			bitmap.set(wheelId);
+			mInvNbDrivenWheels=1.0f/(1.0f*numDrivenWheels);
+		}
+	}
+	else if(bitmap.test(wheelId))
+	{
+		numDrivenWheels--;
+		bitmap.reset(wheelId);
+		mInvNbDrivenWheels =  numDrivenWheels>0.0f ? 1.0f/(1.0f*numDrivenWheels) : 0.0f;
+	}
+	mNbDrivenWheels=numDrivenWheels;
+}
+
+bool PxVehicleDifferentialNWData::getIsDrivenWheel(const PxU32 wheelId) const
+{
+	PxU32* words=(PxU32*)mBitmapBuffer;
+	Cm::BitMap bitmap;
+	bitmap.setWords(words,((PX_MAX_NB_WHEELS + 31) & ~31) >> 5);
+	return (bitmap.test(wheelId) ? true : false);
+}
+
+PxU32 PxVehicleDifferentialNWData::getDrivenWheelStatus() const
+{
+	PX_ASSERT(((PX_MAX_NB_WHEELS + 31) & ~31) >> 5 == 1);
+	return *(PxU32*)mBitmapBuffer;
+}
+
+void PxVehicleDifferentialNWData::setDrivenWheelStatus(PxU32 status)
+{
+	PX_ASSERT(((PX_MAX_NB_WHEELS + 31) & ~31) >> 5 == 1);
+
+	Cm::BitMap bitmap;
+	bitmap.setWords(&status, 1);
+	
+	for(PxU32 i = 0; i < PX_MAX_NB_WHEELS; ++i)
+	{
+		setDrivenWheel(i, !!bitmap.test(i));
+	}
+}
+
+bool PxVehicleDifferentialNWData::isValid() const
+{
+	PX_CHECK_AND_RETURN_VAL(mNbDrivenWheels<=PX_MAX_NB_WHEELS,  "PxVehicleDifferentialNWData.mNbDrivenWheels must be in range (0,20)", false);
 	return true;
 }
 
@@ -154,6 +213,5 @@ bool PxVehicleTireData::isValid() const
 	PX_CHECK_AND_RETURN_VAL(PxAbs((1.0f/(mFrictionVsSlipGraph[2][0]-mFrictionVsSlipGraph[1][0])) - mFrictionVsSlipGraphRecipx2Minusx1) < 0.001f, "PxVehicleTireData.mFrictionVsSlipGraphRecipx2Minusx1 not set up", false);
 	return true;
 }
-
 } //namespace physx
 

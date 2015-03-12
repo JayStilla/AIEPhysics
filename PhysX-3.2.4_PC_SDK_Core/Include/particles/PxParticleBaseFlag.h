@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -107,7 +107,7 @@ struct PxParticleBaseFlag
 		
 		@see PxScene.removeActor() PxScene.addActor() PxParticleGpu
 		*/
-		eGPU								= (1<<6),
+		eGPU								= (1<<6)
 	};
 };
 
@@ -118,7 +118,7 @@ struct PxParticleBaseFlag
 @see PxParticleBaseFlag
 */
 typedef PxFlags<PxParticleBaseFlag::Enum,PxU16> PxParticleBaseFlags;
-PX_FLAGS_OPERATORS(PxParticleBaseFlag::Enum,PxU16);
+PX_FLAGS_OPERATORS(PxParticleBaseFlag::Enum,PxU16)
 
 #ifndef PX_DOXYGEN
 } // namespace physx

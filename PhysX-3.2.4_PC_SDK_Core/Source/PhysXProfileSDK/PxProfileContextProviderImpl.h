@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #ifndef PX_PHYSX_PROFILE_CONTEXT_PROVIDER_IMPL_H
 #define PX_PHYSX_PROFILE_CONTEXT_PROVIDER_IMPL_H
@@ -36,13 +36,13 @@ namespace physx {
 	{
 		PxProfileEventExecutionContext getExecutionContext() 
 		{ 
-			Thread::Id theId( Thread::getId() );
-			return PxProfileEventExecutionContext( static_cast<PxU32>( theId ), static_cast<PxU8>( ThreadPriority::eNORMAL ), 0 );
+			shdfnd::Thread::Id theId( shdfnd::Thread::getId() );
+			return PxProfileEventExecutionContext( static_cast<PxU32>( theId ), static_cast<PxU8>( shdfnd::ThreadPriority::eNORMAL ), 0 );
 		}
 
 		PxU32 getThreadId() 
 		{ 
-			return static_cast<PxU32>( Thread::getId() ); 
+			return static_cast<PxU32>( shdfnd::Thread::getId() ); 
 		}
 	};
 }

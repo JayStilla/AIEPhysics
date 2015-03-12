@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,9 +35,9 @@
 */
 
 #include "foundation/PxVec3.h"
-#include "geometry/PxPhysXGeomUtils.h"
 #include "foundation/PxFlags.h"
 #include "common/PxCoreUtilityTypes.h"
+#include "common/PxPhysXCommonConfig.h"
 
 #ifndef PX_DOXYGEN
 namespace physx
@@ -54,7 +54,7 @@ struct PxMeshFlag
 		/**
 		\brief Specifies if the SDK should flip normals.
 
-		The Nx libraries assume that the face normal of a triangle with vertices [a,b,c] can be computed as:
+		The PhysX libraries assume that the face normal of a triangle with vertices [a,b,c] can be computed as:
 		edge1 = b-a
 		edge2 = c-a
 		face_normal = edge1 x edge2.
@@ -65,7 +65,7 @@ struct PxMeshFlag
 		If this does not match the winding order for your triangles, raise the below flag.
 		*/
 		eFLIPNORMALS		=	(1<<0),
-		e16_BIT_INDICES		=	(1<<1),	//<! Denotes the use of 16-bit vertex indices
+		e16_BIT_INDICES		=	(1<<1)	//<! Denotes the use of 16-bit vertex indices
 	};
 };
 
@@ -75,7 +75,7 @@ struct PxMeshFlag
 @see PxMeshFlag
 */
 typedef PxFlags<PxMeshFlag::Enum,PxU16> PxMeshFlags;
-PX_FLAGS_OPERATORS(PxMeshFlag::Enum,PxU16);
+PX_FLAGS_OPERATORS(PxMeshFlag::Enum,PxU16)
 
 
 /**

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -84,6 +84,7 @@ namespace physx { namespace profile {
 			case EventStreamCompressionFlags::U32:
 					streamify( nm, static_cast<PxU32>( inType ) );
 					break;
+			case EventStreamCompressionFlags::U64:
 			default:
 				streamify( nm, inType );
 				break;
@@ -100,6 +101,8 @@ namespace physx { namespace profile {
 			case EventStreamCompressionFlags::U16:
 					streamify( nm, static_cast<PxU16>( inType ) );
 					break;
+			case EventStreamCompressionFlags::U32:
+			case EventStreamCompressionFlags::U64:
 			default:
 				streamify( nm, inType );
 				break;
@@ -210,6 +213,7 @@ namespace physx { namespace profile {
 					inType = val;
 				}
 					break;
+			case EventStreamCompressionFlags::U64:
 			default:
 				streamify( nm, inType );
 				break;
@@ -234,6 +238,8 @@ namespace physx { namespace profile {
 					inType = val;
 				}
 					break;
+			case EventStreamCompressionFlags::U32:
+			case EventStreamCompressionFlags::U64:
 			default:
 				streamify( nm, inType );
 				break;

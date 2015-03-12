@@ -4,7 +4,7 @@
 struct VertexOut
 {
 	FragmentParameters params;
-#if defined(RENDERER_D3D11)
+#if defined(RENDERER_D3D11) && !defined(RENDERER_WIN8ARM)
 	float4             screenSpacePosition : SV_POSITION;
 	float4             rotScaleXScaleY     : SEMANTIC_SPRITE_ROT_SCALEX_SCALEY;
 #else
@@ -23,6 +23,7 @@ CONST_TYPE sampler2D positionTexture;
 CONST_TYPE sampler2D colorTexture;
 CONST_TYPE sampler2D transformTexture;
 CONST_TYPE float vertexTextureWidth;
+CONST_TYPE float vertexTextureHeight;
 #endif
 END_CBUFFER(cbPointSprite)
 
@@ -51,7 +52,7 @@ VertexOut  vmain(
 
 #if defined(USE_VTF)
 	float f = floor(particleIndex/vertexTextureWidth);
-	float4 tcx = float4((particleIndex - f * vertexTextureWidth) / vertexTextureWidth, f / vertexTextureWidth, 0, 0);
+	float4 tcx = float4((particleIndex - f * vertexTextureWidth) / vertexTextureWidth, f / vertexTextureHeight, 0, 0);
 	float4 pos = tex2Dlod(positionTexture, tcx);
 #else
 	float4 pos = localSpacePosition;
@@ -94,7 +95,9 @@ VertexOut  vmain(
 #if !defined(GLSL_COMPILER)
 	vout.params.texcoord1   = vertexTexcoord1;
 	vout.params.texcoord2   = vertexTexcoord2;
+#if !defined (RENDERER_WIN8ARM)		
 	vout.params.texcoord3   = vertexTexcoord3;
+#endif
 #endif
 
 #if defined(USE_VTF)
@@ -103,7 +106,7 @@ VertexOut  vmain(
 	vout.params.color       = swizzle(vertexColor);
 #endif
 
-#if defined(RENDERER_D3D11)
+#if defined(RENDERER_D3D11) && !defined(RENDERER_WIN8ARM)
 	vout.pointSize          = particleSize * .75;
 	vout.rotScaleXScaleY    = float4(hasRotation ? vertexTexcoord3.x    : 0,
 	                                 hasScale    ? localSpaceTangent.xy : float2(1,1), 
@@ -114,7 +117,7 @@ VertexOut  vmain(
 	return vout;
 }
 
-#if defined(RENDERER_D3D11)
+#if defined(RENDERER_D3D11) && !defined(RENDERER_WIN8ARM)
 
 struct GeomOut
 {

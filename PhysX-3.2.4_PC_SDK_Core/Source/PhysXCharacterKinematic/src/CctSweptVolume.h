@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -53,17 +53,17 @@ namespace Cct
 	class SweptVolume
 	{
 		public:
-											SweptVolume();
-		virtual								~SweptVolume();
+												SweptVolume();
+		virtual									~SweptVolume();
 
-		virtual		void					computeTemporalBox(const SweepTest& test, PxExtendedBounds3& box, const PxExtendedVec3& center, const PxVec3& direction)	const	= 0;
+		virtual			void					computeTemporalBox(const SweepTest& test, PxExtendedBounds3& box, const PxExtendedVec3& center, const PxVec3& direction)	const	= 0;
 
-		PX_INLINE	SweptVolumeType::Enum	getType()	const	{ return mType;	}
+		PX_FORCE_INLINE	SweptVolumeType::Enum	getType()	const	{ return mType;	}
 
-					PxExtendedVec3			mCenter;
-					PxF32					mHalfHeight;	// UBI
+						PxExtendedVec3			mCenter;
+						PxF32					mHalfHeight;	// UBI
 		protected:
-					SweptVolumeType::Enum	mType;
+						SweptVolumeType::Enum	mType;
 	};
 
 	void computeTemporalBox(PxExtendedBounds3& _box, float radius, float height, float contactOffset, float maxJumpHeight, const PxVec3& upDirection, const PxExtendedVec3& center, const PxVec3& direction);

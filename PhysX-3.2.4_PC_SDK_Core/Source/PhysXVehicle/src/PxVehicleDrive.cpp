@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -52,13 +52,15 @@ bool PxVehicleDriveSimData::isValid() const
 
 void PxVehicleDriveSimData::setEngineData(const PxVehicleEngineData& engine)
 {
-	PX_CHECK_AND_RETURN(engine.mTorqueCurve.getNumDataPairs()>0, "Engine torque curve must specify at least one entry");
+	PX_CHECK_AND_RETURN(engine.mTorqueCurve.getNbDataPairs()>0, "Engine torque curve must specify at least one entry");
 	PX_CHECK_AND_RETURN(engine.mPeakTorque>0, "Engine peak torque  must be greater than zero");
 	PX_CHECK_AND_RETURN(engine.mMaxOmega>0, "Engine max omega must be greater than zero");
 	PX_CHECK_AND_RETURN(engine.mDampingRateFullThrottle>=0, "Full throttle damping rate must be greater than or equal to zero");
-	PX_CHECK_AND_RETURN(engine.mDampingRateZeroThrottleClutchEngaged>=0, "Zero throttle clutch engaged clutch damping rate must be greater than or equal to zero");
+	PX_CHECK_AND_RETURN(engine.mDampingRateZeroThrottleClutchEngaged>=0, "Zero throttle clutch engaged damping rate must be greater than or equal to zero");
 	PX_CHECK_AND_RETURN(engine.mDampingRateZeroThrottleClutchDisengaged>=0, "Zero throttle clutch disengaged damping rate must be greater than or equal to zero");
+
 	mEngine=engine;
+	mEngine.mRecipMOI=1.0f/engine.mMOI;
 	mEngine.mRecipMaxOmega=1.0f/engine.mMaxOmega;
 }
 
@@ -67,13 +69,13 @@ void PxVehicleDriveSimData::setGearsData(const PxVehicleGearsData& gears)
 	PX_CHECK_AND_RETURN(gears.mRatios[PxVehicleGearsData::eREVERSE]<0, "Reverse gear ratio must be negative");
 	PX_CHECK_AND_RETURN(gears.mRatios[PxVehicleGearsData::eNEUTRAL]==0, "Neutral gear ratio must be zero");
 	PX_CHECK_AND_RETURN(gears.mRatios[PxVehicleGearsData::eFIRST]>0, "First gear ratio must be positive");
-	PX_CHECK_AND_RETURN(PxVehicleGearsData::eSECOND>=gears.mNumRatios || (gears.mRatios[PxVehicleGearsData::eSECOND]>0 && gears.mRatios[PxVehicleGearsData::eSECOND] < gears.mRatios[PxVehicleGearsData::eFIRST]), "Second gear ratio must be positive and less than first gear ratio");
-	PX_CHECK_AND_RETURN(PxVehicleGearsData::eTHIRD>=gears.mNumRatios || (gears.mRatios[PxVehicleGearsData::eTHIRD]>0 && gears.mRatios[PxVehicleGearsData::eTHIRD] < gears.mRatios[PxVehicleGearsData::eSECOND]), "Third gear ratio must be positive and less than second gear ratio");
-	PX_CHECK_AND_RETURN(PxVehicleGearsData::eFOURTH>=gears.mNumRatios || (gears.mRatios[PxVehicleGearsData::eFOURTH]>0 && gears.mRatios[PxVehicleGearsData::eFOURTH] < gears.mRatios[PxVehicleGearsData::eTHIRD]), "Fourth gear ratio must be positive and less than third gear ratio");
-	PX_CHECK_AND_RETURN(PxVehicleGearsData::eFIFTH>=gears.mNumRatios || (gears.mRatios[PxVehicleGearsData::eFIFTH]>0 && gears.mRatios[PxVehicleGearsData::eFIFTH] < gears.mRatios[PxVehicleGearsData::eFOURTH]), "Fifth gear ratio must be positive and less than fourth gear ratio");
-	PX_CHECK_AND_RETURN(PxVehicleGearsData::eSIXTH>=gears.mNumRatios || (gears.mRatios[PxVehicleGearsData::eSIXTH]>0 && gears.mRatios[PxVehicleGearsData::eSIXTH] < gears.mRatios[PxVehicleGearsData::eFIFTH]), "Sixth gear ratio must be positive and less than fifth gear ratio");
+	PX_CHECK_AND_RETURN(PxVehicleGearsData::eSECOND>=gears.mNbRatios || (gears.mRatios[PxVehicleGearsData::eSECOND]>0 && gears.mRatios[PxVehicleGearsData::eSECOND] < gears.mRatios[PxVehicleGearsData::eFIRST]), "Second gear ratio must be positive and less than first gear ratio");
+	PX_CHECK_AND_RETURN(PxVehicleGearsData::eTHIRD>=gears.mNbRatios || (gears.mRatios[PxVehicleGearsData::eTHIRD]>0 && gears.mRatios[PxVehicleGearsData::eTHIRD] < gears.mRatios[PxVehicleGearsData::eSECOND]), "Third gear ratio must be positive and less than second gear ratio");
+	PX_CHECK_AND_RETURN(PxVehicleGearsData::eFOURTH>=gears.mNbRatios || (gears.mRatios[PxVehicleGearsData::eFOURTH]>0 && gears.mRatios[PxVehicleGearsData::eFOURTH] < gears.mRatios[PxVehicleGearsData::eTHIRD]), "Fourth gear ratio must be positive and less than third gear ratio");
+	PX_CHECK_AND_RETURN(PxVehicleGearsData::eFIFTH>=gears.mNbRatios || (gears.mRatios[PxVehicleGearsData::eFIFTH]>0 && gears.mRatios[PxVehicleGearsData::eFIFTH] < gears.mRatios[PxVehicleGearsData::eFOURTH]), "Fifth gear ratio must be positive and less than fourth gear ratio");
+	PX_CHECK_AND_RETURN(PxVehicleGearsData::eSIXTH>=gears.mNbRatios || (gears.mRatios[PxVehicleGearsData::eSIXTH]>0 && gears.mRatios[PxVehicleGearsData::eSIXTH] < gears.mRatios[PxVehicleGearsData::eFIFTH]), "Sixth gear ratio must be positive and less than fifth gear ratio");
 	PX_CHECK_AND_RETURN(gears.mFinalRatio>0, "Final gear ratio must be greater than zero");
-	PX_CHECK_AND_RETURN(gears.mNumRatios>=3, "Number of gear ratios must be at least 3 - we need at least reverse, neutral, and a forward gear");
+	PX_CHECK_AND_RETURN(gears.mNbRatios>=3, "Number of gear ratios must be at least 3 - we need at least reverse, neutral, and a forward gear");
 
 	mGears=gears;
 }
@@ -81,6 +83,7 @@ void PxVehicleDriveSimData::setGearsData(const PxVehicleGearsData& gears)
 void PxVehicleDriveSimData::setClutchData(const PxVehicleClutchData& clutch)
 {
 	PX_CHECK_AND_RETURN(clutch.mStrength>0, "Clutch strength must be greater than zero");
+	PX_CHECK_AND_RETURN(PxVehicleClutchAccuracyMode::eBEST_POSSIBLE==clutch.mAccuracyMode || clutch.mEstimateIterations > 0, "Clutch mEstimateIterations must be greater than zero in eESTIMATE mode.");
 
 	mClutch=clutch;
 }
@@ -114,11 +117,11 @@ PxVehicleDriveDynData::PxVehicleDriveDynData()
 		mGearDownPressed(false),
 		mCurrentGear(PxVehicleGearsData::eNEUTRAL),
 		mTargetGear(PxVehicleGearsData::eNEUTRAL),
-		mEnginespeed(0.0f),
+		mEnginespeed(360.0f),
 		mGearSwitchTime(0.0f),
 		mAutoBoxSwitchTime(0.0f)
 {
-	for(PxU32 i=0;i<eMAX_NUM_ANALOG_INPUTS;i++)
+	for(PxU32 i=0;i<eMAX_NB_ANALOG_INPUTS;i++)
 	{
 		mControlAnalogVals[i]=0.0f;		
 	}
@@ -127,7 +130,7 @@ PxVehicleDriveDynData::PxVehicleDriveDynData()
 void PxVehicleDriveDynData::setToRestState()
 {
 	//Set analog inputs to zero so the vehicle starts completely at rest.
-	for(PxU32 i=0;i<eMAX_NUM_ANALOG_INPUTS;i++)
+	for(PxU32 i=0;i<eMAX_NB_ANALOG_INPUTS;i++)
 	{
 		mControlAnalogVals[i]=0.0f;
 	}
@@ -149,16 +152,16 @@ bool PxVehicleDriveDynData::isValid() const
 	return true;
 }
 
-void PxVehicleDriveDynData::setAnalogInput(const PxReal analogVal, const PxU32 type)
+void PxVehicleDriveDynData::setAnalogInput(const PxU32 type, const PxReal analogVal)
 {
 	PX_CHECK_AND_RETURN(analogVal>=-1.01f && analogVal<=1.01f, "PxVehicleDriveDynData::setAnalogInput - analogVal must be in range (-1,1)");
-	PX_CHECK_AND_RETURN(type<eMAX_NUM_ANALOG_INPUTS, "PxVehicleDriveDynData::setAnalogInput - illegal type");
+	PX_CHECK_AND_RETURN(type<eMAX_NB_ANALOG_INPUTS, "PxVehicleDriveDynData::setAnalogInput - illegal type");
 	mControlAnalogVals[type]=analogVal;
 }
 
-PxReal PxVehicleDriveDynData::getAnalogInput(const PxU32 type)
+PxReal PxVehicleDriveDynData::getAnalogInput(const PxU32 type) const
 {
-	PX_CHECK_AND_RETURN_VAL(type<eMAX_NUM_ANALOG_INPUTS, "PxVehicleDriveDynData::getAnalogInput - illegal type", 0.0f);
+	PX_CHECK_AND_RETURN_VAL(type<eMAX_NB_ANALOG_INPUTS, "PxVehicleDriveDynData::getAnalogInput - illegal type", 0.0f);
 	return mControlAnalogVals[type];
 }
 
@@ -203,17 +206,6 @@ void PxVehicleDrive::setToRestState()
 	//Set dynamics data to rest state.
 	mDriveDynData.setToRestState();
 }
-
-
-
-
-
-
-
-
-
-
-
 
 } //namespace physx
 

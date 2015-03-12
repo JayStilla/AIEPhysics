@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,10 +32,11 @@
 #define PX_PHYSICS_COMMON_IO
 
 #include "PxIO.h"
-#include "../Source/shared/general/PxIOStream/public/PxFileBuf.h"
+#include "PxMemory.h"
 #include "CmPhysXCommon.h"
 #include "PxAssert.h"
-#include "CmLegacyStream.h"
+#include "PxSerialFramework.h"
+#include "CmUtils.h"
 
 namespace physx
 {
@@ -56,7 +57,7 @@ public:
 
 		// zero the buffer if we didn't get all the data
 		if(readLength<count)
-			Ps::memZero(reinterpret_cast<PxU8*>(dest)+readLength, count-readLength);
+			PxMemZero(reinterpret_cast<PxU8*>(dest)+readLength, count-readLength);
 	
 		return readLength;
 	}
@@ -66,12 +67,15 @@ public:
 		T val;	
 		PxU32 length = mStream.read(&val, sizeof(T));
 		PX_ASSERT(length == sizeof(T));
+		PX_UNUSED(length);
 		return val; 
 	}
 
 
 protected:
 	PxInputStream &mStream;
+private:
+	InputStreamReader& operator=(const InputStreamReader&);
 };
 
 
@@ -79,6 +83,7 @@ class InputDataReader : public InputStreamReader
 {
 public:
 	InputDataReader(PxInputData& data) : InputStreamReader(data) {}
+	InputDataReader &operator=(const InputDataReader &);
 
 	PxU32	length() const					{		return getData().getLength();		}
 	void	seek(PxU32 offset)				{		getData().seek(offset);				}
@@ -115,21 +120,14 @@ public:
 	{		
 		PxU32 length = write(&val, sizeof(T));		
 		PX_ASSERT(length == sizeof(T));
+		PX_UNUSED(length);
 	}
 
 private:
+
+	OutputStreamWriter& operator=(const OutputStreamWriter&);
 	PxOutputStream& mStream;
 	PxU32 mCount;
-};
-
-class LegacySerialStream : public PxSerialStream
-{
-public:
-	LegacySerialStream(OutputStreamWriter& writer) : mWriter(writer) {}
-	void		storeBuffer(const void* buffer, PxU32 size)		{		mWriter.write(buffer, size);	}
-	PxU32		getTotalStoredSize()							{		return mWriter.getStoredSize();	}
-private:
-	OutputStreamWriter& mWriter;
 };
 
 

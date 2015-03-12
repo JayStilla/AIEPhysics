@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -43,11 +43,10 @@ RenderTexture::RenderTexture(Renderer& renderer, PxU32 id, PxU32 width, PxU32 he
 {
 	RendererTexture2DDesc tdesc;
 
-	// texture data should be in RendererColor format
-#if defined(RENDERER_ENABLE_OPENGL) && !defined(RENDERER_WINDOWS)
-	tdesc.format	= RendererTexture2D::FORMAT_R8G8B8A8;
-#else
+#if !defined(RENDERER_PS3)
 	tdesc.format	= RendererTexture2D::FORMAT_B8G8R8A8;
+#else
+	tdesc.format	= RendererTexture2D::FORMAT_R8G8B8A8;
 #endif
 
 	tdesc.width		= width;
@@ -77,6 +76,7 @@ RenderTexture::RenderTexture(Renderer& renderer, PxU32 id, PxU32 width, PxU32 he
 			const PxU32 levelWidth	= mTexture->getWidthInBlocks();
 			const PxU32 levelHeight	= mTexture->getHeightInBlocks();
 			const PxU32 rowSrcSize	= levelWidth * mTexture->getBlockSize();
+			PX_UNUSED(rowSrcSize);
 			PX_ASSERT(rowSrcSize <= pitch); // the pitch can't be less than the source row size.
 			for(PxU32 row=0; row<levelHeight; row++)
 			{ 

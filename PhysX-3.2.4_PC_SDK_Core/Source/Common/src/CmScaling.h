@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -62,8 +62,8 @@ namespace Cm
 		PX_INLINE FastVertex2ShapeScaling()
 		{
 			//no scaling by default:
-			vertex2ShapeSkew = PxMat33::createIdentity();
-			shape2VertexSkew = PxMat33::createIdentity();
+			vertex2ShapeSkew = PxMat33(PxIdentity);
+			shape2VertexSkew = PxMat33(PxIdentity);
 		}
 
 		PX_INLINE explicit FastVertex2ShapeScaling(const PxMeshScale& scale)
@@ -83,8 +83,8 @@ namespace Cm
 
 		PX_INLINE void setIdentity()
 		{
-			vertex2ShapeSkew = PxMat33::createIdentity();
-			shape2VertexSkew = PxMat33::createIdentity();
+			vertex2ShapeSkew = PxMat33(PxIdentity);
+			shape2VertexSkew = PxMat33(PxIdentity);
 		}
 
 		PX_INLINE void init(const PxVec3& scale, const PxQuat& rotation)
@@ -158,7 +158,8 @@ namespace Cm
 		//! same as transformBounds with absPose == id.
 		PX_INLINE PxBounds3 transformBounds(const PxBounds3& bounds) const
 		{
-			return PxBounds3::transform(vertex2ShapeSkew, bounds);
+			PX_ASSERT(!bounds.isEmpty());
+			return PxBounds3::transformFast(vertex2ShapeSkew, bounds);
 		}
 
 		//! Transforms a shape space OBB to a vertex space OBB.  All 3 params are in and out.
@@ -205,7 +206,10 @@ PX_INLINE Cm::Matrix34 operator*(const PxTransform& transform, const PxMeshScale
 PX_INLINE Cm::Matrix34 operator*(const PxMeshScale& scale, const PxTransform& transform) 
 {
 	PxMat33 scaleMat = scale.toMat33();
-	return Cm::Matrix34(scaleMat * PxMat33(transform.q), scaleMat * transform.p);
+	PxMat33 t = PxMat33(transform.q);
+	PxMat33 r = scaleMat * t;
+	PxVec3 p = scaleMat * transform.p;
+	return Cm::Matrix34(r, p);
 }
 
 PX_INLINE Cm::Matrix34 operator*(const Cm::Matrix34& transform, const PxMeshScale& scale) 

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,159 +34,15 @@
 #include "PsIntrinsics.h"
 #include "PxMath.h"
 #include "PxPhysics.h"
-#include "PxCooking.h"
+#include "geometry/PxConvexMesh.h"
+#include "cooking/PxCooking.h"
+#include "PxBounds3.h"
+#include "extensions/PxDefaultStreams.h"
 
 using namespace PxToolkit;
-
 ///////////////////////////////////////////////////////////////////////////////
 
-MemoryOutputStream::MemoryOutputStream() :
-	mData		(NULL),
-	mSize		(0),
-	mCapacity	(0)
-{
-}
-
-MemoryOutputStream::~MemoryOutputStream()
-{
-	if(mData)
-		delete[] mData;
-}
-
-PxU32 MemoryOutputStream::write(const void* src, PxU32 size)
-{
-	PxU32 expectedSize = mSize + size;
-	if(expectedSize > mCapacity)
-	{
-		mCapacity = expectedSize + 4096;
-
-		PxU8* newData = new PxU8[mCapacity];
-		PX_ASSERT(newData!=NULL);
-
-		if(newData)
-		{
-			memcpy(newData, mData, mSize);
-			delete[] mData;
-		}
-		mData = newData;
-	}
-	memcpy(mData+mSize, src, size);
-	mSize += size;
-	return size;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-MemoryInputData::MemoryInputData(PxU8* data, PxU32 length) :
-	mSize	(length),
-	mData	(data),
-	mPos	(0)
-{
-}
-
-PxU32 MemoryInputData::read(void* dest, PxU32 count)
-{
-	PxU32 length = PxMin<PxU32>(count, mSize-mPos);
-	memcpy(dest, mData+mPos, length);
-	mPos += length;
-	return length;
-}
-
-PxU32 MemoryInputData::getLength() const
-{
-	return mSize;
-}
-
-void MemoryInputData::seek(PxU32 offset)
-{
-	mPos = PxMin<PxU32>(mSize, offset);
-}
-
-PxU32 MemoryInputData::tell() const
-{
-	return mPos;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-FileOutputStream::FileOutputStream(const char* filename)
-{
-	mFile = NULL;
-	Ps::fopen_s(&mFile, filename, "wb");
-}
-
-FileOutputStream::~FileOutputStream()
-{
-	if(mFile)
-		fclose(mFile);
-}
-
-PxU32 FileOutputStream::write(const void* src, PxU32 count)
-{
-	return mFile ? (PxU32)fwrite(src, 1, count, mFile) : 0;
-}
-
-bool FileOutputStream::isValid()
-{
-	return mFile != NULL;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-FileInputData::FileInputData(const char* filename)
-{
-	mFile = NULL;
-	Ps::fopen_s(&mFile, filename, "rb");
-
-	if(mFile)
-	{
-		fseek(mFile, 0, SEEK_END);
-		mLength = ftell(mFile);
-		fseek(mFile, 0, SEEK_SET);
-	}
-	else
-	{
-		mLength = 0;
-	}
-}
-
-FileInputData::~FileInputData()
-{
-	if(mFile)
-		fclose(mFile);
-}
-
-PxU32 FileInputData::read(void* dest, PxU32 count)
-{
-	PX_ASSERT(mFile);
-	const size_t size = fread(dest, 1, count, mFile);
-	PX_ASSERT(PxU32(size)==count);
-	return PxU32(size);
-}
-
-PxU32 FileInputData::getLength() const
-{
-	return mLength;
-}
-
-void FileInputData::seek(PxU32 pos)
-{
-	fseek(mFile, pos, SEEK_SET);
-}
-
-PxU32 FileInputData::tell() const
-{
-	return ftell(mFile);
-}
-
-bool FileInputData::isValid() const
-{
-	return mFile != NULL;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-PxTriangleMesh* PxToolkit::createTriangleMesh32(PxPhysics& physics, PxCooking& cooking, const PxVec3* verts, PxU32 vertCount, const PxU32* indices32, PxU32 triCount)
+PxTriangleMesh* PxToolkit::createTriangleMesh32(PxPhysics& physics, PxCooking& cooking, const PxVec3* verts, PxU32 vertCount, const PxU32* indices32, PxU32 triCount, bool insert)
 {
 	PxTriangleMeshDesc meshDesc;
 	meshDesc.points.count			= vertCount;
@@ -197,39 +53,164 @@ PxTriangleMesh* PxToolkit::createTriangleMesh32(PxPhysics& physics, PxCooking& c
 	meshDesc.triangles.stride		= 3*sizeof(PxU32);
 	meshDesc.triangles.data			= indices32;
 
-	PxToolkit::MemoryOutputStream writeBuffer;
-	bool status = cooking.cookTriangleMesh(meshDesc, writeBuffer);
-	if(!status)
-		return NULL;
+	if(!insert)
+	{
+		PxDefaultMemoryOutputStream writeBuffer;
+		bool status = cooking.cookTriangleMesh(meshDesc, writeBuffer);
+		if(!status)
+			return NULL;
 
-	PxToolkit::MemoryInputData readBuffer(writeBuffer.getData(), writeBuffer.getSize());
-	return physics.createTriangleMesh(readBuffer);
+		PxDefaultMemoryInputData readBuffer(writeBuffer.getData(), writeBuffer.getSize());
+		return physics.createTriangleMesh(readBuffer);
+	}
+	else
+	{
+		return cooking.createTriangleMesh(meshDesc,physics.getPhysicsInsertionCallback());
+	}
 }
 
-PxTriangleMesh* PxToolkit::createTriangleMesh32(PxPhysics& physics, PxCooking& cooking, PxTriangleMeshDesc* meshDesc)
+PxTriangleMesh* PxToolkit::createTriangleMesh32(PxPhysics& physics, PxCooking& cooking, PxTriangleMeshDesc* meshDesc, bool insert)
 {
-	PxToolkit::MemoryOutputStream writeBuffer;
-	bool status = cooking.cookTriangleMesh(*meshDesc, writeBuffer);
-	if(!status)
-		return NULL;
+	if(!insert)
+	{
+		PxDefaultMemoryOutputStream writeBuffer;
+		bool status = cooking.cookTriangleMesh(*meshDesc, writeBuffer);
+		if(!status)
+			return NULL;
 
-	PxToolkit::MemoryInputData readBuffer(writeBuffer.getData(), writeBuffer.getSize());
-	return physics.createTriangleMesh(readBuffer);
+		PxDefaultMemoryInputData readBuffer(writeBuffer.getData(), writeBuffer.getSize());
+		return physics.createTriangleMesh(readBuffer);
+	}
+	else
+	{
+		return cooking.createTriangleMesh(*meshDesc,physics.getPhysicsInsertionCallback());
+	}
 }
 
 PxConvexMesh* PxToolkit::createConvexMesh(PxPhysics& physics, PxCooking& cooking, const PxVec3* verts, PxU32 vertCount, PxConvexFlags flags)
+{
+	PxConvexMeshDesc convexDesc;
+	convexDesc.points.count		= vertCount;
+	convexDesc.points.stride	= sizeof(PxVec3);
+	convexDesc.points.data		= verts;
+	convexDesc.flags			= flags;
+
+	PxDefaultMemoryOutputStream buf;
+	if(!cooking.cookConvexMesh(convexDesc, buf))
+		return NULL;
+
+	PxDefaultMemoryInputData input(buf.getData(), buf.getSize());
+	return physics.createConvexMesh(input);
+}
+
+PxConvexMesh* PxToolkit::createConvexMeshSafe(PxPhysics& physics, PxCooking& cooking, const PxVec3* verts, PxU32 vertCount, PxConvexFlags flags, PxU32 vLimit)
 {
 	PxConvexMeshDesc convexDesc;
 	convexDesc.points.count			= vertCount;
 	convexDesc.points.stride		= sizeof(PxVec3);
 	convexDesc.points.data			= verts;
 	convexDesc.flags				= flags;
+	convexDesc.vertexLimit			= vLimit;
 
-	MemoryOutputStream buf;
-	if(!cooking.cookConvexMesh(convexDesc, buf))
+	bool aabbCreated = false;
+
+	PxDefaultMemoryOutputStream buf;
+	bool retVal = cooking.cookConvexMesh(convexDesc, buf);
+	if(!retVal)
+	{
+		if(!(flags & PxConvexFlag::eINFLATE_CONVEX))
+		{
+			convexDesc.flags |= PxConvexFlag::eINFLATE_CONVEX;
+			retVal = cooking.cookConvexMesh(convexDesc, buf);
+		}		
+	}
+	
+	if(!retVal)
+	{
+		// create AABB
+		PxBounds3 aabb;
+		aabb.setEmpty();
+		for (PxU32 i = 0; i < vertCount; i++)
+		{
+			aabb.include(verts[i]);
+		}
+
+		PxVec3  aabbVerts[8];
+		aabbVerts[0] = PxVec3(aabb.minimum.x,aabb.minimum.y,aabb.minimum.z);
+		aabbVerts[1] = PxVec3(aabb.maximum.x,aabb.minimum.y,aabb.minimum.z);
+		aabbVerts[2] = PxVec3(aabb.maximum.x,aabb.maximum.y,aabb.minimum.z);
+		aabbVerts[3] = PxVec3(aabb.minimum.x,aabb.maximum.y,aabb.minimum.z);
+
+		aabbVerts[4] = PxVec3(aabb.minimum.x,aabb.minimum.y,aabb.maximum.z);
+		aabbVerts[5] = PxVec3(aabb.maximum.x,aabb.minimum.y,aabb.maximum.z);
+		aabbVerts[6] = PxVec3(aabb.maximum.x,aabb.maximum.y,aabb.maximum.z);
+		aabbVerts[7] = PxVec3(aabb.minimum.x,aabb.maximum.y,aabb.maximum.z);
+
+		convexDesc.points.count			= 8;
+		convexDesc.points.stride		= sizeof(PxVec3);
+		convexDesc.points.data			= &aabbVerts[0];
+		convexDesc.flags				= flags;
+
+		retVal = cooking.cookConvexMesh(convexDesc, buf);
+
+		aabbCreated = true;
+	}
+
+	if(!retVal)
+	{
 		return NULL;
+	}
 
-	PxToolkit::MemoryInputData input(buf.getData(), buf.getSize());
-	return physics.createConvexMesh(input);
+	PxDefaultMemoryInputData input(buf.getData(), buf.getSize());
+	PxConvexMesh* mesh = physics.createConvexMesh(input);
+
+	// vLimit test
+	if(mesh && !aabbCreated && (flags & PxConvexFlag::eINFLATE_CONVEX))
+	{
+		bool iterate = true;
+		PxU32 limit = vLimit;
+		while(iterate)
+		{		
+			if(mesh->getNbVertices() > vLimit)
+			{
+				if(limit - (mesh->getNbVertices() - limit) > 4)
+				{
+					convexDesc.vertexLimit = limit - (mesh->getNbVertices() - limit);
+				}
+				else
+				{
+					convexDesc.vertexLimit = 4;
+				}
+
+				limit = convexDesc.vertexLimit;
+
+				mesh->release();
+				mesh = NULL;
+
+				PxDefaultMemoryOutputStream buf2;
+				retVal = cooking.cookConvexMesh(convexDesc, buf2);
+
+				if(retVal)
+				{
+					PxDefaultMemoryInputData input2(buf2.getData(), buf2.getSize());
+					mesh = physics.createConvexMesh(input2);
+
+					if(!mesh)
+						return NULL;
+				}
+				else
+				{
+					return NULL;
+				}
+			}
+			else
+			{
+				return mesh;
+			}
+		}
+	}
+
+	return mesh;
 }
+
 

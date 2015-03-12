@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -37,7 +37,7 @@
 class SampleInputMappingAsset : public SampleAllocateable
 {	
 public:
-	SampleInputMappingAsset(FILE* file, const char *path, bool empty,PxU32 userInputCS, PxU32 inputEventCS);
+	SampleInputMappingAsset(SampleFramework::File* file, const char *path, bool empty,PxU32 userInputCS, PxU32 inputEventCS);
 	virtual ~SampleInputMappingAsset(void);
 	
 	virtual bool isOk(void) const;
@@ -54,13 +54,13 @@ private:
 
 private:
 	SampleFramework::T_SampleInputData mSampleInputData;
-	ODBlock*			mSettingsBlock;
-	ODBlock*			mMapping;
-	FILE*				mFile;
-	const char*			mPath;
-	bool				mIsOk;
-	PxU32				mUserInputCS;
-	PxU32				mInputEventCS;
+	ODBlock*				mSettingsBlock;
+	ODBlock*				mMapping;
+	SampleFramework::File*	mFile;
+	const char*				mPath;
+	bool					mIsOk;
+	PxU32					mUserInputCS;
+	PxU32					mInputEventCS;
 };	
 
 #endif

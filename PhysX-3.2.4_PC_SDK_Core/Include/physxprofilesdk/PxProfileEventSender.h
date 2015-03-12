@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #ifndef PX_PROFILE_EVENT_SENDER_H
 #define PX_PROFILE_EVENT_SENDER_H
@@ -54,6 +54,10 @@ namespace physx {
 	protected:
 		virtual ~PxProfileEventSender(){}
 	public:
+	
+		// use this as a thread id for events that start on one thread and end on another
+		static const PxU32 CrossThreadId = 99999789;
+
 		//Send a profile event, optionally with a context.  Events are sorted by thread
 		//and context in the client side.
 		virtual void startEvent( PxU16 inId, PxU64 contextId) = 0;

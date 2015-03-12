@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -40,14 +40,14 @@
 
 // todo: these need to go somewhere else 
 
-#if defined(PX_WINDOWS) || defined(PX_WINMODERN) 
+#if defined(PX_WINDOWS) ||  defined(PX_WINMODERN) || defined(PX_XBOXONE)
 #	define PxSpinLockPause() __asm pause
 #	if defined(PX_WINMODERN) 
 #		define PX_TLS_MAX_SLOTS 64
 #	endif
 #elif defined(PX_X360)
 #	define PxSpinLockPause() __asm nop
-#elif defined(PX_LINUX) || defined(PX_ANDROID) || defined(PX_APPLE)
+#elif defined(PX_LINUX) || defined(PX_ANDROID) || defined(PX_PS4) || defined(PX_APPLE)
 #   define PxSpinLockPause() asm ("nop")
 #elif defined(PX_PS3)
 #	    define PxSpinLockPause() asm ("nop") // don't know if it's correct yet...
@@ -55,8 +55,10 @@
 #elif defined(PX_PSP2)
 #	    define PxSpinLockPause() asm ("nop") // don't know if it's correct yet...
 #define PX_TLS_MAX_SLOTS 64
-#elif defined(PX_WII)
-#	define PxSpinLockPause() asm { nop } // don't know if it's correct yet...
+#elif defined(PX_WIIU)
+#	define PxSpinLockPause() asm ("nop")
+#else
+	#error "Platform not supported!"
 #endif
 
 
@@ -97,34 +99,37 @@ namespace shdfnd
 		};
 	};
 
+	class Runnable
+	{
+	public:
+		Runnable() {}
+		virtual ~Runnable() {}
+		virtual void execute(void) {}
+	};
 
 
-	/**
-	Thread abstraction API
-	*/
-
-	class PX_FOUNDATION_API Thread : public UserAllocated
+	class PX_FOUNDATION_API ThreadImpl
 	{
 	public:	
 		typedef		size_t	Id;								// space for a pointer or an integer
 		typedef		void*	(*ExecuteFn)(void *);
 
 		static PxU32 getDefaultStackSize();
-
 		static Id getId();
 			
 		/**  
-		Construct (but do not start) the thread object. Executes in the context
-		of the spawning thread
+		Construct (but do not start) the thread object. The OS thread object will not be created
+		until start() is called. Executes in the context
+		of the spawning thread.
 		*/
 
-		Thread();
+		ThreadImpl();
 
 		/**  
 		Construct and start the the thread, passing the given arg to the given fn. (pthread style)
 		*/
 
-		Thread(ExecuteFn fn, void *arg);
+		ThreadImpl(ExecuteFn fn, void *arg);
 
 
 		/**
@@ -132,14 +137,16 @@ namespace shdfnd
 		context of the spawning thread.
 		*/
 
-		virtual ~Thread();
+		~ThreadImpl();
 
 
 		/**
-		start the thread running. Called in the context of the spawning thread.
+		Create the OS thread and start it running. Called in the context of the spawning thread.
+		If an affinity mask has previously been set then it will be applied after the 
+		thread has been created.
 		*/
 
-		void start(PxU32 stackSize);
+		void start(PxU32 stackSize, Runnable* r);
 
 		/**
 		Violently kill the current thread. Blunt instrument, not recommended since
@@ -150,14 +157,7 @@ namespace shdfnd
 		void kill();
 
 		/**
-		The virtual execute() method is the user defined function that will
-		run in the new thread. Called in the context of the spawned thread.
-		*/
-
-		virtual void execute(void);
-
-		/**
-		stop the thread. Signals the spawned thread that it should stop, so the 
+		Stop the thread. Signals the spawned thread that it should stop, so the 
 		thread should check regularly
 		*/
 
@@ -183,13 +183,28 @@ namespace shdfnd
 		void quit();
 
 		/**
-		Change the affinity mask for this thread.
-		On Xbox360, sets the hardware thread to the first non-zero bit.
+		Change the affinity mask for this thread. The mask is a platform
+		specific value.
 
-		Returns previous mask if successful, or zero on failure
+		On Windows, Linux, PS4 and XboxOne platforms, each set mask bit represents 
+		the index of a logical processor that the OS may schedule thread execution on. 
+		Bits outside the range of valid logical processors may be ignored or cause 
+		the function to return an error.
+
+		On WiiU, the mask should be set to one of the platform provided core definitions 
+		and the affinity should be set before starting the thread.
+
+		On Xbox360, the function sets the hardware thread to the first non-zero bit.
+
+		On PS3 and Apple platforms, this function has no effect.
+		
+		If the thread has not yet been started then the mask is stored
+		and applied when the thread is started.
+
+		If the thread has already been started then this method	returns the 
+		previous affinity mask on success, otherwise it returns zero.
 		*/	
-		virtual PxU32 setAffinityMask(PxU32 mask);
-
+		PxU32 setAffinityMask(PxU32 mask);
 
 		static ThreadPriority::Enum getPriority( Id threadId );
 
@@ -205,9 +220,131 @@ namespace shdfnd
 		/** Yield the current thread's slot on the CPU */
 		static void yield();
 
+		/** Return the number of physical cores (does not include hyper-threaded cores), returns 0 on failure */
+		static PxU32 getNbPhysicalCores();
+
+		 /**
+        Size of this class.
+        */
+		static const PxU32& getSize();
+	};
+
+
+	/**
+	Thread abstraction API
+	*/
+	template <typename Alloc = ReflectionAllocator<ThreadImpl> >
+	class ThreadT: protected Alloc, public UserAllocated, public Runnable
+	{
+	public:	
+		typedef		ThreadImpl::Id	Id;					// space for a pointer or an integer
+
+		/**  
+		Construct (but do not start) the thread object. Executes in the context
+		of the spawning thread
+		*/
+		ThreadT(const Alloc& alloc = Alloc())
+			: Alloc(alloc)
+		{
+			mImpl = reinterpret_cast<ThreadImpl*>(Alloc::allocate(ThreadImpl::getSize(), __FILE__, __LINE__));
+			PX_PLACEMENT_NEW(mImpl, ThreadImpl)();
+		}
+
+
+		/**  
+		Construct and start the the thread, passing the given arg to the given fn. (pthread style)
+		*/
+		ThreadT(ThreadImpl::ExecuteFn fn, void *arg, const Alloc& alloc = Alloc())
+			: Alloc(alloc)
+		{
+			mImpl = reinterpret_cast<ThreadImpl*>(Alloc::allocate(ThreadImpl::getSize(), __FILE__, __LINE__));
+			PX_PLACEMENT_NEW(mImpl, ThreadImpl)(fn, arg);
+		}
+
+		/**
+		Deallocate all resources associated with the thread. Should be called in the
+		context of the spawning thread.
+		*/
+		virtual ~ThreadT()
+		{
+			mImpl->~ThreadImpl();
+			Alloc::deallocate(mImpl);
+		}
+
+		/**
+		start the thread running. Called in the context of the spawning thread.
+		*/
+
+		void start(PxU32 stackSize = ThreadImpl::getDefaultStackSize())		{ mImpl->start(stackSize, this); }
+
+		/**
+		Violently kill the current thread. Blunt instrument, not recommended since
+		it can leave all kinds of things unreleased (stack, memory, mutexes...) Should
+		be called in the context of the spawning thread.
+		*/
+
+		void kill()															{ mImpl->kill(); }
+
+		/**
+		The virtual execute() method is the user defined function that will
+		run in the new thread. Called in the context of the spawned thread.
+		*/
+
+		virtual void execute(void)											{ }
+
+		/**
+		stop the thread. Signals the spawned thread that it should stop, so the 
+		thread should check regularly
+		*/
+
+		void signalQuit()													{ mImpl->signalQuit(); }
+
+		/**
+		Wait for a thread to stop. Should be called in the context of the spawning
+		thread. Returns false if the thread has not been started.
+		*/
+
+		bool waitForQuit()													{ return mImpl->waitForQuit(); }
+
+		/**
+		check whether the thread is signalled to quit. Called in the context of the
+		spawned thread.
+		*/
+
+		bool quitIsSignalled()												{ return mImpl->quitIsSignalled(); }
+
+		/**
+		Cleanly shut down this thread. Called in the context of the spawned thread.
+		*/
+		void quit()															{ mImpl->quit(); }
+
+		PxU32 setAffinityMask(PxU32 mask)									{ return mImpl->setAffinityMask(mask); }
+
+		static ThreadPriority::Enum getPriority(ThreadImpl::Id threadId)	{ return ThreadImpl::getPriority(threadId); }
+
+		/** Set thread priority. */
+		void setPriority(ThreadPriority::Enum prio)							{ mImpl->setPriority(prio); }
+
+		/** set the thread's name */
+		void setName(const char *name)										{ mImpl->setName(name); }
+
+		/** Put the current thread to sleep for the given number of milliseconds */
+		static void sleep(PxU32 ms)											{ ThreadImpl::sleep(ms); }
+
+		/** Yield the current thread's slot on the CPU */
+		static void yield()													{ ThreadImpl::yield(); }
+
+		static PxU32 getDefaultStackSize()									{ return ThreadImpl::getDefaultStackSize(); }
+
+		static ThreadImpl::Id getId()										{ return ThreadImpl::getId(); }
+
+		static PxU32 getNbPhysicalCores()									{ return ThreadImpl::getNbPhysicalCores(); }
+
 	private:
 		class ThreadImpl *mImpl;
 	};
+
+	typedef ThreadT<> Thread;
 
 
 	PX_FOUNDATION_API PxU32			TlsAlloc();

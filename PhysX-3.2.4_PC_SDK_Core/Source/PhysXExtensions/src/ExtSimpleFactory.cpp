@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -47,35 +47,39 @@
 #include "PxShape.h"
 #include "PxRigidDynamic.h"
 #include "CmPhysXCommon.h"
-
+#include "PxPhysics.h"
 
 using namespace physx;
-using namespace physx::shdfnd;
+using namespace shdfnd;
 
 namespace
 {
-template<class A>
- A* setShape(A* actor, const PxGeometry& geometry, PxMaterial& material, const PxTransform& shapeOffset, PxShape*& shape)
-{
-	if(!actor)
-		return NULL;
 
-	shape = actor->createShape(geometry, material, shapeOffset);
-	if(!shape)
-	{ 
-		actor->release();
-		return NULL;
+bool isDynamicGeometry(PxGeometryType::Enum type)
+{
+	return type == PxGeometryType::eBOX 
+		|| type == PxGeometryType::eSPHERE
+		|| type == PxGeometryType::eCAPSULE
+		|| type == PxGeometryType::eCONVEXMESH;
+}
+}
+
+namespace physx
+{
+PxRigidDynamic* PxCreateDynamic(PxPhysics& sdk, 
+								const PxTransform& transform, 
+								PxShape& shape,
+								PxReal density)
+{
+	PX_CHECK_AND_RETURN_NULL(transform.isValid(), "PxCreateDynamic: transform is not valid.");
+
+	PxRigidDynamic* actor = sdk.createRigidDynamic(transform);
+	if(actor)
+	{
+		actor->attachShape(shape);
+		PxRigidBodyExt::updateMassAndInertia(*actor, density);
 	}
 	return actor;
-}
-
-bool isDynamicGeometry(const PxGeometry& geometry)
-{
-	return geometry.getType() == PxGeometryType::eBOX 
-		|| geometry.getType() == PxGeometryType::eSPHERE
-		|| geometry.getType() == PxGeometryType::eCAPSULE
-		|| geometry.getType() == PxGeometryType::eCONVEXMESH;
-}
 }
 
 PxRigidDynamic* PxCreateDynamic(PxPhysics& sdk, 
@@ -88,13 +92,51 @@ PxRigidDynamic* PxCreateDynamic(PxPhysics& sdk,
 	PX_CHECK_AND_RETURN_NULL(transform.isValid(), "PxCreateDynamic: transform is not valid.");
 	PX_CHECK_AND_RETURN_NULL(shapeOffset.isValid(), "PxCreateDynamic: shapeOffset is not valid.");
 
-	if(!isDynamicGeometry(geometry) || density <= 0.0f)
+	if(!isDynamicGeometry(geometry.getType()) || density <= 0.0f)
 	    return NULL;
 
-	PxShape* shape;
-	PxRigidDynamic* actor = setShape(sdk.createRigidDynamic(transform), geometry, material, shapeOffset, shape);
+	PxShape* shape = sdk.createShape(geometry, material, true);
+	if(!shape)
+		return NULL;
+
+	shape->setLocalPose(shapeOffset);
+
+	PxRigidDynamic* body = shape ? PxCreateDynamic(sdk, transform, *shape, density) : NULL;
+	shape->release();
+	return body;
+}
+
+
+
+PxRigidDynamic* PxCreateKinematic(PxPhysics& sdk, 
+								  const PxTransform& transform, 
+								  PxShape& shape,
+								  PxReal density)
+{
+	PX_CHECK_AND_RETURN_NULL(transform.isValid(), "PxCreateKinematic: transform is not valid.");
+
+	bool isDynGeom = isDynamicGeometry(shape.getGeometryType());
+	if(isDynGeom && density <= 0.0f)
+	    return NULL;
+
+	PxRigidDynamic* actor = sdk.createRigidDynamic(transform);	
 	if(actor)
-		PxRigidBodyExt::updateMassAndInertia(*actor, density);
+	{
+		actor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+		if(!isDynGeom)
+			shape.setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
+
+		actor->attachShape(shape);
+
+		if(isDynGeom)
+			PxRigidBodyExt::updateMassAndInertia(*actor, density);
+		else		
+		{
+			actor->setMass(1.f);
+			actor->setMassSpaceInertiaTensor(PxVec3(1.f,1.f,1.f));
+		}
+	}
+
 	return actor;
 }
 
@@ -109,44 +151,61 @@ PxRigidDynamic* PxCreateKinematic(PxPhysics& sdk,
 	PX_CHECK_AND_RETURN_NULL(transform.isValid(), "PxCreateKinematic: transform is not valid.");
 	PX_CHECK_AND_RETURN_NULL(shapeOffset.isValid(), "PxCreateKinematic: shapeOffset is not valid.");
 
-	bool isDynGeom = isDynamicGeometry(geometry);
+	bool isDynGeom = isDynamicGeometry(geometry.getType());
 	if(isDynGeom && density <= 0.0f)
 	    return NULL;
 
-	PxShape* shape;
-	PxRigidDynamic* actor = setShape(sdk.createRigidDynamic(transform), geometry, material, shapeOffset, shape);
-	
-	if(actor)
-	{
-		actor->setRigidDynamicFlag(PxRigidDynamicFlag::eKINEMATIC, true);
+	PxShape* shape = sdk.createShape(geometry, material, true);
+	if(!shape)
+		return NULL;
 
-		if(isDynGeom)
-			PxRigidBodyExt::updateMassAndInertia(*actor, density);
-		else		
-		{
-			shape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
-			actor->setMass(1);
-			actor->setMassSpaceInertiaTensor(PxVec3(1,1,1));
-		}
-	}
-	return actor;
+	shape->setLocalPose(shapeOffset);
+
+	PxRigidDynamic* body = PxCreateKinematic(sdk, transform, *shape, density);
+	shape->release();
+	return body;
 }
+
+
 
 
 PxRigidStatic* PxCreateStatic(PxPhysics& sdk, 
 							  const PxTransform& transform, 
-							  const PxGeometry& geometry, 
-							  PxMaterial& material,
-							  const PxTransform& shapeOffset)
+							  PxShape& shape)
 {
+	PX_CHECK_AND_RETURN_NULL(transform.isValid(), "PxCreateStatic: transform is not valid.");
+
+	PxRigidStatic* s = sdk.createRigidStatic(transform);
+	if(s)
+		s->attachShape(shape);
+	return s;
+}
+
+PxRigidStatic*	PxCreateStatic(PxPhysics& sdk,
+							   const PxTransform& transform,
+							   const PxGeometry& geometry,
+							   PxMaterial& material,
+							   const PxTransform& shapeOffset)
+{
+
 	PX_CHECK_AND_RETURN_NULL(transform.isValid(), "PxCreateStatic: transform is not valid.");
 	PX_CHECK_AND_RETURN_NULL(shapeOffset.isValid(), "PxCreateStatic: shapeOffset is not valid.");
 
-	PxShape* shape;
-	return setShape(sdk.createRigidStatic(transform), geometry, material, shapeOffset, shape);
+	PxShape* shape = sdk.createShape(geometry, material, true);
+	if(!shape)
+		return NULL;
+
+	shape->setLocalPose(shapeOffset);
+
+	PxRigidStatic* s = PxCreateStatic(sdk, transform, *shape);
+	shape->release();
+	return s;
 }
 
-PxRigidStatic* PxCreatePlane(physx::PxPhysics& sdk,
+
+
+
+PxRigidStatic* PxCreatePlane(PxPhysics& sdk,
 							 const PxPlane& plane,
 							 PxMaterial& material)
 {
@@ -174,21 +233,21 @@ namespace
 		{
 			PxShape* s = shapes[i];
 
-			PxU32 materialCount = s->getNbMaterials();
+			PxU16 materialCount = s->getNbMaterials();
 			materials.resize(materialCount);
 			s->getMaterials(materials.begin(), materialCount);
 
-			PxShape* shape = to.createShape(s->getGeometry().any(), materials.begin(), materialCount, s->getLocalPose());
+			PxShape* shape = to.createShape(s->getGeometry().any(), materials.begin(), materialCount, s->getFlags());
+			shape->setLocalPose(s->getLocalPose());
 			shape->setContactOffset(s->getContactOffset());
 			shape->setRestOffset(s->getRestOffset());
-			shape->setFlags(s->getFlags());
 			shape->setSimulationFilterData(s->getSimulationFilterData());
 			shape->setQueryFilterData(s->getQueryFilterData());
 		}
 
 		to.setActorFlags(from.getActorFlags());
 		to.setOwnerClient(from.getOwnerClient());
-		to.setClientBehaviorBits(from.getClientBehaviorBits());
+		to.setClientBehaviorFlags(from.getClientBehaviorFlags());
 		to.setDominanceGroup(from.getDominanceGroup());
 	}
 }
@@ -216,7 +275,7 @@ PxRigidDynamic* PxCloneDynamic(PxPhysics& physicsSDK,
 
 	copyStaticProperties(*to, from);
 
-	to->setRigidDynamicFlags(from.getRigidDynamicFlags());
+	to->setRigidBodyFlags(from.getRigidBodyFlags());
 
 	to->setMass(from.getMass());
 	to->setMassSpaceInertiaTensor(from.getMassSpaceInertiaTensor());
@@ -249,7 +308,7 @@ namespace
 	}
 }
 
-void PxScaleRigidActor(physx::PxRigidActor& actor, PxReal scale, bool scaleMassProps)
+void PxScaleRigidActor(PxRigidActor& actor, PxReal scale, bool scaleMassProps)
 {
 	Ps::InlineArray<PxShape*, 64> shapes;
 	shapes.resize(actor.getNbShapes());
@@ -285,6 +344,8 @@ void PxScaleRigidActor(physx::PxRigidActor& actor, PxReal scale, bool scaleMassP
 			h.heightField().rowScale *= scale;
 			h.heightField().columnScale *= scale;
 			break;
+		case PxGeometryType::eINVALID:
+		case PxGeometryType::eGEOMETRY_COUNT:
 		default:
 			PX_ASSERT(0);
 		}
@@ -302,4 +363,5 @@ void PxScaleRigidActor(physx::PxRigidActor& actor, PxReal scale, bool scaleMassP
 	dynamic->setMass(dynamic->getMass()*scale3);
 	dynamic->setMassSpaceInertiaTensor(dynamic->getMassSpaceInertiaTensor()*scale3*scale*scale);
 	dynamic->setCMassLocalPose(scalePosition(dynamic->getCMassLocalPose(), scale));
+}
 }

@@ -23,17 +23,20 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 
 #include "PxDefaultSimulationFilterShader.h"
 #include "PsIntrinsics.h"
-#include "PsAllocator.h"
-#include "PsInlineArray.h"
+#include "particles/PxParticleBase.h"
+#include "cloth/PxCloth.h"
+#include "PxRigidActor.h"
 #include "PxShape.h"
+#include "PsAllocator.h"
 #include "CmPhysXCommon.h"
+#include "PsInlineArray.h"
 
 using namespace physx;
 
@@ -62,53 +65,53 @@ namespace
 
 	static void gAND(PxGroupsMask& results, const PxGroupsMask& mask0, const PxGroupsMask& mask1)
 	{
-		results.bits0 = mask0.bits0 & mask1.bits0;
-		results.bits1 = mask0.bits1 & mask1.bits1;
-		results.bits2 = mask0.bits2 & mask1.bits2;
-		results.bits3 = mask0.bits3 & mask1.bits3;
+		results.bits0 = PxU16(mask0.bits0 & mask1.bits0);
+		results.bits1 = PxU16(mask0.bits1 & mask1.bits1);
+		results.bits2 = PxU16(mask0.bits2 & mask1.bits2);
+		results.bits3 = PxU16(mask0.bits3 & mask1.bits3);
 	}
 	static void gOR(PxGroupsMask& results, const PxGroupsMask& mask0, const PxGroupsMask& mask1)
 	{
-		results.bits0 = mask0.bits0 | mask1.bits0;
-		results.bits1 = mask0.bits1 | mask1.bits1;
-		results.bits2 = mask0.bits2 | mask1.bits2;
-		results.bits3 = mask0.bits3 | mask1.bits3;
+		results.bits0 = PxU16(mask0.bits0 | mask1.bits0);
+		results.bits1 = PxU16(mask0.bits1 | mask1.bits1);
+		results.bits2 = PxU16(mask0.bits2 | mask1.bits2);
+		results.bits3 = PxU16(mask0.bits3 | mask1.bits3);
 	}
 	static void gXOR(PxGroupsMask& results, const PxGroupsMask& mask0, const PxGroupsMask& mask1)
 	{
-		results.bits0 = mask0.bits0 ^ mask1.bits0;
-		results.bits1 = mask0.bits1 ^ mask1.bits1;
-		results.bits2 = mask0.bits2 ^ mask1.bits2;
-		results.bits3 = mask0.bits3 ^ mask1.bits3;
+		results.bits0 = PxU16(mask0.bits0 ^ mask1.bits0);
+		results.bits1 = PxU16(mask0.bits1 ^ mask1.bits1);
+		results.bits2 = PxU16(mask0.bits2 ^ mask1.bits2);
+		results.bits3 = PxU16(mask0.bits3 ^ mask1.bits3);
 	}
 	static void gNAND(PxGroupsMask& results, const PxGroupsMask& mask0, const PxGroupsMask& mask1)
 	{
-		results.bits0 = ~(mask0.bits0 & mask1.bits0);
-		results.bits1 = ~(mask0.bits1 & mask1.bits1);
-		results.bits2 = ~(mask0.bits2 & mask1.bits2);
-		results.bits3 = ~(mask0.bits3 & mask1.bits3);
+		results.bits0 = PxU16(~(mask0.bits0 & mask1.bits0));
+		results.bits1 = PxU16(~(mask0.bits1 & mask1.bits1));
+		results.bits2 = PxU16(~(mask0.bits2 & mask1.bits2));
+		results.bits3 = PxU16(~(mask0.bits3 & mask1.bits3));
 	}
 	static void gNOR(PxGroupsMask& results, const PxGroupsMask& mask0, const PxGroupsMask& mask1)
 	{
-		results.bits0 = ~(mask0.bits0 | mask1.bits0);
-		results.bits1 = ~(mask0.bits1 | mask1.bits1);
-		results.bits2 = ~(mask0.bits2 | mask1.bits2);
-		results.bits3 = ~(mask0.bits3 | mask1.bits3);
+		results.bits0 = PxU16(~(mask0.bits0 | mask1.bits0));
+		results.bits1 = PxU16(~(mask0.bits1 | mask1.bits1));
+		results.bits2 = PxU16(~(mask0.bits2 | mask1.bits2));
+		results.bits3 = PxU16(~(mask0.bits3 | mask1.bits3));
 	}
 	static void gNXOR(PxGroupsMask& results, const PxGroupsMask& mask0, const PxGroupsMask& mask1)
 	{
-		results.bits0 = ~(mask0.bits0 ^ mask1.bits0);
-		results.bits1 = ~(mask0.bits1 ^ mask1.bits1);
-		results.bits2 = ~(mask0.bits2 ^ mask1.bits2);
-		results.bits3 = ~(mask0.bits3 ^ mask1.bits3);
+		results.bits0 = PxU16(~(mask0.bits0 ^ mask1.bits0));
+		results.bits1 = PxU16(~(mask0.bits1 ^ mask1.bits1));
+		results.bits2 = PxU16(~(mask0.bits2 ^ mask1.bits2));
+		results.bits3 = PxU16(~(mask0.bits3 ^ mask1.bits3));
 	}
 
 	static void gSWAP_AND(PxGroupsMask& results, const PxGroupsMask& mask0, const PxGroupsMask& mask1)
 	{
-		results.bits0 = mask0.bits0 & mask1.bits2;
-		results.bits1 = mask0.bits1 & mask1.bits3;
-		results.bits2 = mask0.bits2 & mask1.bits0;
-		results.bits3 = mask0.bits3 & mask1.bits1;
+		results.bits0 = PxU16(mask0.bits0 & mask1.bits2);
+		results.bits1 = PxU16(mask0.bits1 & mask1.bits3);
+		results.bits2 = PxU16(mask0.bits2 & mask1.bits0);
+		results.bits3 = PxU16(mask0.bits3 & mask1.bits1);
 	}
 	
 	typedef void	(*FilterFunction)	(PxGroupsMask& results, const PxGroupsMask& mask0, const PxGroupsMask& mask1);
@@ -119,8 +122,8 @@ namespace
 	{
 		PxFilterData fd;
 
-		fd.word2 = mask.bits0 | (mask.bits1 << 16);
-		fd.word3 = mask.bits2 | (mask.bits3 << 16);
+		fd.word2 = PxU32(mask.bits0 | (mask.bits1 << 16));
+		fd.word3 = PxU32(mask.bits2 | (mask.bits3 << 16));
 
 		return fd;
 	}
@@ -135,6 +138,127 @@ namespace
 		mask.bits3 = (PxU16)(fd.word3 >> 16);
 
 		return mask;
+	}
+
+	static bool getFilterData(const PxActor& actor, PxFilterData& fd)
+	{
+		PxActorType::Enum aType = actor.getType();
+		switch (aType)
+		{
+			case PxActorType::eRIGID_DYNAMIC:
+			case PxActorType::eRIGID_STATIC:
+			case PxActorType::eARTICULATION_LINK:
+			{
+				const PxRigidActor& rActor = static_cast<const PxRigidActor&>(actor);
+				PX_CHECK_AND_RETURN_VAL(rActor.getNbShapes() >= 1,"There must be a shape in actor", false);
+
+				PxShape* shape = NULL;
+				rActor.getShapes(&shape, 1);
+
+				fd = shape->getSimulationFilterData();
+			}
+			break;
+
+#if PX_USE_PARTICLE_SYSTEM_API
+			case PxActorType::ePARTICLE_FLUID:
+			case PxActorType::ePARTICLE_SYSTEM:
+			{
+				const PxParticleBase& pActor = static_cast<const PxParticleBase&>(actor);
+				fd = pActor.getSimulationFilterData();
+			}
+			break;
+#endif
+
+#if PX_USE_CLOTH_API
+			case PxActorType::eCLOTH:
+			{
+				const PxCloth& cActor = static_cast<const PxCloth&>(actor);
+				fd = cActor.getSimulationFilterData();
+			}
+			break;
+#endif
+			case PxActorType::eACTOR_COUNT:
+			case PxActorType::eACTOR_FORCE_DWORD:
+			default:
+			break;
+		}
+
+		return true;
+	}
+
+	PX_FORCE_INLINE static void adjustFilterData(bool groupsMask, const PxFilterData& src, PxFilterData& dst)
+	{
+		if (groupsMask)
+		{
+			dst.word2 = src.word2;
+			dst.word3 = src.word3;
+		}
+		else
+			dst.word0 = src.word0;
+	}
+
+	template<bool TGroupsMask>
+	static void setFilterData(PxActor& actor, const PxFilterData& fd)
+	{
+		PxActorType::Enum aType = actor.getType();
+		switch (aType)
+		{
+			case PxActorType::eRIGID_DYNAMIC:
+			case PxActorType::eRIGID_STATIC:
+			case PxActorType::eARTICULATION_LINK:
+			{
+				const PxRigidActor& rActor = static_cast<const PxRigidActor&>(actor);
+
+				PxShape* shape;
+				for(PxU32 i=0; i < rActor.getNbShapes(); i++)
+				{
+					rActor.getShapes(&shape, 1, i);
+
+					// retrieve current group mask
+					PxFilterData resultFd = shape->getSimulationFilterData();
+					
+					adjustFilterData(TGroupsMask, fd, resultFd);
+					
+					// set new filter data
+					shape->setSimulationFilterData(resultFd);
+				}
+			}
+			break;
+
+#if PX_USE_PARTICLE_SYSTEM_API
+			case PxActorType::ePARTICLE_FLUID:
+			case PxActorType::ePARTICLE_SYSTEM:
+			{
+				PxParticleBase& pActor = static_cast<PxParticleBase&>(actor);
+
+				PxFilterData resultFd = pActor.getSimulationFilterData();
+
+				adjustFilterData(TGroupsMask, fd, resultFd);
+
+				pActor.setSimulationFilterData(resultFd);
+			}
+			break;
+#endif
+
+#if PX_USE_CLOTH_API
+			case PxActorType::eCLOTH:
+			{
+				PxCloth& cActor = static_cast<PxCloth&>(actor);
+				
+				PxFilterData resultFd = cActor.getSimulationFilterData();
+
+				adjustFilterData(TGroupsMask, fd, resultFd);
+
+				cActor.setSimulationFilterData(resultFd);
+			}
+			break;
+#endif
+			
+			case PxActorType::eACTOR_COUNT:
+			case PxActorType::eACTOR_FORCE_DWORD:
+			default:
+			break;
+		}
 	}
 }
 
@@ -190,80 +314,25 @@ bool physx::PxGetGroupCollisionFlag(const PxU16 group1, const PxU16 group2)
 }
 
 void physx::PxSetGroupCollisionFlag(const PxU16 group1, const PxU16 group2, const bool enable)
-{	
+{
 	PX_CHECK_AND_RETURN(group1 < 32 && group2 < 32, "Group must be less than 32");	
 
 	gCollisionTable[group1][group2] = enable;
 	gCollisionTable[group2][group1] = enable;
 }
 
-PxU16 physx::PxGetGroup(const PxRigidActor& actor)
+PxU16 physx::PxGetGroup(const PxActor& actor)
 {
-	PX_CHECK_AND_RETURN_NULL(actor.getNbShapes() >= 1,"There must be a shape in actor");
-
-	PxShape* shape = NULL;
-	actor.getShapes(&shape, 1);
-
-	PxFilterData fd = shape->getSimulationFilterData();
-
+	PxFilterData fd;
+	getFilterData(actor, fd);
 	return (PxU16)fd.word0;
 }
 
-void physx::PxSetGroup(const PxRigidActor& actor, const PxU16 collisionGroup)
-{	
+void physx::PxSetGroup(PxActor& actor, const PxU16 collisionGroup)
+{
 	PX_CHECK_AND_RETURN(collisionGroup < 32,"Collision group must be less than 32");
-
-	PxFilterData fd;
-	
-	if (actor.getNbShapes() == 1)
-	{
-		PxShape* shape = NULL;
-		actor.getShapes(&shape, 1);
-
-		// retrieve current group mask
-		fd = shape->getSimulationFilterData();
-		fd.word0 = collisionGroup;
-		
-		// set new filter data
-		shape->setSimulationFilterData(fd);
-	}
-	else
-	{
-		PxShape* shape;
-		PxU32 numShapes = actor.getNbShapes();
-		shdfnd::InlineArray<PxShape*, 64> shapes;
-		if(numShapes > 64)
-		{
-			shapes.resize(64);
-		}
-		else
-		{
-			shapes.resize(numShapes);
-		}
-
-		PxU32 iter = 1 + numShapes/64;
-
-		for(PxU32 i=0; i < iter; i++)
-		{
-			PxU32 offset = i * 64;
-			PxU32 size = numShapes - offset;
-			if(size > 64)
-				size = 64;
-
-			actor.getShapes(shapes.begin(), size, offset);
-
-			for(PxU32 j = size; j--;)
-			{
-				// retrieve current group mask
-				shape = shapes[j];
-				fd = shape->getSimulationFilterData();
-				fd.word0 = collisionGroup;
-
-				// set new filter data
-				shape->setSimulationFilterData(fd);
-			}
-		}
-	}
+	PxFilterData fd(collisionGroup, 0, 0, 0);
+	setFilterData<false>(actor, fd);
 }
 
 void physx::PxGetFilterOps(PxFilterOp::Enum& op0, PxFilterOp::Enum& op1, PxFilterOp::Enum& op2)
@@ -302,72 +371,17 @@ void physx::PxSetFilterConstants(const PxGroupsMask& c0, const PxGroupsMask& c1)
 	gFilterConstants[1] = c1;
 }
 
-PxGroupsMask physx::PxGetGroupsMask(const PxRigidActor& actor)
+PxGroupsMask physx::PxGetGroupsMask(const PxActor& actor)
 {
-	PX_CHECK_AND_RETURN_VAL(actor.getNbShapes() >= 1,"At least one shape must be in actor",PxGroupsMask());
-
-	PxShape* shape = NULL;
-	actor.getShapes(&shape, 1);
-
-	PxFilterData fd = shape->getSimulationFilterData();
-	
-	return convert(fd);
+	PxFilterData fd;
+	if (getFilterData(actor, fd))
+		return convert(fd);
+	else
+		return PxGroupsMask();
 }
 
-void physx::PxSetGroupsMask(const PxRigidActor& actor, const PxGroupsMask& mask)
+void physx::PxSetGroupsMask(PxActor& actor, const PxGroupsMask& mask)
 {
-	PxFilterData tmp;
 	PxFilterData fd = convert(mask);
-
-	if (actor.getNbShapes() == 1)
-	{
-		PxShape* shape = NULL;
-		actor.getShapes(&shape, 1);
-
-		// retrieve current group
-		tmp = shape->getSimulationFilterData();
-		fd.word0 = tmp.word0;
-
-		// set new filter data
-		shape->setSimulationFilterData(fd);
-	}
-	else
-	{
-		PxShape* shape;
-		PxU32 numShapes = actor.getNbShapes();
-		shdfnd::InlineArray<PxShape*, 64> shapes;
-		if(numShapes > 64)
-		{
-			shapes.resize(64);
-		}
-		else
-		{
-			shapes.resize(numShapes);
-		}
-
-		PxU32 iter = 1 + numShapes/64;
-
-		for(PxU32 i=0; i < iter; i++)
-		{
-			PxU32 offset = i * 64;
-			PxU32 size = numShapes - offset;
-			if(size > 64)
-				size = 64;
-
-			actor.getShapes(shapes.begin(), size, offset);
-
-			for(PxU32 j = size; j--;)
-			{
-				// retrieve current group mask
-				shape = shapes[j];
-				// retrieve current group
-				tmp = shape->getSimulationFilterData();
-				fd.word0 = tmp.word0;
-
-				// set new filter data
-				shape->setSimulationFilterData(fd);
-
-			}
-		}
-	}
+	setFilterData<true>(actor, fd);
 }

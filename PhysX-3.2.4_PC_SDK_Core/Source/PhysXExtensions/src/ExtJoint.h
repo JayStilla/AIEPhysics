@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -37,12 +37,13 @@
 #include "PxConstraintExt.h"
 #include "PxJoint.h"
 #include "PxD6Joint.h"
-#include "PxSerialFramework.h"
 #include "PxRigidDynamic.h"
 #include "PxRigidStatic.h"
+#include "PxDeletionListener.h"
 #include "ExtVisualDebugger.h"
-#include "CmMetaData.h"
+#include "PxMetaData.h"
 #include "CmRenderOutput.h"
+#include "PxPhysics.h"
 
 #if PX_SUPPORT_VISUAL_DEBUGGER
 #include "PxScene.h"
@@ -50,12 +51,11 @@
 #endif
 
 // PX_SERIALIZATION
-#include "CmReflection.h"
 
 namespace physx
 {
 
-PxConstraint* resolveConstraintPtr(PxRefResolver& v, 
+PxConstraint* resolveConstraintPtr(PxDeserializationContext& v,
 								   PxConstraint* old, 
 								   PxConstraintConnector* connector,
 								   PxConstraintShaderTable& shaders);
@@ -65,52 +65,66 @@ PxConstraint* resolveConstraintPtr(PxRefResolver& v,
 namespace Ext
 {
 	struct JointData
-	{	
-							PxTransform				c2b[2];
-
-							PxConstraintFlags		constraintFlags;
-		EXPLICIT_PADDING(	PxU16					paddingFromFlags);
+	{
+	//= ATTENTION! =====================================================================================
+	// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+	// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+	// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+	// accordingly.
+	//==================================================================================================
+							PxTransform					c2b[2];		
+							PxConstraintInvMassScale	invMassScale;
+	protected:
+		                    ~JointData(){}
 	};
 
-	template <class Base, PxJointType::Enum t>
+	template <class Base, class ValueStruct>
 	class Joint : public Base, 
 				  public PxConstraintConnector, 
 				  public Ps::UserAllocated
 	{
-	public:
+  
+    public:
 // PX_SERIALIZATION
-						Joint(PxRefResolver& v) : Base(v)	{}
-		virtual	void	collectForExport(PxCollection& c)
-		{
-			Base::collectForExport(c);
-			mPxConstraint->collectForExport(c);
-		}
-		virtual		PxU32			getOrder()								const	{ return PxSerialOrder::eJOINT;							}
-		virtual		void			registerNameForExport(PxNameManager& nm)		{ nm.registerName(&mName);								}
-		virtual		bool			resolvePointers(PxRefResolver& resolver, void*)	{ mName = resolver.resolveName(mName);	return true;	}
+						Joint(PxBaseFlags baseFlags) : Base(baseFlags) {}
+		virtual	void	requires(PxProcessPxBaseCallback& c)
+		{			
+			c.process(*mPxConstraint);
+			
+			{
+				PxRigidActor* a0 = NULL;
+				PxRigidActor* a1 = NULL;
+				mPxConstraint->getActors(a0,a1);
+				
+				if (a0)
+				{
+					c.process(*a0);
+				}
+				if (a1)
+				{
+					c.process(*a1);
+				}
+			}
+		}	
 //~PX_SERIALIZATION
-		PxJointType::Enum	getType()		const
-		{
-			return t;
-		}
+		
+#if PX_SUPPORT_VISUAL_DEBUGGER
 
 		virtual bool updatePvdProperties(physx::debugger::comm::PvdDataStream& pvdConnection, const PxConstraint* c, PxPvdUpdateType::Enum updateType) const
 		{
-#if PX_SUPPORT_VISUAL_DEBUGGER
-
 			if(updateType == PxPvdUpdateType::UPDATE_SIM_PROPERTIES)
 			{
-				Ext::VisualDebugger::simUpdate(pvdConnection, *this);
+				Ext::VisualDebugger::simUpdate<Base>(pvdConnection, *this);
 				return true;
 			}
 			else if(updateType == PxPvdUpdateType::UPDATE_ALL_PROPERTIES)
 			{
-				Ext::VisualDebugger::updatePvdProperties(pvdConnection, *this);
+				Ext::VisualDebugger::updatePvdProperties<Base, ValueStruct>(pvdConnection, *this);
 				return true;
 			}
 			else if(updateType == PxPvdUpdateType::CREATE_INSTANCE)
 			{
-				Ext::VisualDebugger::createPvdInstance(pvdConnection, *c, *this);
+				Ext::VisualDebugger::createPvdInstance<Base>(pvdConnection, *c, *this);
 				return true;
 			}
 			else if(updateType == PxPvdUpdateType::RELEASE_INSTANCE)
@@ -118,9 +132,15 @@ namespace Ext
 				Ext::VisualDebugger::releasePvdInstance(pvdConnection, *c, *this);
 				return true;
 			}
-#endif
 			return false;
 		}
+#else
+		virtual bool updatePvdProperties(physx::debugger::comm::PvdDataStream&, const PxConstraint*, PxPvdUpdateType::Enum) const
+		{
+			return false;
+		}
+#endif
+
 
 
 		void getActors(PxRigidActor*& actor0, PxRigidActor*& actor1)	const		
@@ -139,13 +159,14 @@ namespace Ext
 			//You can get the debugger stream from the NpScene
 			//Ext::VisualDebugger::setActors( stream, this, mPxConstraint, actor0, actor1 );
 			PX_CHECK_AND_RETURN(actor0 != actor1, "PxJoint::setActors: actors must be different");
+			PX_CHECK_AND_RETURN((actor0 && !actor0->is<PxRigidStatic>()) || (actor1 && !actor1->is<PxRigidStatic>()), "PxJoint::setActors: at least one actor must be non-static");
 
 #if PX_SUPPORT_VISUAL_DEBUGGER
 			PxScene* scene = getScene();
 			PxVisualDebugger* debugger = scene ? scene->getPhysics().getVisualDebugger() : NULL;
 			if( debugger != NULL)
 			{
-				debugger::comm::PvdDataStream* conn = debugger->getPvdConnection(*scene);
+				debugger::comm::PvdDataStream* conn = debugger->getPvdDataStream(*scene);
 				if( conn != NULL )
 					Ext::VisualDebugger::setActors(
 					*conn,
@@ -180,6 +201,68 @@ namespace Ext
 			mPxConstraint->markDirty();
 		}
 
+		PxTransform			getBodyPose(const PxRigidActor* actor) const
+		{
+			if(!actor)
+				return PxTransform(PxIdentity);
+			else if(actor->is<PxRigidStatic>())
+				return actor->getGlobalPose();
+			else
+				return actor->getGlobalPose() * static_cast<const PxRigidBody*>(actor)->getCMassLocalPose();
+		}
+
+
+		void getActorVelocity(const PxRigidActor* actor, PxVec3& linear, PxVec3& angular) const
+		{
+			if(!actor || actor->is<PxRigidStatic>())
+			{
+				linear = angular = PxVec3(0);
+				return;
+			}
+			
+			linear = static_cast<const PxRigidBody*>(actor)->getLinearVelocity();
+			angular = static_cast<const PxRigidBody*>(actor)->getAngularVelocity();
+		}
+
+
+		PxTransform			getRelativeTransform()					const
+		{
+			PxRigidActor* actor0, * actor1;
+			mPxConstraint->getActors(actor0, actor1);
+			PxTransform t0 = getBodyPose(actor0) * mLocalPose[0],
+						t1 = getBodyPose(actor1) * mLocalPose[1];
+			return t0.transformInv(t1);
+		}
+
+		PxVec3	getRelativeLinearVelocity()			const
+		{
+			PxRigidActor* actor0, * actor1;
+			PxVec3 l0, a0, l1, a1;
+			mPxConstraint->getActors(actor0, actor1);
+
+			PxTransform t0 = getCom(actor0), t1 = getCom(actor1);
+			getActorVelocity(actor0, l0, a0);
+			getActorVelocity(actor1, l1, a1);
+
+			PxVec3 p0 = t0.q.rotate(mLocalPose[0].p), 
+				   p1 = t1.q.rotate(mLocalPose[1].p);
+			return t0.transformInv(l1 - a1.cross(p1) - l0 + a0.cross(p0));
+		}
+
+		PxVec3				getRelativeAngularVelocity()		const
+		{
+			PxRigidActor* actor0, * actor1;
+			PxVec3 l0, a0, l1, a1;
+			mPxConstraint->getActors(actor0, actor1);
+
+			PxTransform t0 = getCom(actor0);
+			getActorVelocity(actor0, l0, a0);
+			getActorVelocity(actor1, l1, a1);
+
+			return t0.transformInv(a1 - a0);
+		}
+
+
 		void getBreakForce(PxReal& force, PxReal& torque)	const
 		{
 			mPxConstraint->getBreakForce(force,torque);
@@ -187,6 +270,7 @@ namespace Ext
 
 		void setBreakForce(PxReal force, PxReal torque)
 		{
+			PX_CHECK_AND_RETURN(PxIsFinite(force) && PxIsFinite(torque), "NpJoint::setBreakForce: invalid float");
 			mPxConstraint->setBreakForce(force,torque);
 		}
 
@@ -199,16 +283,60 @@ namespace Ext
 		void setConstraintFlags(PxConstraintFlags flags)
 		{
 			mPxConstraint->setFlags(flags);
-			mData->constraintFlags = flags;
 		}
 
-		void setConstraintFlag(PxConstraintFlag::Type flag, bool value)
+		void setConstraintFlag(PxConstraintFlag::Enum flag, bool value)
 		{
-			PxConstraintFlags newFlags = value ? mData->constraintFlags | flag : mData->constraintFlags & ~flag;
-			mPxConstraint->setFlags(newFlags);
-			mData->constraintFlags = newFlags;
+			mPxConstraint->setFlag(flag, value);
 		}
 
+		void setInvMassScale0(PxReal invMassScale)
+		{
+			PX_CHECK_AND_RETURN(PxIsFinite(invMassScale) && invMassScale>=0, "PxJoint::setInvMassScale0: scale must be non-negative");
+			mData->invMassScale.linear0 = invMassScale;
+			mPxConstraint->markDirty();
+		}
+
+		PxReal getInvMassScale0() const
+		{
+			return mData->invMassScale.linear0;
+		}
+
+		void setInvInertiaScale0(PxReal invInertiaScale)
+		{
+			PX_CHECK_AND_RETURN(PxIsFinite(invInertiaScale) && invInertiaScale>=0, "PxJoint::setInvInertiaScale0: scale must be non-negative");
+			mData->invMassScale.angular0 = invInertiaScale;
+			mPxConstraint->markDirty();
+		}
+
+		PxReal getInvInertiaScale0() const
+		{
+			return mData->invMassScale.angular0;
+		}
+
+		void setInvMassScale1(PxReal invMassScale)
+		{
+			PX_CHECK_AND_RETURN(PxIsFinite(invMassScale) && invMassScale>=0, "PxJoint::setInvMassScale1: scale must be non-negative");
+			mData->invMassScale.linear1 = invMassScale;
+			mPxConstraint->markDirty();
+		}
+
+		PxReal getInvMassScale1() const
+		{
+			return mData->invMassScale.linear1;
+		}
+
+		void setInvInertiaScale1(PxReal invInertiaScale)
+		{
+			PX_CHECK_AND_RETURN(PxIsFinite(invInertiaScale) && invInertiaScale>=0, "PxJoint::setInvInertiaScale: scale must be non-negative");
+			mData->invMassScale.angular1 = invInertiaScale;
+			mPxConstraint->markDirty();
+	}
+
+		PxReal getInvInertiaScale1() const
+		{
+			return mData->invMassScale.angular1;
+		}
 
 		const char* getName() const
 		{
@@ -224,6 +352,25 @@ namespace Ext
 		{
 			mData->c2b[actor] = getCom(actor).transformInv(mLocalPose[actor]); 
 			markDirty();
+		}
+
+		void onOriginShift(const PxVec3& shift)
+		{
+			PxRigidActor* a[2];
+			mPxConstraint->getActors(a[0], a[1]);
+
+			if (!a[0])
+			{
+				mLocalPose[0].p -= shift;
+				mData->c2b[0].p -= shift;
+				markDirty();
+			}
+			else if (!a[1])
+			{
+				mLocalPose[1].p -= shift;
+				mData->c2b[1].p -= shift;
+				markDirty();
+			}
 		}
 
 		void* prepareData()
@@ -267,6 +414,11 @@ namespace Ext
 			mPxConstraint->release();
 		}
 
+		PxBase* getSerializable()
+		{
+			return this;
+		}
+
 		void onConstraintRelease()
 		{
 			PX_FREE_AND_RESET(mData);
@@ -293,7 +445,7 @@ namespace Ext
 		PxTransform getCom(PxRigidActor* actor) const
 		{
 			if (!actor)
-				return PxTransform::createIdentity();
+				return PxTransform(PxIdentity);
 			else if (actor->getType() == PxActorType::eRIGID_DYNAMIC || actor->getType() == PxActorType::eARTICULATION_LINK)
 				return static_cast<PxRigidBody*>(actor)->getCMassLocalPose();
 			else
@@ -311,16 +463,20 @@ namespace Ext
 			mLocalPose[1] = localFrame1.getNormalized();
 			data.c2b[0] = getCom(actor0).transformInv(localFrame0);
 			data.c2b[1] = getCom(actor1).transformInv(localFrame1);
-			data.constraintFlags = PxConstraintFlags();
+			data.invMassScale.linear0 = 1.0f;
+			data.invMassScale.angular0 = 1.0f;
+			data.invMassScale.linear1 = 1.0f;
+			data.invMassScale.angular1 = 1.0f;
 		}
 
 
-		Joint():
-			mName(NULL)
-		,	mPxConstraint(0)
-		 {
-			 Base::userData = NULL;
-		 }
+		Joint(PxType concreteType, PxBaseFlags baseFlags)
+		: Base(concreteType, baseFlags)
+		, mName(NULL)
+		, mPxConstraint(0)
+		{
+			Base::userData = NULL;
+		}
 
 
 		void markDirty()

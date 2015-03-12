@@ -1,37 +1,29 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #include <SampleMaterialAsset.h>
 
 #include <Renderer.h>
@@ -46,6 +38,28 @@
 #include <ctype.h>
 
 using namespace SampleFramework;
+
+static SampleRenderer::RendererMaterial::BlendFunc 
+getBlendFunc(const char* nodeValue, 
+			 SampleRenderer::RendererMaterial::BlendFunc defaultBlendFunc = SampleRenderer::RendererMaterial::BLEND_ONE)
+{
+	using SampleRenderer::RendererMaterial;
+	RendererMaterial::BlendFunc blendFunc = defaultBlendFunc;
+	if(     !strcmp(nodeValue, "ZERO"))                 blendFunc = RendererMaterial::BLEND_ZERO;
+	else if(!strcmp(nodeValue, "ONE"))                  blendFunc = RendererMaterial::BLEND_ONE;
+	else if(!strcmp(nodeValue, "SRC_COLOR"))            blendFunc = RendererMaterial::BLEND_SRC_COLOR;
+	else if(!strcmp(nodeValue, "ONE_MINUS_SRC_COLOR"))  blendFunc = RendererMaterial::BLEND_ONE_MINUS_SRC_COLOR;
+	else if(!strcmp(nodeValue, "SRC_ALPHA"))            blendFunc = RendererMaterial::BLEND_SRC_ALPHA;
+	else if(!strcmp(nodeValue, "ONE_MINUS_SRC_ALPHA"))  blendFunc = RendererMaterial::BLEND_ONE_MINUS_SRC_ALPHA;
+	else if(!strcmp(nodeValue, "DST_COLOR"))            blendFunc = RendererMaterial::BLEND_DST_COLOR;
+	else if(!strcmp(nodeValue, "ONE_MINUS_DST_COLOR"))  blendFunc = RendererMaterial::BLEND_ONE_MINUS_DST_COLOR;
+	else if(!strcmp(nodeValue, "DST_ALPHA"))            blendFunc = RendererMaterial::BLEND_DST_ALPHA;
+	else if(!strcmp(nodeValue, "ONE_MINUS_DST_ALPHA"))  blendFunc = RendererMaterial::BLEND_ONE_MINUS_DST_ALPHA;
+	else if(!strcmp(nodeValue, "SRC_ALPHA_SATURATE"))   blendFunc = RendererMaterial::BLEND_SRC_ALPHA_SATURATE;
+	else PX_ASSERT(0); // Unknown blend func!
+
+	return blendFunc;
+}
 
 static void readFloats(const char *str, float *floats, unsigned int numFloats)
 {
@@ -104,6 +118,18 @@ SampleAsset(ASSET_MATERIAL, path),
 				{
 					matdesc.fragmentShaderPath = nodeValue;
 				}
+				else if(name && !strcmp(name, "geometry"))
+				{
+					matdesc.geometryShaderPath = nodeValue;
+				}
+				else if(name && !strcmp(name, "hull"))
+				{
+					matdesc.hullShaderPath = nodeValue;
+				}
+				else if(name && !strcmp(name, "domain"))
+				{
+					matdesc.domainShaderPath = nodeValue;
+				}
 			}
 			else if(!strcmp(nodeName, "alphaTestFunc"))
 			{
@@ -122,9 +148,33 @@ SampleAsset(ASSET_MATERIAL, path),
 			else if(!strcmp(nodeName, "blending") && strstr(nodeValue, "true"))
 			{
 				matdesc.blending = true;
-				//TODO: read these values from disk!
-				matdesc.srcBlendFunc = SampleRenderer::RendererMaterial::BLEND_SRC_ALPHA;
-				matdesc.dstBlendFunc = SampleRenderer::RendererMaterial::BLEND_ONE_MINUS_SRC_ALPHA;
+
+				static const PxU32 numBlendFuncs = 2;
+				static const char* blendFuncNames[numBlendFuncs] = 
+				{
+					"srcBlendFunc", 
+					"dstBlendFunc"
+				};
+				static const SampleRenderer::RendererMaterial::BlendFunc blendFuncDefaults[numBlendFuncs] =
+				{
+					SampleRenderer::RendererMaterial::BLEND_SRC_ALPHA,
+					SampleRenderer::RendererMaterial::BLEND_ONE_MINUS_SRC_ALPHA
+				};
+				SampleRenderer::RendererMaterial::BlendFunc* blendFuncs[numBlendFuncs] = 
+				{
+					&matdesc.srcBlendFunc, 
+					&matdesc.dstBlendFunc
+				};
+
+				// Parse optional src/dst blend funcs
+				for (PxU32 i = 0; i < numBlendFuncs; ++i)
+				{
+					FAST_XML::xml_node *blendNode = child->first_node(blendFuncNames[i]);
+					if (blendNode && blendNode->value())
+						*blendFuncs[i] = getBlendFunc(blendNode->value(), blendFuncDefaults[i]);
+					else
+						*blendFuncs[i] = blendFuncDefaults[i];
+				}
 			}
 		}
 	}
@@ -158,7 +208,7 @@ SampleAsset(ASSET_MATERIAL, path),
 					{
 						float f = (float)atof(value);
 						const SampleRenderer::RendererMaterial::Variable *var = materialStruct.m_materialInstance->findVariable(varname, SampleRenderer::RendererMaterial::VARIABLE_FLOAT);
-						PX_ASSERT(var);
+						//PX_ASSERT(var);
 						if(var) materialStruct.m_materialInstance->writeData(*var, &f);
 					}
 					else if(!strcmp(nodename, "float2"))
@@ -166,7 +216,7 @@ SampleAsset(ASSET_MATERIAL, path),
 						float f[2];
 						readFloats(value, f, 2);
 						const SampleRenderer::RendererMaterial::Variable *var = materialStruct.m_materialInstance->findVariable(varname, SampleRenderer::RendererMaterial::VARIABLE_FLOAT2);
-						PX_ASSERT(var);
+						//PX_ASSERT(var);
 						if(var) materialStruct.m_materialInstance->writeData(*var, f);
 					}
 					else if(!strcmp(nodename, "float3"))
@@ -174,7 +224,7 @@ SampleAsset(ASSET_MATERIAL, path),
 						float f[3];
 						readFloats(value, f, 3);
 						const SampleRenderer::RendererMaterial::Variable *var = materialStruct.m_materialInstance->findVariable(varname, SampleRenderer::RendererMaterial::VARIABLE_FLOAT3);
-						PX_ASSERT(var);
+						//PX_ASSERT(var);
 						if(var) materialStruct.m_materialInstance->writeData(*var, f);
 					}
 					else if(!strcmp(nodename, "float4"))
@@ -182,21 +232,22 @@ SampleAsset(ASSET_MATERIAL, path),
 						float f[4];
 						readFloats(value, f, 4);
 						const SampleRenderer::RendererMaterial::Variable *var = materialStruct.m_materialInstance->findVariable(varname, SampleRenderer::RendererMaterial::VARIABLE_FLOAT4);
-						PX_ASSERT(var);
+						//PX_ASSERT(var);
 						if(var) materialStruct.m_materialInstance->writeData(*var, f);
 					}
-					else if(!strcmp(nodename, "sampler2D"))
+					else if(!strcmp(nodename, "sampler2D") || !strcmp(nodename, "sampler3D"))
 					{
 						SampleTextureAsset *textureAsset = static_cast<SampleTextureAsset*>(assetManager.getAsset(value, ASSET_TEXTURE));
 						PX_ASSERT(textureAsset);
 						if(textureAsset)
 						{
 							m_assets.push_back(textureAsset);
-							const SampleRenderer::RendererMaterial::Variable *var = materialStruct.m_materialInstance->findVariable(varname, SampleRenderer::RendererMaterial::VARIABLE_SAMPLER2D);
-							PX_ASSERT(var);
+							SampleRenderer::RendererMaterial::VariableType vartype = (0 == strcmp(nodename, "sampler2D")) ? SampleRenderer::RendererMaterial::VARIABLE_SAMPLER2D : SampleRenderer::RendererMaterial::VARIABLE_SAMPLER3D;
+							const SampleRenderer::RendererMaterial::Variable *var  = materialStruct.m_materialInstance->findVariable(varname, vartype);
+							//PX_ASSERT(var);
 							if(var)
 							{
-								SampleRenderer::RendererTexture2D *texture = textureAsset->getTexture();
+								SampleRenderer::RendererTexture *texture = textureAsset->getTexture();
 								materialStruct.m_materialInstance->writeData(*var, &texture);
 							}
 						}
@@ -208,6 +259,13 @@ SampleAsset(ASSET_MATERIAL, path),
 			m_vertexShaders.push_back(materialStruct);
 		}
 	}
+}
+
+SampleFramework::SampleMaterialAsset::SampleMaterialAsset(SampleAssetManager &assetManager, Type type, const char *path)
+: SampleAsset(type, path),
+  m_assetManager(assetManager)
+{
+
 }
 
 SampleMaterialAsset::~SampleMaterialAsset(void)

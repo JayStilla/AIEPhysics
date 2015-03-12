@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #ifndef PVD_IMMEDIATE_RENDERER_H
 #define PVD_IMMEDIATE_RENDERER_H
 #include "physxvisualdebuggersdk/PvdObjectModelBaseTypes.h"
@@ -37,15 +37,15 @@ namespace physx { namespace debugger { namespace renderer {
 	{
 		PxVec3		pos;
 		PvdColor	color;
-		PvdPoint(const PxVec3& pos, const PvdColor& color)
-			: pos(pos), color(color) {}
+		PvdPoint(const PxVec3& p, const PvdColor& c)
+			: pos(p), color(c) {}
 		PvdPoint(){}
 	};
 	
 	struct PvdLine
 	{
-		PvdLine(const PxVec3& pos0, const PxVec3& pos1, const PvdColor& color)
-			: pos0(pos0), color0(color), pos1(pos1), color1(color) {}
+		PvdLine(const PxVec3& p0, const PxVec3& p1, const PvdColor& c)
+			: pos0(p0), color0(c), pos1(p1), color1(c) {}
 		PvdLine(){}
 
 		PxVec3		pos0;
@@ -57,8 +57,8 @@ namespace physx { namespace debugger { namespace renderer {
 	
 	struct PvdTriangle
 	{
-		PvdTriangle(const PxVec3& pos0, const PxVec3& pos1, const PxVec3& pos2, const PvdColor& color)
-			: pos0(pos0), color0(color), pos1(pos1), color1(color), pos2(pos2), color2(color) {}
+		PvdTriangle(const PxVec3& p0, const PxVec3& p1, const PxVec3& p2, const PvdColor& c)
+			: pos0(p0), color0(c), pos1(p1), color1(c), pos2(p2), color2(c) {}
 		PvdTriangle(){}
 		PxVec3		pos0;
 		PvdColor	color0;

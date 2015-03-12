@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 
 #include "GLES2RendererMaterial.h"
@@ -116,16 +116,7 @@ static int glsl_log(GLuint obj, GLenum check_compile)
     return 0;
 }
 
-GLES2RendererMaterial::shaderProgram::shaderProgram() : vertexMojoResult(NULL),
-														fragmentMojoResult(NULL),
-														vsUniformsTotal(0),
-														psUniformsTotal(0),
-														vsUniformsVec4(NULL),
-														vsUniformsVec4Location(-1),
-														vsUniformsVec4Size(0),
-														psUniformsVec4(NULL),
-														psUniformsVec4Location(-1),
-														psUniformsVec4Size(0),
+GLES2RendererMaterial::shaderProgram::shaderProgram() :
 														modelMatrixUniform(-1),
 														viewMatrixUniform(-1),
 														projMatrixUniform(-1),
@@ -137,7 +128,17 @@ GLES2RendererMaterial::shaderProgram::shaderProgram() : vertexMojoResult(NULL),
 														normalAttr(-1),
 														tangentAttr(-1),
 														boneIndexAttr(-1),
-														boneWeightAttr(-1)												
+														boneWeightAttr(-1),
+														vsUniformsTotal(0),
+														psUniformsTotal(0),
+														vsUniformsVec4(NULL),
+														vsUniformsVec4Location(-1),
+														vsUniformsVec4Size(0),
+														psUniformsVec4(NULL),
+														psUniformsVec4Location(-1),
+														psUniformsVec4Size(0),
+														vertexMojoResult(NULL),
+														fragmentMojoResult(NULL)
 {
 }
 
@@ -151,10 +152,9 @@ GLES2RendererMaterial::shaderProgram::~shaderProgram()
 	DELETEARRAY(psUniformsVec4);
 }
 
-#define LOGI(...) LOG_INFO("GLES2RendererMaterial", __VA_ARGS__)
 
 GLES2RendererMaterial::GLES2RendererMaterial(GLES2Renderer &renderer, const RendererMaterialDesc &desc) :
-	RendererMaterial(desc),
+	RendererMaterial(desc, false),
 	m_renderer(renderer)
 {
 	m_glAlphaTestFunc = GL_ALWAYS;
@@ -190,7 +190,6 @@ GLES2RendererMaterial::GLES2RendererMaterial(GLES2Renderer &renderer, const Rend
 		{
 			vertexSource = load_file(desc.vertexShaderPath);
 		}
-
 		if(fragmentShaderPath.substr(fragmentShaderPath.size() - 3, 3) == ".cg")
 		{
 			m_program[i].fragmentMojoResult = static_cast<mojoResult*>(SampleFramework::SamplePlatform::platform()->
@@ -233,7 +232,8 @@ GLES2RendererMaterial::GLES2RendererMaterial(GLES2Renderer &renderer, const Rend
 		GLint link_status;
 		glsl_log(m_program[i].program, GL_LINK_STATUS);
 		glGetProgramiv(m_program[i].program, GL_LINK_STATUS, &link_status);
-		if(link_status == GL_FALSE) {
+		if(link_status == GL_FALSE) 
+		{
 			LOGI("Failed to link program"); 
 			GLint error = glGetError();
 			if(error == GL_INVALID_VALUE) LOGI("GL_INVALID_VALUE");
@@ -241,11 +241,11 @@ GLES2RendererMaterial::GLES2RendererMaterial(GLES2Renderer &renderer, const Rend
 		}
 		loadCustomConstants(static_cast<Pass>(i));
 	}
+	LOGI("");	
 }
 
-GLES2RendererMaterial::~GLES2RendererMaterial(void)
+GLES2RendererMaterial::~GLES2RendererMaterial()
 {
-
 }
 
 GLES2RendererMaterial 		*g_hackCurrentMat = NULL;
@@ -322,7 +322,7 @@ void GLES2RendererMaterial::bindVariable(Pass pass, const Variable &variable, co
 				// This is to prevent buffer overruns in such cases.
 				//relocation.size = (relocation.index + relocation.size) > m_program[pass].vsUniformsVec4SizeInBytes ? (m_program[pass].vsUniformsVec4SizeInBytes - relocation.index) : relocation.size;
 				//LOGI("Found variable '%s' for %s (%x)", variable.getName(), getPassName(pass), this);
-				//LOGI("VERTEX: Copying %d bytes from %x to %x+%d for %s (%s)", relocation.size, data, m_program[pass].vsUniformsVec4, relocation.index, variable.getName(), getPassName(pass));
+				//LOGI("VERTEX: Copying %d bytes from %x to %x+%d for %s (%s) -- %p", relocation.size, data, m_program[pass].vsUniformsVec4, relocation.index, variable.getName(), getPassName(pass), this);
 				memcpy(m_program[pass].vsUniformsVec4 + relocation.index, data, relocation.size);
 				m_program[pass].vsUniformsCollected.insert(variable.getName());
 			}
@@ -339,7 +339,7 @@ void GLES2RendererMaterial::bindVariable(Pass pass, const Variable &variable, co
 				// Mojo could truncate unused parts of the original variable, so in the D3D assembly it'll have type which is bigger then needed in the translated shader.
 				// This is to prevent buffer overruns in such cases.
 				//relocation.size = (relocation.index + relocation.size) > m_program[pass].psUniformsVec4SizeInBytes ? (m_program[pass].psUniformsVec4SizeInBytes - relocation.index) : relocation.size;
-				//LOGI("FRAGMENT: Copying %d bytes from %x to %x+%d for %s (%s)", relocation.size, data, m_program[pass].psUniformsVec4, relocation.index, variable.getName(), getPassName(pass));
+				//LOGI("FRAGMENT: Copying %d bytes from %x to %x+%d for %s (%s) -- %p", relocation.size, data, m_program[pass].psUniformsVec4, relocation.index, variable.getName(), getPassName(pass), this);
 				memcpy(m_program[pass].psUniformsVec4 + relocation.index, data, relocation.size);
 				m_program[pass].psUniformsCollected.insert(variable.getName());
 			}
@@ -515,7 +515,7 @@ void GLES2RendererMaterial::loadCustomConstants(Pass pass)
 					m_program[pass].vsUniformsVec4Size = size;
 					m_program[pass].vsUniformsVec4SizeInBytes = m_program[pass].vsUniformsVec4Size * sizeof(float) * 4;
 					m_program[pass].vsUniformsVec4 = new char[m_program[pass].vsUniformsVec4SizeInBytes];
-					LOGI("Allocated %d bytes at %x for vsUniformsVec4", m_program[pass].vsUniformsVec4SizeInBytes, m_program[pass].vsUniformsVec4);
+					LOGI("Allocated %d bytes at %x for vsUniformsVec4", m_program[pass].vsUniformsVec4SizeInBytes, size_t(m_program[pass].vsUniformsVec4));
 					m_program[pass].vsUniformsVec4Location = glGetUniformLocation(m_program[pass].program, name);
 					LOGI("Hidden uniform '%s' -> location %d, size %d x vec4", name, m_program[pass].vsUniformsVec4Location, m_program[pass].vsUniformsVec4Size);
 				}
@@ -524,7 +524,7 @@ void GLES2RendererMaterial::loadCustomConstants(Pass pass)
 					m_program[pass].psUniformsVec4Size = size;
 					m_program[pass].psUniformsVec4SizeInBytes = m_program[pass].psUniformsVec4Size * sizeof(float) * 4;
 					m_program[pass].psUniformsVec4 = new char[m_program[pass].psUniformsVec4SizeInBytes];
-					LOGI("Allocated %d bytes at %x for psUniformsVec4", m_program[pass].psUniformsVec4SizeInBytes, m_program[pass].psUniformsVec4);
+					LOGI("Allocated %d bytes at %x for psUniformsVec4", m_program[pass].psUniformsVec4SizeInBytes, size_t(m_program[pass].psUniformsVec4));
 					m_program[pass].psUniformsVec4Location = glGetUniformLocation(m_program[pass].program, name);
 					LOGI("Hidden uniform '%s' -> location %d, size %d x vec4", name, m_program[pass].psUniformsVec4Location, m_program[pass].psUniformsVec4Size);
 				}
@@ -553,16 +553,34 @@ void GLES2RendererMaterial::loadCustomConstants(Pass pass)
 		m_program[pass].colorAttr      = getAttribLocation(MOJOSHADER_USAGE_COLOR, 0, pass);
 		m_program[pass].normalAttr     = getAttribLocation(MOJOSHADER_USAGE_NORMAL, 0, pass);
 		m_program[pass].tangentAttr    = getAttribLocation(MOJOSHADER_USAGE_TANGENT, 0, pass);
-		m_program[pass].boneIndexAttr  = getAttribLocation(MOJOSHADER_USAGE_BLENDINDICES, 0, pass);
-		m_program[pass].boneWeightAttr = getAttribLocation(MOJOSHADER_USAGE_BLENDWEIGHT, 0, pass);
+		m_program[pass].boneIndexAttr  = -1;
+		m_program[pass].boneWeightAttr = -1;
 		memset(m_program[pass].texcoordAttr, -1, sizeof(m_program[pass].texcoordAttr));
+		LOGI("Attributes:");
 		if(m_program[pass].vertexMojoResult->parseResult.attributes.find(MOJOSHADER_USAGE_TEXCOORD) != m_program[pass].vertexMojoResult->parseResult.attributes.end())
 			{
 				for(int i = 0; i < m_program[pass].vertexMojoResult->parseResult.attributes[MOJOSHADER_USAGE_TEXCOORD].size(); ++i)
 				{
 					m_program[pass].texcoordAttr[i] = glGetAttribLocation(m_program[pass].program, m_program[pass].vertexMojoResult->parseResult.attributes[MOJOSHADER_USAGE_TEXCOORD][i].c_str());
+					LOGI("\t TEXCOORD%d: %d", i, m_program[pass].texcoordAttr[i]);
 				}
+				/* If shader contains more than 4 texture coords inputs, then next one/two should be: bone indices input, bone weights input */
+				if(m_program[pass].vertexMojoResult->parseResult.attributes[MOJOSHADER_USAGE_TEXCOORD].size() > 4) 
+				{
+					m_program[pass].boneIndexAttr = glGetAttribLocation(m_program[pass].program, m_program[pass].vertexMojoResult->parseResult.attributes[MOJOSHADER_USAGE_TEXCOORD][4].c_str());
+				}
+				if(m_program[pass].vertexMojoResult->parseResult.attributes[MOJOSHADER_USAGE_TEXCOORD].size() > 5) 
+				{
+					m_program[pass].boneWeightAttr = glGetAttribLocation(m_program[pass].program, m_program[pass].vertexMojoResult->parseResult.attributes[MOJOSHADER_USAGE_TEXCOORD][5].c_str());
+				}				
 			}
+
+		LOGI("\t POSITION: %d", m_program[pass].positionAttr);
+		LOGI("\t COLOR: %d", m_program[pass].colorAttr);
+		LOGI("\t NORMAL: %d", m_program[pass].normalAttr);
+		LOGI("\t TANGENT: %d", m_program[pass].tangentAttr);
+		LOGI("\t BONE INDEX: %d", m_program[pass].boneIndexAttr);
+		LOGI("\t BONE WEIGHT: %d", m_program[pass].boneWeightAttr);
 
 		/* Expose variables that were in the original shader, but are now inside one vec4 array */
 		std::vector<mojoResult*> mojoResults;
@@ -637,7 +655,7 @@ void GLES2RendererMaterial::loadCustomConstants(Pass pass)
 		}
 	}
 	
-	LOGI("That was %x\n\n\n", this);
+	LOGI("That was %p", this);
 }
 
 }

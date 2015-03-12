@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -39,6 +39,21 @@
 #include "extensions/PxVisualDebuggerExt.h"
 #include "extensions/PxParticleExt.h"
 #include "PhysXSampleApplication.h"
+
+// fwd to avoid including cuda.h
+#if defined(__x86_64) || defined(AMD64) || defined(_M_AMD64)
+typedef unsigned long long CUdeviceptr;
+#else
+typedef unsigned int CUdeviceptr;
+#endif
+
+namespace physx
+{
+	namespace pxtask
+	{
+		class CudaContextManager;
+	}
+}
 
 /* 
 	This is class for particle systems/fluids with constant rate emitter.
@@ -75,6 +90,11 @@ private:
 	PxU32                   mValidParticleRange;
 	bool					mUseLifetime;
 	bool					mUseInstancedMeshes;
+
+	CUdeviceptr				mParticlesOrientationsDevice;
+	CUdeviceptr				mParticleLifetimeDevice;
+	CUdeviceptr				mParticleValidityDevice;	
+	PxCudaContextManager*	mCtxMgr;
 
 	void					modifyRotationMatrix(PxMat33& rotMatrix, PxReal deltaTime, const PxVec3& velocity);
 	void					initializeParticlesOrientations();
@@ -121,6 +141,14 @@ public:
 	/* Returns number of particles */
 	PxU32 getNumParticles();
 
+	/* Return the device copy of particles validity */
+	CUdeviceptr getValiditiesDevice() const { return mParticleValidityDevice; }
+	/* Return the device copy of particles orientation */
+	CUdeviceptr getOrientationsDevice() const { return mParticlesOrientationsDevice; }
+	/* Return the device copy of particle lifetimes*/
+	CUdeviceptr getLifetimesDevice() const { return mParticleLifetimeDevice; }
+	/* Return cuda context manager if set, which is only the case if interop is enabled*/
+	PxCudaContextManager* getCudaContextManager() const { return mCtxMgr; }
 
 public:
 	PxParticleSystem& getPxParticleSystem() { PX_ASSERT(mParticleSystem); return static_cast<PxParticleSystem&>(*mParticleSystem); }

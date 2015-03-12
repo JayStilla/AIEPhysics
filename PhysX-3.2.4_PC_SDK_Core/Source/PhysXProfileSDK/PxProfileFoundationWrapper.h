@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -87,7 +87,7 @@ namespace physx { namespace profile {
 	{
 		static const char* getName()
 		{
-#if defined PX_GNUC
+#if defined PX_GNUC || defined PX_GHS
 			return __PRETTY_FUNCTION__;
 #else
 			return typeid(T).name();
@@ -110,10 +110,9 @@ namespace physx { namespace profile {
 		void* allocate(size_t size, const char* filename, int line)
 		{
 #if defined(PX_CHECKED) // checked and debug builds
-			static const char* handle = getName();
 			if(!size)
 				return 0;
-			return getAllocator().allocate(size, handle, filename, line);
+			return getAllocator().allocate(size, getName(), filename, line);
 #else
 			return getAllocator().allocate(size, "<no allocation names in this config>", filename, line);
 #endif
@@ -147,10 +146,9 @@ namespace physx { namespace profile {
 		PxAllocatorCallback& getAllocator() { return mWrapper->getAllocator(); }
 		void* allocate(size_t size, const char* filename, int line)
 		{
-			static const char* handle = mAllocationName;
 			if(!size)
 				return 0;
-			return getAllocator().allocate(size, handle, filename, line);
+			return getAllocator().allocate(size, mAllocationName, filename, line);
 		}
 		void deallocate(void* ptr)
 		{
@@ -160,25 +158,25 @@ namespace physx { namespace profile {
 	};
 
 	template<class T>
-	struct ProfileArray : public Array<T, WrapperReflectionAllocator<T> >
+	struct ProfileArray : public shdfnd::Array<T, WrapperReflectionAllocator<T> >
 	{
 		typedef WrapperReflectionAllocator<T> TAllocatorType;
 
 		ProfileArray( FoundationWrapper& inWrapper )
-			: Array<T, TAllocatorType >( TAllocatorType( inWrapper ) )
+			: shdfnd::Array<T, TAllocatorType >( TAllocatorType( inWrapper ) )
 		{
 		}
 		
 		ProfileArray( const ProfileArray< T >& inOther )
-			: Array<T, TAllocatorType >( inOther, inOther )
+			: shdfnd::Array<T, TAllocatorType >( inOther, inOther )
 		{
 		}
 	};
 
-	template<typename TKeyType, typename TValueType, typename THashType=Hash<TKeyType> >
-	struct ProfileHashMap : public HashMap<TKeyType, TValueType, THashType, WrapperReflectionAllocator< TValueType > >
+	template<typename TKeyType, typename TValueType, typename THashType=shdfnd::Hash<TKeyType> >
+	struct ProfileHashMap : public shdfnd::HashMap<TKeyType, TValueType, THashType, WrapperReflectionAllocator< TValueType > >
 	{
-		typedef HashMap<TKeyType, TValueType, THashType, WrapperReflectionAllocator< TValueType > > THashMapType;
+		typedef shdfnd::HashMap<TKeyType, TValueType, THashType, WrapperReflectionAllocator< TValueType > > THashMapType;
 		typedef WrapperReflectionAllocator<TValueType> TAllocatorType;
 		ProfileHashMap( FoundationWrapper& inWrapper )
 			: THashMapType( TAllocatorType( inWrapper ) )
@@ -222,16 +220,14 @@ namespace physx { namespace profile {
 	template<typename TDataType>
 	inline void PxProfileDeleteAndDeallocate( PxAllocatorCallback& inAllocator, TDataType* inDType )
 	{
-		FoundationWrapper wrapper( &inAllocator );
-		typedef WrapperReflectionAllocator< TDataType > TAllocator;
+		FoundationWrapper wrapper( &inAllocator );	
 		PxProfileDeleteAndDeallocate( wrapper, inDType );
 	}
 	
 	template<typename TDataType>
 	inline void PxProfileDeleteAndDeallocate( PxFoundation* inAllocator, TDataType* inDType )
 	{
-		FoundationWrapper wrapper( inAllocator );
-		typedef WrapperReflectionAllocator< TDataType > TAllocator;
+		FoundationWrapper wrapper( inAllocator );		
 		PxProfileDeleteAndDeallocate( wrapper, inDType );
 	}
 } }

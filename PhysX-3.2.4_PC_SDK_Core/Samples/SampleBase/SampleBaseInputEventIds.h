@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #ifndef _SAMPLE_BASE_INPUT_EVENT_IDS_H
 #define _SAMPLE_BASE_INPUT_EVENT_IDS_H
 
@@ -44,8 +44,7 @@ enum SampleBaseInputEventIds
 	DECREASE_DEBUG_RENDER_SCALE ,
 	INCREASE_DEBUG_RENDER_SCALE ,
 	HIDE_GRAPHICS ,
-	WIREFRAME ,
-	SWEPT_INTEGRATION ,
+	WIREFRAME ,	
 	TOGGLE_PVD_CONNECTION ,
 	SHOW_HELP ,
 	SHOW_DESCRIPTION ,
@@ -73,8 +72,10 @@ enum SampleBaseInputEventIds
 
 	MOUSE_LOOK_BUTTON,
 
-	TOGGLE_CONSOLE,
+	CONSOLE_OPEN,
 	CONSOLE_ESCAPE,
+	CONSOLE_BACKSPACE,
+	CONSOLE_ENTER,
 	CONSOLE_SCROLL_UP,
 	CONSOLE_SCROLL_DOWN,
 	CONSOLE_LIST_COMMAND_UP,

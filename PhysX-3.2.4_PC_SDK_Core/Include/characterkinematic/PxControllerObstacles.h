@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -42,6 +42,8 @@ namespace physx
 {
 #endif
 
+	class PxControllerManager;
+
 	#define INVALID_OBSTACLE_HANDLE	0xffffffff
 
 	/**
@@ -56,7 +58,7 @@ namespace physx
 													mType		(PxGeometryType::eINVALID),
 													mUserData	(NULL),
 													mPos		(0.0, 0.0, 0.0),
-													mRot		(PxQuat::createIdentity())
+													mRot		(PxQuat(PxIdentity))
 												{}
 												~PxObstacle()					{}
 
@@ -125,6 +127,13 @@ namespace physx
 		virtual	void				release()															= 0;
 
 		/**
+		\brief Retrieves the controller manager associated with this context.
+
+		\return The associated controller manager
+		*/
+		virtual PxControllerManager&	getControllerManager() const									= 0;
+
+		/**
 		\brief Adds an obstacle to the context.
 
 		\param	[in]	obstacle	Obstacle data for the new obstacle. The data gets copied.
@@ -171,11 +180,11 @@ namespace physx
 		/**
 		\brief Retrieves desired obstacle by given handle.
 
-		\param	[in]	handle		Obstacle handle
+		\param	[in]	handle			Obstacle handle
 
 		\return Desired obstacle
 		*/
-		virtual	const PxObstacle*	getObstacleByHandle(ObstacleHandle handle)										const	= 0;
+		virtual	const PxObstacle*	getObstacleByHandle(ObstacleHandle handle)					const	= 0;
 	};
 
 #ifndef PX_DOXYGEN

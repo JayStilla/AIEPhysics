@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -39,6 +39,7 @@
 #include "PsUtilities.h"
 #include "CmPhysXCommon.h"
 #include "PxScene.h"
+#include "CmUtils.h"
 
 namespace physx
 {
@@ -53,6 +54,7 @@ bool PxVehicleDriveTank::isValid() const
 PxVehicleDriveTank* PxVehicleDriveTank::allocate(const PxU32 numWheels)
 {
 	PX_CHECK_AND_RETURN_NULL(numWheels>0, "Cars with zero wheels are illegal");
+	PX_CHECK_AND_RETURN_NULL(0 == (numWheels % 2), "PxVehicleDriveTank::allocate - needs to have even number of wheels");
 
 	//Compute the bytes needed.
 	const PxU32 numWheels4 = (((numWheels + 3) & ~3) >> 2);
@@ -60,16 +62,18 @@ PxVehicleDriveTank* PxVehicleDriveTank::allocate(const PxU32 numWheels)
 
 	//Allocate the memory.
 	PxVehicleDriveTank* veh = (PxVehicleDriveTank*)PX_ALLOC(byteSize, PX_DEBUG_EXP("PxVehicleDriveTank"));
+	Cm::markSerializedMem(veh, byteSize);
+	new(veh) PxVehicleDriveTank();
 
 	//Patch up the pointers.
 	PxU8* ptr = (PxU8*)veh + sizeof(PxVehicleDriveTank);
 	PxVehicleDrive::patchupPointers(veh,ptr,numWheels4,numWheels);
 
 	//Set the vehicle type.
-	veh->mType = eVEHICLE_TYPE_DRIVETANK;
+	veh->mType = PxVehicleTypes::eDRIVETANK;
 
 	//Set the default drive model.
-	veh->mDriveModel = eDRIVE_MODEL_STANDARD;
+	veh->mDriveModel = PxVehicleDriveTankControlModel::eSTANDARD;
 
 	return veh;
 }
@@ -112,17 +116,5 @@ void PxVehicleDriveTank::setToRestState()
 	//Set core to rest state.
 	PxVehicleDrive::setToRestState();
 }
-
-
-
-
-
-
-
-
-
-
-
-
 } //namespace physx
 

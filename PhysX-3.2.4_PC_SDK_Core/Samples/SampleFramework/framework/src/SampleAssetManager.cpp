@@ -1,37 +1,29 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #include <SampleAssetManager.h>
 #include <SampleAsset.h>
 #include <SampleMaterialAsset.h>
@@ -54,7 +46,7 @@ namespace physx
 #include <PsFile.h>
 
 #include "SampleXml.h"
-#include "PxFileBuffer.h"
+#include "extensions/PxDefaultStreams.h"
 
 using namespace SampleFramework;
 
@@ -73,10 +65,10 @@ void SampleFramework::addSearchPath(const char* path)
 
 	const PxU32 len2 = len+2;
 	char* searchPath = new char[len2];
-	physx::string::strncpy_s(searchPath, len2, path, len2);
+	physx::string::strcpy_s(searchPath, len2, path);
 	if(path[len-1] != '/' && path[len-1] != '\\')
 	{
-		physx::string::strncat_s(searchPath, len2, "/", len2);
+		physx::string::strcat_s(searchPath, len2, "/");
 	}
 	if(!gSearchPaths)
 		gSearchPaths = new std::vector<char*>;
@@ -103,20 +95,20 @@ static void FixSeparators(char* path)
 			path[i] = SampleFramework::SamplePlatform::platform()->getPathSeparator()[0];
 }
 
-FILE* SampleFramework::findFile(const char* path, bool binary)
+File* SampleFramework::findFile(const char* path, bool binary)
 {
 	if(!gSearchPaths)
 		return NULL;
 
-	FILE* file = NULL;
+	File* file = NULL;
 	const PxU32 numSearchPaths = (PxU32)gSearchPaths->size();
 	for(PxU32 i=0; i<numSearchPaths; i++)
 	{
 		const char* prefix = (*gSearchPaths)[i];
 
 		char fullPath[512];
-		physx::string::strncpy_s(fullPath, 512, prefix, 512);
-		physx::string::strncat_s(fullPath, 512, path,   512);
+		physx::string::strcpy_s(fullPath, 512, prefix);
+		physx::string::strcat_s(fullPath, 512, path);
 		FixSeparators(fullPath);
 		if(binary)
 			Fnd::fopen_s(&file, fullPath, "rb");
@@ -137,13 +129,13 @@ const char* SampleFramework::findPath(const char* path)
 
 	static char fullPath[512];
 
-	FILE* file = NULL;
+	File* file = NULL;
 	const PxU32 numSearchPaths = (PxU32)gSearchPaths->size();
 	for(PxU32 i=0; i<numSearchPaths; i++)
 	{
 		const char* prefix = (*gSearchPaths)[i];
-		physx::string::strncpy_s(fullPath, 512, prefix, 512);
-		physx::string::strncat_s(fullPath, 512, path,   512);
+		physx::string::strcpy_s(fullPath, 512, prefix);
+		physx::string::strcat_s(fullPath, 512, path);
 		FixSeparators(fullPath);
 		Fnd::fopen_s(&file, fullPath, "rb");
 		if(file) break;
@@ -160,8 +152,10 @@ const char* SampleFramework::findPath(const char* path)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SampleAssetManager::SampleAssetManager(SampleRenderer::Renderer& renderer) :
-	m_renderer(renderer)
+SampleAssetManager::SampleAssetManager(SampleRenderer::Renderer& renderer,
+									   SampleAssetCreator* fallbackAssetCreator) :
+	m_renderer(renderer), 
+	m_fallbackAssetCreator(fallbackAssetCreator)
 {
 }
 
@@ -175,7 +169,7 @@ SampleAsset* SampleAssetManager::getAsset(const char* path, SampleAsset::Type ty
 	SampleAsset* asset = findAsset(path);
 	if(!asset)
 	{
-		asset = loadAsset(path);
+		asset = loadAsset(path, type);
 	}
 	if(asset && asset->getType() != type)
 	{
@@ -184,7 +178,7 @@ SampleAsset* SampleAssetManager::getAsset(const char* path, SampleAsset::Type ty
 	}
 	if(asset)
 	{
-		asset->m_numUsers++;
+		addAssetUser(*asset);
 	}
 	return asset;
 }
@@ -232,129 +226,150 @@ static const char* strext(const char* str)
 	return ext;
 }
 
-SampleAsset* SampleAssetManager::loadAsset(const char* path)
+class FileExtensions
 {
-	const char* extension = strext(path);
-	if (extension == NULL || *extension == 0)
-		return NULL;
+public:
+	explicit FileExtensions(const char** extensions, PxU32 numExtensions)
+		: mExtensions(extensions), mNumExtensions(numExtensions) { }
 
-	SampleAsset* asset = NULL;
+	template<typename EnumType>
+	EnumType typeOf(const char* extension)
+	{
+		PxU32 type = 0;
+		while (type < mNumExtensions && (physx::string::stricmp(extension, mExtensions[type]) != 0)) ++type;
+		return static_cast<EnumType>(type);
+	}
 	
+protected:
+	const char** mExtensions;
+	PxU32  mNumExtensions;
+};
+
+enum FileType { TYPE_XML = 0, TYPE_DDS, TYPE_TGA, TYPE_ODS, TYPE_PVR, TYPE_BMP, NUM_TYPES, TYPE_NOT_SUPPORTED = NUM_TYPES };
+static const char* sSupportedExtensions[NUM_TYPES] = {"xml", "dds", "tga", "ods", "pvr", "bmp"};
+static FileExtensions sFileExtensions(sSupportedExtensions, NUM_TYPES);
+
 #if defined(RENDERER_ENABLE_PVR_SUPPORT)
-	if(!strcmp(extension, "dds"))
-	{
-		//replace dds with pvr extension and loadAsset.
-		char pathPVR[512];
-		strcpy(pathPVR, path);	
-		strcpy(strstr(pathPVR,".dds"), ".pvr");
-		return loadAsset(pathPVR);
-	}
+static FILE* findFileExchangeExtension(const char* path, bool binary, const char* origEnding, const char* newEnding)
+{
+	char pathPVR[512];
+	strcpy(pathPVR, path);
+	char* endStr = strstr(pathPVR, origEnding);	
+	strcpy(endStr, newEnding);
+	return findFile(pathPVR, binary);
+}
 #endif
-		
-	FILE* file = NULL;
-		
-	if(!strcmp(extension, "ods")) 
-		file = findFile(path, false);
-	else
-		file = findFile(path, true);
 
-	if(!file)
+SampleAsset* SampleAssetManager::loadAsset(const char* path, SampleAsset::Type type)
+{
+	SampleAsset* asset = NULL;
+	const char* extension = strext(path);
+	if(extension && *extension)
 	{
-		if(!strcmp(extension, "ods")) 
-			Fnd::fopen_s(&file, path, "r+");
-		else
-			Fnd::fopen_s(&file, path, "rb");
-	}
+		FileType fileType = sFileExtensions.typeOf<FileType>(extension);
+		if (TYPE_NOT_SUPPORTED != fileType )
+		{
+			File* file = NULL;
+#if defined(RENDERER_ENABLE_PVR_SUPPORT)
+			if(fileType == TYPE_DDS)
+			{
+				file = findFileExchangeExtension(path, true, ".dds", ".pvr");
+				fileType = TYPE_PVR;
+			}
+#endif
+			if(!file)
+				file = findFile(path, fileType != TYPE_ODS);
 
-	if(file)
-	{
-		if(!strcmp(extension, "xml")) 
-		{
-			asset = loadXMLAsset(*file, path);
-		}
-		else if (!strcmp(extension, "dds"))
-		{
-#if defined(RENDERER_ENABLE_GXT_SUPPORT)
-			asset = loadTextureAsset(*file, path, SampleTextureAsset::GXT);
+			if(!file)
+				Fnd::fopen_s(&file, path, fileType != TYPE_ODS ? "rb" : "r+");
+
+			if(file)
+			{
+				switch(fileType)
+				{
+				case TYPE_XML:
+					 asset = loadXMLAsset(*file, path);
+					 break;
+				case TYPE_DDS:
+#if defined(RENDERER_PSP2)
+					asset = loadTextureAsset(*file, path, SampleTextureAsset::PSP2);
 #else
-			asset = loadTextureAsset(*file, path, SampleTextureAsset::DDS);
+					asset = loadTextureAsset(*file, path, SampleTextureAsset::DDS);
 #endif
-		}		
-#if defined(RENDERER_ENABLE_PVR_SUPPORT)
-		else if (!strcmp(extension, "pvr"))
-		{					
-			asset = loadTextureAsset(*file, path, SampleTextureAsset::PVR);
-		}
-#endif
-		else if (!strcmp(extension, "tga")) 
-		{
-			asset = loadTextureAsset(*file, path, SampleTextureAsset::TGA);
-		}
-		else if (!strcmp(extension, "bmp")) 
-		{
-			asset = loadTextureAsset(*file, path, SampleTextureAsset::BMP);
-		}
-		else if(!strcmp(extension, "ods")) 
-		{
-			asset = loadODSAsset(*file,path);
+					break;
+				case TYPE_PVR:
+					asset = loadTextureAsset(*file, path, SampleTextureAsset::PVR);
+					break;
+				case TYPE_BMP:
+					asset = loadTextureAsset(*file, path, SampleTextureAsset::BMP);
+					break;
+				case TYPE_TGA:
+					asset = loadTextureAsset(*file, path, SampleTextureAsset::TGA);
+					break;
+				case TYPE_ODS:
+					asset = loadODSAsset(*file, path);
+					break;
+				case TYPE_NOT_SUPPORTED:
+				default:
+					PX_ALWAYS_ASSERT();
+				};
+				fclose(file);
+			}
 		}
 
-		fclose(file);
-	}
-	else
-	{
+		if (NULL == asset)
+		{
+			if (m_fallbackAssetCreator)
+			{
+				asset = m_fallbackAssetCreator->create(path, type);
+			}
+			if (NULL == asset)
+			{
+
 #define SAM_DEFAULT_MATERIAL "materials/simple_lit.xml"
-		
+
 #if defined(RENDERER_ENABLE_PVR_SUPPORT)
-	#define SAM_DEFAULT_TEXTURE "textures/test.pvr"
+#	define SAM_DEFAULT_TEXTURE "textures/test.pvr"
 #else
-	#define SAM_DEFAULT_TEXTURE "textures/test.dds"
+#	define SAM_DEFAULT_TEXTURE "textures/test.dds"
 #endif
 
-		// report the missing asset
-		char msg[1024];
+				// report the missing asset
+				char msg[1024];
 
-		if( !strcmp(extension, "xml") && strcmp(path, SAM_DEFAULT_MATERIAL) )  // Avoid infinite recursion
-		{
-			physx::string::sprintf_s(msg, sizeof(msg), "Could not find material: %s, loading default material: %s", 
-				path, SAM_DEFAULT_MATERIAL);
-			RENDERER_OUTPUT_MESSAGE(&m_renderer, msg);
+				if (type == SampleAsset::ASSET_MATERIAL && strcmp(path, SAM_DEFAULT_MATERIAL) )  // Avoid infinite recursion
+				{
+					physx::string::sprintf_s(msg, sizeof(msg), "Could not find material: %s, loading default material: %s", 
+						path, SAM_DEFAULT_MATERIAL);
+					RENDERER_OUTPUT_MESSAGE(&m_renderer, msg);
 
-			return loadAsset(SAM_DEFAULT_MATERIAL);  // Try to use the default asset
-		}
-		else if(!strcmp(extension, "dds"))
-		{
-			physx::string::sprintf_s(msg, sizeof(msg), "Could not find texture: %s, loading default texture: %s", 
-				path, SAM_DEFAULT_TEXTURE);
-			RENDERER_OUTPUT_MESSAGE(&m_renderer, msg);
+					return loadAsset(SAM_DEFAULT_MATERIAL, type);  // Try to use the default asset
+				}
+				else if (type == SampleAsset::ASSET_TEXTURE)
+				{
+					physx::string::sprintf_s(msg, sizeof(msg), "Could not find texture: %s, loading default texture: %s", 
+						path, SAM_DEFAULT_TEXTURE);
+					RENDERER_OUTPUT_MESSAGE(&m_renderer, msg);
 
-			return loadAsset(SAM_DEFAULT_TEXTURE);  // Try to use the default asset
-		}
-#if defined(RENDERER_ENABLE_PVR_SUPPORT)
-		else if(!strcmp(extension, "pvr"))
-		{
-			physx::string::sprintf_s(msg, sizeof(msg), "Could not find texture: %s, loading default texture: %s", 
-									 path, SAM_DEFAULT_TEXTURE);
-			RENDERER_OUTPUT_MESSAGE(&m_renderer, msg);
-			
-			return loadAsset(SAM_DEFAULT_TEXTURE);  // Try to use the default asset
-		}
-#endif
-		else if(!strcmp(extension, "ods"))
-		{
-			physx::string::sprintf_s(msg, sizeof(msg), "Could not find input definition: %s", path);
-			RENDERER_OUTPUT_MESSAGE(&m_renderer, msg);
+					return loadAsset(SAM_DEFAULT_TEXTURE, type);  // Try to use the default asset
+				}
+				else if (fileType == TYPE_ODS)
+				{
+					physx::string::sprintf_s(msg, sizeof(msg), "Could not find input definition: %s", path);
+					RENDERER_OUTPUT_MESSAGE(&m_renderer, msg);
+				}
+			}
 		}
 	}
-
+	//PX_ASSERT(asset && asset->isOk());
 	if(asset && !asset->isOk())
 	{
-		delete asset;
+		deleteAsset(asset);
 		asset = 0;
 	}
 	if(asset)
 	{
-		m_assets.push_back(asset);
+		addAsset(asset);
 	}
 	return asset;
 }
@@ -376,38 +391,53 @@ void SampleAssetManager::releaseAsset(SampleAsset& asset)
 	{
 		m_assets[found] = m_assets.back();
 		m_assets.pop_back();
-		asset.release();
+		deleteAsset(&asset);
 	}
 }
 
-SampleAsset* SampleAssetManager::loadXMLAsset(FILE& file, const char* path)
+void SampleAssetManager::addAssetUser(SampleAsset& asset)
+{
+	asset.m_numUsers++;
+}
+
+void SampleAssetManager::addAsset(SampleAsset* asset)
+{
+	if (asset)
+		m_assets.push_back(asset);
+}
+
+void SampleAssetManager::deleteAsset(SampleAsset* asset)
+{
+	if (asset)
+		asset->release();
+}
+
+SampleAsset* SampleAssetManager::loadXMLAsset(File& file, const char* path)
 {
 	SampleAsset* asset = NULL;
 
-	PxFileBuffer theBuffer(findPath(path), physx::general_PxIOStream2::PxFileBuf::OPEN_READ_ONLY);
+	PxDefaultFileInputData theBuffer(findPath(path));	
 	FAST_XML::XmlBuilder builder;
-	FAST_XML::FastXml *xml = createFastXml(&builder);
+	physx::shdfnd::FastXml *xml = createFastXml(&builder);
 	xml->processXml(theBuffer, false);
 	FAST_XML::xml_node* rootnode = builder.rootnode();
 	if(!strcmp(rootnode->name(), "material"))
 	{
 		asset = new SampleMaterialAsset(*this, *rootnode, path);
 	}
+	xml->release();
 
 	return asset;
 }
 
-SampleAsset* SampleAssetManager::loadTextureAsset(FILE& file, const char* path, SampleTextureAsset::Type texType)
+SampleAsset* SampleAssetManager::loadTextureAsset(File& file, const char* path, SampleTextureAsset::Type texType)
 {
 	SampleTextureAsset* asset = new SampleTextureAsset(getRenderer(), file, path, texType);
 	return asset;
 }
 
-SampleAsset* SampleAssetManager::loadODSAsset(FILE& file, const char* path)
+SampleAsset* SampleAssetManager::loadODSAsset(File& file, const char* path)
 {
-	SampleAsset* asset = NULL;
-
-	asset = new SampleInputAsset(&file, path);
-
+	SampleAsset* asset = new SampleInputAsset(&file, path);
 	return asset;
 }

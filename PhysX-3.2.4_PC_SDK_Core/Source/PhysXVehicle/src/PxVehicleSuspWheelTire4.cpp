@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,6 +32,7 @@
 #include "PsFoundation.h"
 #include "PsUtilities.h"
 #include "CmPhysXCommon.h"
+#include "PxMaterial.h"
 
 namespace physx
 {
@@ -66,17 +67,19 @@ bool PxVehicleWheels4SimData::isValid(const PxU32 id) const
 	return true;
 }
 
-void PxVehicleWheels4SimData::setSuspensionData(const PxVehicleSuspensionData& susp, const PxU32 id)
+void PxVehicleWheels4SimData::setSuspensionData(const PxU32 id, const PxVehicleSuspensionData& susp)
 {
 	PX_CHECK_AND_RETURN(id<4, "Illegal suspension id");
 	PX_CHECK_AND_RETURN(susp.mSpringStrength>0, "Susp spring strength must be greater than zero");
 	PX_CHECK_AND_RETURN(susp.mSpringDamperRate>=0, "Susp spring damper rate must be greater than or equal to zero");
 	PX_CHECK_AND_RETURN(susp.mMaxCompression>=0, "Susp max compression must be greater than or equal to zero");
 	PX_CHECK_AND_RETURN(susp.mMaxDroop>=0, "Susp max droop must be greater than or equal to zero");
-	PX_CHECK_AND_RETURN(susp.mMaxDroop>0 || susp.mMaxCompression>0, "Either one of max droop or max comporession must be greater than zero");
+	PX_CHECK_AND_RETURN(susp.mMaxDroop>0 || susp.mMaxCompression>0, "Either one of max droop or max compression must be greater than zero");
 	PX_CHECK_AND_RETURN(susp.mSprungMass>0, "Susp spring mass must be greater than zero");
 
 	mSuspensions[id]=susp;
+	mSuspensions[id].mRecipMaxCompression = 1.0f/((susp.mMaxCompression > 0.0f) ? susp.mMaxCompression : 1.0f);
+	mSuspensions[id].mRecipMaxDroop = 1.0f/((susp.mMaxDroop > 0.0f) ? susp.mMaxDroop : 1.0f);
 
 	mTireRestLoads[id]=mWheels[id].mMass+mSuspensions[id].mSprungMass;
 	mRecipTireRestLoads[id]=1.0f/mTireRestLoads[id];
@@ -84,7 +87,7 @@ void PxVehicleWheels4SimData::setSuspensionData(const PxVehicleSuspensionData& s
 
 /////////////////////////////
 
-void PxVehicleWheels4SimData::setWheelData(const PxVehicleWheelData& wheel, const PxU32 id)
+void PxVehicleWheels4SimData::setWheelData(const PxU32 id, const PxVehicleWheelData& wheel)
 {
 	PX_CHECK_AND_RETURN(id<4, "Illegal wheel id");
 	PX_CHECK_AND_RETURN(wheel.mRadius>0, "Wheel radius must be greater than zero");
@@ -107,13 +110,13 @@ void PxVehicleWheels4SimData::setWheelData(const PxVehicleWheelData& wheel, cons
 
 /////////////////////////////
 
-void PxVehicleWheels4SimData::setTireData(const PxVehicleTireData& tire, const PxU32 id)
+void PxVehicleWheels4SimData::setTireData(const PxU32 id, const PxVehicleTireData& tire)
 {
 	PX_CHECK_AND_RETURN(id<4, "Illegal tire id");
 	PX_CHECK_AND_RETURN(tire.mLatStiffX>0, "Tire mLatStiffX must greater than zero");
 	PX_CHECK_AND_RETURN(tire.mLatStiffY>0, "Tire mLatStiffY must greater than zero");
 	PX_CHECK_AND_RETURN(tire.mLongitudinalStiffnessPerUnitGravity>0, "Tire longitudinal stiffness must greater than zero");
-	PX_CHECK_AND_RETURN(tire.mCamberStiffness>=0, "Tire camber stiffness must greater than or equal to zero");
+	PX_CHECK_AND_RETURN(tire.mCamberStiffnessPerUnitGravity>=0, "Tire camber stiffness must greater than or equal to zero");
 	PX_CHECK_AND_RETURN(tire.mFrictionVsSlipGraph[0][0]==0, "mFrictionVsSlipGraph[0][0] must be zero");
 	PX_CHECK_AND_RETURN(tire.mFrictionVsSlipGraph[0][1]>0, "mFrictionVsSlipGraph[0][0] must be greater than zero");
 	PX_CHECK_AND_RETURN(tire.mFrictionVsSlipGraph[1][0]>0, "mFrictionVsSlipGraph[1][0] must be greater than zero");
@@ -129,7 +132,7 @@ void PxVehicleWheels4SimData::setTireData(const PxVehicleTireData& tire, const P
 
 /////////////////////////////
 
-void PxVehicleWheels4SimData::setSuspTravelDirection(const PxVec3& dir, const PxU32 id)
+void PxVehicleWheels4SimData::setSuspTravelDirection(const PxU32 id, const PxVec3& dir)
 {
 	PX_CHECK_AND_RETURN(id<4, "Illegal suspension id");
 	PX_CHECK_AND_RETURN(dir.magnitude()>0.999f && dir.magnitude()<1.0001f, "Suspension travel dir must be unit vector");
@@ -139,7 +142,7 @@ void PxVehicleWheels4SimData::setSuspTravelDirection(const PxVec3& dir, const Px
 
 /////////////////////////////
 
-void PxVehicleWheels4SimData::setSuspForceAppPointOffset(const PxVec3& offset, const PxU32 id)
+void PxVehicleWheels4SimData::setSuspForceAppPointOffset(const PxU32 id, const PxVec3& offset)
 {
 	PX_CHECK_AND_RETURN(id<4, "Illegal suspension id");
 	PX_CHECK_AND_RETURN(offset.magnitude()>0, "Susp force app point must be offset from centre of mass");
@@ -149,7 +152,7 @@ void PxVehicleWheels4SimData::setSuspForceAppPointOffset(const PxVec3& offset, c
 
 /////////////////////////////
 
-void PxVehicleWheels4SimData::setTireForceAppPointOffset(const PxVec3& offset, const PxU32 id)
+void PxVehicleWheels4SimData::setTireForceAppPointOffset(const PxU32 id, const PxVec3& offset)
 {
 	PX_CHECK_AND_RETURN(id<4, "Illegal tire id");
 	PX_CHECK_AND_RETURN(offset.magnitude()>0, "Tire force app point must be offset from centre of mass");
@@ -159,13 +162,31 @@ void PxVehicleWheels4SimData::setTireForceAppPointOffset(const PxVec3& offset, c
 
 /////////////////////////////
 
-void PxVehicleWheels4SimData::setWheelCentreOffset(const PxVec3& offset, const PxU32 id)
+void PxVehicleWheels4SimData::setWheelCentreOffset(const PxU32 id, const PxVec3& offset)
 {
 	PX_CHECK_AND_RETURN(id<4, "Illegal wheel id");
 	PX_CHECK_AND_RETURN(offset.magnitude()>0, "Tire force app point must be offset from centre of mass");
 
 	mWheelCentreOffsets[id]=offset;
 }
+
+/////////////////////////////
+
+void PxVehicleWheels4SimData::setWheelShapeMapping(const PxU32 id, const PxI32 shapeId)
+{
+	PX_CHECK_AND_RETURN(id<4, "Illegal wheel id");
+	PX_CHECK_AND_RETURN((-1==shapeId) || ((PxU32)shapeId < PX_MAX_U8), "Illegal shapeId: must be -1 or less than PX_MAX_U8");
+	mWheelShapeMap[id] = Ps::to8(-1!=shapeId ? shapeId : PX_MAX_U8);
+}
+
+/////////////////////////////
+
+void PxVehicleWheels4SimData::setSceneQueryFilterData(const PxU32 id, const PxFilterData& sqFilterData)
+{
+	PX_CHECK_AND_RETURN(id<4, "Illegal wheel id");
+	mSqFilterData[id]=sqFilterData;
+}
+
 
 } //namespace physx
 

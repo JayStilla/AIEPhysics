@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -128,6 +128,7 @@ namespace Cm
 
 	class ReaderWriterLock
 	{
+		PX_NOCOPY(ReaderWriterLock)
 	public:
 
 		PX_INLINE void lockReader()
@@ -173,6 +174,7 @@ namespace Cm
 		}
 
 	private:
+		TakeReaderLock& operator=(const TakeReaderLock&);
 		ReaderWriterLock &lock;
 	};
 
@@ -190,6 +192,7 @@ namespace Cm
 		}
 
 	private:
+		TakeWriterLock& operator=(const TakeWriterLock&);
 		ReaderWriterLock &lock;
 	};
 

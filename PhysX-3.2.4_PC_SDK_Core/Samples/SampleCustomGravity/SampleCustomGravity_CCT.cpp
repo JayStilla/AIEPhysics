@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -79,14 +79,14 @@ PxCapsuleController* SampleCustomGravity::createCharacter(const PxExtendedVec3& 
 	cDesc.stepOffset			= STEP_OFFSET;
 	cDesc.invisibleWallHeight	= INVISIBLE_WALLS_HEIGHT;
 	cDesc.maxJumpHeight			= MAX_JUMP_HEIGHT;
-	cDesc.callback				= this;
+	cDesc.reportCallback		= this;
 
 	mControllerInitialPosition = cDesc.position;
 
 #ifdef USE_BOX_CONTROLLER
 	PxBoxController* ctrl = static_cast<PxBoxController*>(mControllerManager->createController(getPhysics(), &getActiveScene(), cDesc));
 #else
-	PxCapsuleController* ctrl = static_cast<PxCapsuleController*>(mControllerManager->createController(getPhysics(), &getActiveScene(), cDesc));
+	PxCapsuleController* ctrl = static_cast<PxCapsuleController*>(mControllerManager->createController(cDesc));
 #endif
 	// remove controller shape from scene query for standup overlap test
 	PxRigidDynamic* actor = ctrl->getActor();
@@ -131,7 +131,7 @@ void SampleCustomGravity::onShapeHit(const PxControllerShapeHit& hit)
 		if(hit.shape->getTriangleMeshGeometry(meshGeom))
 		{
 			PxTriangle touchedTriangle;
-			PxMeshQuery::getTriangle(meshGeom, PxShapeExt::getGlobalPose(*hit.shape), hit.triangleIndex, touchedTriangle, NULL/*, NULL, NULL*/);
+			PxMeshQuery::getTriangle(meshGeom, PxShapeExt::getGlobalPose(*hit.shape, *hit.shape->getActor()), hit.triangleIndex, touchedTriangle, NULL/*, NULL, NULL*/);
 			mValidTouchedTriangle = true;
 			mTouchedTriangle[0] = touchedTriangle.verts[0];
 			mTouchedTriangle[1] = touchedTriangle.verts[1];
@@ -140,7 +140,7 @@ void SampleCustomGravity::onShapeHit(const PxControllerShapeHit& hit)
 		else if(hit.shape->getHeightFieldGeometry(hfGeom))
 		{
 			PxTriangle touchedTriangle;
-			PxMeshQuery::getTriangle(hfGeom, PxShapeExt::getGlobalPose(*hit.shape), hit.triangleIndex, touchedTriangle, NULL/*, NULL, NULL*/);
+			PxMeshQuery::getTriangle(hfGeom, PxShapeExt::getGlobalPose(*hit.shape, *hit.shape->getActor()), hit.triangleIndex, touchedTriangle, NULL/*, NULL, NULL*/);
 			mValidTouchedTriangle = true;
 			mTouchedTriangle[0] = touchedTriangle.verts[0];
 			mTouchedTriangle[1] = touchedTriangle.verts[1];
@@ -172,17 +172,18 @@ void SampleCustomGravity::collectInputEvents(std::vector<const SampleFramework::
 	PhysXSample::collectInputEvents(inputEvents);
 
 	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(DRAW_WALLS,				WKEY_B,	XKEY_B,	PS3KEY_B,	AKEY_UNKNOWN,	OSXKEY_B,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_B);
-	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER,			WKEY_J,	XKEY_J,	PS3KEY_J,	AKEY_UNKNOWN,	OSXKEY_J,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_J);
+	DIGITAL_INPUT_EVENT_DEF(DRAW_WALLS,				WKEY_B,	XKEY_B,	X1KEY_B,	PS3KEY_B,	PS4KEY_B,	AKEY_UNKNOWN,	OSXKEY_B,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_B,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER,			WKEY_J,	XKEY_J,	X1KEY_J,	PS3KEY_J,	PS4KEY_J,	AKEY_UNKNOWN,	OSXKEY_J,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_J,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(RELEASE_TOUCH_SHAPE,	WKEY_T,	XKEY_T,	X1KEY_T,	PS3KEY_T,	PS4KEY_T,	AKEY_UNKNOWN,	OSXKEY_T,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_T,	WIIUKEY_UNKNOWN);
 
 	//digital mouse events
-	DIGITAL_INPUT_EVENT_DEF(RAYCAST_HIT,			MOUSE_BUTTON_RIGHT,	XKEY_UNKNOWN,	PS3KEY_UNKNOWN,	AKEY_UNKNOWN,	MOUSE_BUTTON_RIGHT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN, MOUSE_BUTTON_RIGHT);
+	DIGITAL_INPUT_EVENT_DEF(RAYCAST_HIT,			MOUSE_BUTTON_RIGHT,	XKEY_UNKNOWN,	X1KEY_UNKNOWN, PS3KEY_UNKNOWN,	PS4KEY_UNKNOWN,	AKEY_UNKNOWN,	MOUSE_BUTTON_RIGHT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN, MOUSE_BUTTON_RIGHT,	WIIUKEY_UNKNOWN);
 
     //touch events
-    TOUCH_INPUT_EVENT_DEF(SPAWN_DEBUG_OBJECT,	"Throw Object",		ABUTTON_5,	IBUTTON_5);
+    TOUCH_INPUT_EVENT_DEF(SPAWN_DEBUG_OBJECT,	"Throw Object",		ABUTTON_5,	IBUTTON_5, TOUCH_BUTTON_5);
 }
 
-bool SampleCustomGravity::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
+void SampleCustomGravity::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
 {
 	if(val)
 	{
@@ -203,10 +204,33 @@ bool SampleCustomGravity::onDigitalInputEvent(const SampleFramework::InputEvent&
 				mEnableCCTDebugRender = !mEnableCCTDebugRender; 
 			}
 			break;
+		case RELEASE_TOUCH_SHAPE:
+			{
+#ifndef USE_BOX_CONTROLLER
+				PxControllerState state;
+				mCapsuleController->getState(state);
+				if (state.touchedShape && (!state.touchedShape->getActor()->isRigidStatic()))
+				{
+					PxRigidActor* actor = state.touchedShape->getActor();
+
+					std::vector<PxRigidDynamic*>::iterator i;
+					for(i=mDebugActors.begin(); i != mDebugActors.end(); i++)
+					{
+						if ((*i) == actor)
+						{
+							mDebugActors.erase(i);
+							break;
+						}
+					}
+					removeActor(actor);
+				}
+#endif
+			}
+			break;
 		default:
 			break;
 		};
 	}
 
-	return PhysXSample::onDigitalInputEvent(ie,val);
+	PhysXSample::onDigitalInputEvent(ie,val);
 }

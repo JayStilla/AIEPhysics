@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,7 @@
 
 using namespace PxToolkit;
 
-//#define USE_MESH_LANDSCAPE	// PT: define this to use a triangle mesh for the landscape, instead of a heightfield
+#define USE_MESH_LANDSCAPE	// PT: define this to use a triangle mesh for the landscape, instead of a heightfield
 
 static PxReal randomScaled(PxReal value)
 {
@@ -114,7 +114,7 @@ PxRigidStatic* SampleNorthPole::buildHeightField()
 
  		RAWMesh data;
 		data.mName = "terrain";
-		data.mTransform = PxTransform::createIdentity();
+		data.mTransform = PxTransform(PxIdentity);
 		data.mTransform.p = PxVec3(-(hfSize/2*hfScale),0,-(hfSize/2*hfScale));
  		data.mNbVerts = hfNumVerts;
 		data.mVerts = (PxVec3*)hfVerts;
@@ -248,7 +248,7 @@ PxRigidStatic* SampleNorthPole::createHeightField(PxReal* heightmap, PxReal hfSc
 	if(!heightField)
 		fatalError("creating the heightfield failed");
 
-	PxTransform pose = PxTransform::createIdentity();
+	PxTransform pose = PxTransform(PxIdentity);
 	pose.p = PxVec3(-(hfSize/2*hfScale),0,-(hfSize/2*hfScale));
 
 	PxRigidStatic* hfActor = getPhysics().createRigidStatic(pose);
@@ -257,7 +257,7 @@ PxRigidStatic* SampleNorthPole::createHeightField(PxReal* heightmap, PxReal hfSc
 
 	PxHeightFieldGeometry hfGeom(heightField, PxMeshGeometryFlags(), heightScale, hfScale, hfScale);
 	PxShape* hfShape = hfActor->createShape(hfGeom, getDefaultMaterial());
-	setCCDActive(*hfShape);
+	//setCCDActive(*hfShape);
 	if(!hfShape) 
 		fatalError("creating heightfield shape failed");
 
@@ -290,7 +290,7 @@ PxRigidStatic* SampleNorthPole::buildIglooTriMesh()
 
 		PxVec3* currentVerts = bufferVerts[buf];
 
-		for(int i = 0; i < numBlocks; i++)
+		for(int i = 0; i < (int)numBlocks; i++)
 		{
 			PxQuat rotY(i*step-step/2,PxVec3(0,1,0));
 			PxVec3 pos = rotY.rotate(initpos);
@@ -300,7 +300,7 @@ PxRigidStatic* SampleNorthPole::buildIglooTriMesh()
 		currentVerts[n] = currentVerts[0];
 		currentVerts[n+1] = currentVerts[1];
 
-		for(int j = 0; j < numRows; j++)
+		for(int j = 0; j < (int)numRows; j++)
 		{
 			PxVec3* previousVerts = currentVerts;
 			currentVerts = bufferVerts[buf=1-buf];
@@ -308,7 +308,7 @@ PxRigidStatic* SampleNorthPole::buildIglooTriMesh()
 			PxQuat rotZ((j+1)*step2,PxVec3(0,0,1));
 			PxVec3 posX = rotZ.rotate(initpos);
 
-			for(int i = 0; i < numBlocks; i++)
+			for(int i = 0; i < (int)numBlocks; i++)
 			{
 				PxQuat rotY(i*step-step/2,PxVec3(0,1,0));
 				PxVec3 pos = rotY.rotate(posX);
@@ -318,9 +318,9 @@ PxRigidStatic* SampleNorthPole::buildIglooTriMesh()
 			currentVerts[n] = currentVerts[0];
 			currentVerts[n+1] = currentVerts[1];
 
-			for(int i = 0; i < numBlocks; i++)
+			for(int i = 0; i < (int)numBlocks; i++)
 			{
-				if( (i==0 && (j<doorHeight)) || (i==numBlocks/3 && j==numRows/2) )
+				if( (i==0 && (j<(int)doorHeight)) || (i==numBlocks/3 && j==numRows/2) )
 				{
 					// omit the door and window
 					continue;
@@ -408,7 +408,7 @@ PxRigidStatic* SampleNorthPole::buildIglooTriMesh()
 	if(!iglooShape)
 		fatalError("creating igloo shape failed");
 
-	setCCDActive(*iglooShape);
+	//setCCDActive(*iglooShape);
 
 	getActiveScene().addActor(*iglooActor);
 

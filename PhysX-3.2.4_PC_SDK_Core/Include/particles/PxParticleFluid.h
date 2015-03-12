@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -62,7 +62,7 @@ There are two kinds of particle interaction forces which govern the behaviour of
 For a good introduction to SPH fluid simulation,
 see http://www.matthiasmueller.info/publications/sca03.pdf
 
-@see PxParticleBase, PxParticleFluidReadData
+@see PxParticleBase, PxParticleFluidReadData, PxPhysics.createParticleFluid
 */
 class PxParticleFluid : public PxParticleBase
 {
@@ -77,10 +77,19 @@ public:
 	
 	/**
 	\brief Locks the particle data and provides the data descriptor for accessing the particles including fluid particle densities.
+	\note Only PxDataAccessFlag::eREADABLE and PxDataAccessFlag::eDEVICE are supported, PxDataAccessFlag::eWRITABLE will be ignored.
 	@see PxParticleFluidReadData
 	@see PxParticleBase::lockParticleReadData()
 	*/
-	virtual		PxParticleFluidReadData*		lockParticleFluidReadData()										= 0;
+	virtual		PxParticleFluidReadData*		lockParticleFluidReadData(PxDataAccessFlags flags)	= 0;
+
+	/**
+	\brief Locks the particle data and provides the data descriptor for accessing the particles including fluid particle densities.
+	\note This is the same as calling lockParticleFluidReadData(PxDataAccessFlag::eREADABLE).
+	@see PxParticleFluidReadData
+	@see PxParticleBase::lockParticleReadData()
+	*/
+	virtual		PxParticleFluidReadData*		lockParticleFluidReadData()	= 0;
 
 //@}
 /************************************************************************************************/
@@ -149,17 +158,17 @@ public:
 //@}
 /************************************************************************************************/
 
-		virtual		const char*					getConcreteTypeName() const					{	return "PxParticleFluid"; }
-protected:
+	virtual		const char*						getConcreteTypeName() const { return "PxParticleFluid"; }
 
-											PxParticleFluid(PxRefResolver& v) : PxParticleBase(v)		{}
-	PX_INLINE								PxParticleFluid() : PxParticleBase() {}
-	virtual									~PxParticleFluid() {}
-	virtual		bool						isKindOf(const char* name)	const		{	return !strcmp("PxParticleFluid", name) || PxParticleBase::isKindOf(name);  }
+protected:
+	PX_INLINE									PxParticleFluid(PxType concreteType, PxBaseFlags baseFlags) : PxParticleBase(concreteType, baseFlags) {}
+	PX_INLINE									PxParticleFluid(PxBaseFlags baseFlags) : PxParticleBase(baseFlags) {}
+	virtual										~PxParticleFluid() {}
+	virtual		bool							isKindOf(const char* name) const { return !strcmp("PxParticleFluid", name) || PxParticleBase::isKindOf(name);  }
 };
 
-PX_INLINE PxParticleFluid*			PxActor::isParticleFluid()				{ return is<PxParticleFluid>();	}
-PX_INLINE const PxParticleFluid*	PxActor::isParticleFluid()		const	{ return is<PxParticleFluid>();	}
+PX_DEPRECATED PX_INLINE PxParticleFluid*		PxActor::isParticleFluid()				{ return is<PxParticleFluid>();	}
+PX_DEPRECATED PX_INLINE const PxParticleFluid*	PxActor::isParticleFluid()		const	{ return is<PxParticleFluid>();	}
 
 
 #ifndef PX_DOXYGEN

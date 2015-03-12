@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #ifndef GLES2_RENDERER_H
 #define GLES2_RENDERER_H
@@ -98,7 +98,8 @@ class RendererMaterial;
 void PxToGL(GLfloat *gl44, const physx::PxMat44 &mat);
 void PxToGLColumnMajor(GLfloat *gl44, const physx::PxMat44 &mat);
 void RenToGL(GLfloat *gl44, const RendererProjection &proj);
-	
+void RenToGLColumnMajor(GLfloat *gl44, const RendererProjection &proj);
+
 class GLES2Renderer : public Renderer
 {
 	public:
@@ -118,7 +119,9 @@ class GLES2Renderer : public Renderer
 		virtual bool swapBuffers(void);
 		// get the device pointer (void * abstraction)
 		virtual void *getDevice(); 
-		virtual bool captureScreen(const char* filename) { PX_ASSERT(0 && "implement captureScreen for GLES2renderer"); }
+
+		virtual bool captureScreen(const char*);
+		virtual bool captureScreen(PxU32 &width, PxU32& height, PxU32& sizeInBytes, const void*& screenshotData);
 
 		// get the window size
 		void getWindowSize(PxU32 &width, PxU32 &height) const;		
@@ -129,22 +132,25 @@ class GLES2Renderer : public Renderer
 		virtual RendererIndexBuffer    *createIndexBuffer(   const RendererIndexBufferDesc    &desc);
 		virtual RendererInstanceBuffer *createInstanceBuffer(const RendererInstanceBufferDesc &desc);
 		virtual RendererTexture2D      *createTexture2D(     const RendererTexture2DDesc      &desc);
+		virtual RendererTexture3D      *createTexture3D(     const RendererTexture3DDesc      &desc);
 		virtual RendererTarget         *createTarget(        const RendererTargetDesc         &desc);
 		virtual RendererMaterial       *createMaterial(      const RendererMaterialDesc       &desc);
 		virtual RendererMesh           *createMesh(          const RendererMeshDesc           &desc);
 		virtual RendererLight          *createLight(         const RendererLightDesc          &desc);
 
-		virtual void finishRendering();
-        virtual void finalizeTextRender(void);
-	
+		void 							finalizeTextRender();
+		void  							finishRendering();
+		virtual void                    setVsync(bool on);	
 	private:
-		virtual void bindViewProj(const physx::PxMat44 &inveye, const PxMat44 &proj);
+		virtual void bindViewProj(const physx::PxMat44 &inveye, const RendererProjection &proj);
 		virtual void bindFogState(const RendererColor &fogColor, float fogDistance);
 		virtual void bindAmbientState(const RendererColor &ambientColor);
 		virtual void bindDeferredState(void);
 		virtual void bindMeshContext(const RendererMeshContext &context);
 		virtual void beginMultiPass(void);
 		virtual void endMultiPass(void);
+		virtual void beginTransparentMultiPass(void);
+		virtual void endTransparentMultiPass(void);
 		virtual void renderDeferredLight(const RendererLight &light);
 		virtual PxU32 convertColor(const RendererColor& color) const;
 		
@@ -153,12 +159,10 @@ class GLES2Renderer : public Renderer
 		virtual	bool initTexter();
 		virtual	void setupTextRenderStates();
 		virtual	void resetTextRenderStates();
-		virtual	void renderTextBuffer(const void* vertices, PxU32 nbVerts, const PxU16* indices, PxU32 nbIndices, RendererMaterial* material);
+		virtual	void renderTextBuffer(const void* vertices, PxU32 nbVerts, const PxU16* indices, PxU32 nbIndices, SampleRenderer::RendererMaterial* material);
 		virtual	void renderLines2D(const void* vertices, PxU32 nbVerts);
 		virtual	void setupScreenquadRenderStates();
 		virtual	void resetScreenquadRenderStates();
-        
-        void renderQuad(const void* vertices, PxU32 nbVerts, const PxU16* indices, PxU32 nbIndices, RendererMaterial* material);
 	private:
 		SampleFramework::SamplePlatform*				m_platform;
 		RendererVertexBuffer*							m_textVertexBuffer;
@@ -167,16 +171,11 @@ class GLES2Renderer : public Renderer
         PxU32                                           m_textIndexBufferOffset;
         RendererMaterial*                               m_textMaterial;
 		RendererMesh*									m_textMesh;
-        
-        RendererVertexBuffer*							m_quadVertexBuffer;
-		RendererIndexBuffer*							m_quadIndexBuffer;
-		RendererMesh*									m_quadMesh;
-        
 		PxU32         m_displayWidth;
 		PxU32         m_displayHeight;
 		
 		physx::PxMat44 m_viewMatrix;
-		GLfloat		  m_glProjectionMatrix[16];
+		GLfloat		  m_glProjectionMatrix[16], m_glProjectionMatrixC[16];
 		PxVec3		  m_eyePosition;
 		PxVec3		  m_eyeDirection;
 		GLfloat		  m_ambientColor[3];
@@ -184,7 +183,6 @@ class GLES2Renderer : public Renderer
 		GLfloat		  m_intensity;
 		GLfloat		  m_lightDirection[3];
 		GLfloat		  m_fogColorAndDistance[4];
-        bool          m_quadRender;
 };
 }
 #endif // #if defined(RENDERER_ENABLE_GLES2)

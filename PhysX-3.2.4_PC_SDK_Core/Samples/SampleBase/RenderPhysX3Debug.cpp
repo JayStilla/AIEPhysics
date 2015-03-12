@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -33,7 +33,6 @@
 #include "common/PxRenderBuffer.h"
 #include "foundation/PxSimpleTypes.h"
 #include "SampleCamera.h"
-#include <stdio.h>
 
 #include "geometry/PxConvexMesh.h"
 #include "geometry/PxConvexMeshGeometry.h"
@@ -41,6 +40,7 @@
 #include "geometry/PxSphereGeometry.h"
 #include "geometry/PxBoxGeometry.h"
 #include "PsUtilities.h"
+#include "PsPrintString.h"
 
 using namespace physx;
 using namespace SampleRenderer;
@@ -138,7 +138,7 @@ void RenderPhysX3Debug::update(const PxRenderBuffer& debugRenderable, const Came
 			addLine(line.pos0, line.pos1, RendererColor(line.color0));
 			nbVisible++;
 		}
-		printf("%f\n", float(nbVisible)/float(numLines));
+		shdfnd::printFormatted("%f\n", float(nbVisible)/float(numLines));
 	}
 
 	// Triangles
@@ -862,11 +862,8 @@ void RenderPhysX3Debug::addConvex(const PxConvexMeshGeometry& cg, const PxTransf
 
 	// PT: you can't use PxTransform with a non-uniform scaling
 	const PxMat44 globalPose(rot, tr.p);
-
 	const PxU32 polygonCount = mesh.getNbPolygons();
 	const PxU8* indexBuffer = mesh.getIndexBuffer();
-
-	const PxU32 vertexCount = mesh.getNbVertices();
 	const PxVec3* vertexBuffer = mesh.getVertices();
 
 	if(renderFlags & RENDER_DEBUG_WIREFRAME)

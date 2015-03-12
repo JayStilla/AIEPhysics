@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
 
@@ -31,31 +31,22 @@
 #include "PxPreprocessor.h"
 PX_DUMMY_SYMBOL
 
+#include "PxVisualDebugger.h"
 #if PX_SUPPORT_VISUAL_DEBUGGER
 
 #include "PxSimpleTypes.h"
 #include "PsArray.h"
 //using namespace physx::shdfnd;
-#include "PxVisualDebugger.h"
 #include "PxMetaDataPvdBinding.h"
 #include "Px.h"
 
-#ifdef PX_VC
-#pragma warning(push)
-#pragma warning(disable:4100)
-#endif
-
 #include "PxMetaDataObjects.h"
 
-#ifdef PX_VC
-#pragma warning(pop)
-#endif
-
-
 #include "PvdConnection.h"
+#include "PvdVisualDebugger.h"
 #include "PvdDataStream.h"
 #include "PxScene.h"
-#include "ScShapeIterator.h"
+#include "ScIterators.h"
 #include "ScBodyCore.h"
 #include "PvdMetaDataExtensions.h"
 #include "PvdMetaDataPropertyVisitor.h"
@@ -67,36 +58,40 @@ PX_DUMMY_SYMBOL
 #include "PvdTypeNames.h"
 #include "NpScene.h"
 #include "NpPhysics.h"
-#include "SqBatchQueryStream.h"
+
+#include "gpu/PxParticleGpu.h"
 
 using namespace physx::debugger;
 using namespace physx;
 using namespace Sc;
 
 namespace physx { namespace Pvd {
+
 struct NameValuePair
 {
 	const char* mName;
 	PxU32 mValue;
 };
 
-const static NameValuePair g_physx_Sq_SceneQueryID__EnumConversion[] = {
-	{ "QUERY_RAYCAST_ANY_OBJECT", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_RAYCAST_ANY_OBJECT) },
-	{ "QUERY_RAYCAST_CLOSEST_OBJECT", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_RAYCAST_CLOSEST_OBJECT) },
-	{ "QUERY_RAYCAST_ALL_OBJECTS", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_RAYCAST_ALL_OBJECTS) },
-	{ "QUERY_OVERLAP_SPHERE_ALL_OBJECTS", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_OVERLAP_SPHERE_ALL_OBJECTS) },
-	{ "QUERY_OVERLAP_AABB_ALL_OBJECTS", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_OVERLAP_AABB_ALL_OBJECTS) },
-	{ "QUERY_OVERLAP_OBB_ALL_OBJECTS", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_OVERLAP_OBB_ALL_OBJECTS) },
-	{ "QUERY_OVERLAP_CAPSULE_ALL_OBJECTS", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_OVERLAP_CAPSULE_ALL_OBJECTS) },
-	{ "QUERY_OVERLAP_CONVEX_ALL_OBJECTS", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_OVERLAP_CONVEX_ALL_OBJECTS) },
-	{ "QUERY_LINEAR_OBB_SWEEP_CLOSEST_OBJECT", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_LINEAR_OBB_SWEEP_CLOSEST_OBJECT) },
-	{ "QUERY_LINEAR_CAPSULE_SWEEP_CLOSEST_OBJECT", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_LINEAR_CAPSULE_SWEEP_CLOSEST_OBJECT) },
-	{ "QUERY_LINEAR_CONVEX_SWEEP_CLOSEST_OBJECT", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_LINEAR_CONVEX_SWEEP_CLOSEST_OBJECT) },
-	{ "QUERY_LINEAR_COMPOUND_GEOMETRY_SWEEP_CLOSEST_OBJECT", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_LINEAR_COMPOUND_GEOMETRY_SWEEP_CLOSEST_OBJECT) },
-	{ "QUERY_LINEAR_OBB_SWEEP_ALL_OBJECTS", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_LINEAR_OBB_SWEEP_ALL_OBJECTS) },
-	{ "QUERY_LINEAR_CAPSULE_SWEEP_ALL_OBJECTS", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_LINEAR_CAPSULE_SWEEP_ALL_OBJECTS) },
-	{ "QUERY_LINEAR_CONVEX_SWEEP_ALL_OBJECTS", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_LINEAR_CONVEX_SWEEP_ALL_OBJECTS) },
-	{ "QUERY_LINEAR_COMPOUND_GEOMETRY_SWEEP_ALL_OBJECTS", static_cast<PxU32>(physx::Sq::SceneQueryID::QUERY_LINEAR_COMPOUND_GEOMETRY_SWEEP_ALL_OBJECTS) },
+using namespace physx::Sq;
+
+static const NameValuePair g_physx_Sq_SceneQueryID__EnumConversion[] = {
+	{ "QUERY_RAYCAST_ANY_OBJECT", static_cast<PxU32>(QueryID::QUERY_RAYCAST_ANY_OBJECT) },
+	{ "QUERY_RAYCAST_CLOSEST_OBJECT", static_cast<PxU32>(QueryID::QUERY_RAYCAST_CLOSEST_OBJECT) },
+	{ "QUERY_RAYCAST_ALL_OBJECTS", static_cast<PxU32>(QueryID::QUERY_RAYCAST_ALL_OBJECTS) },
+	{ "QUERY_OVERLAP_SPHERE_ALL_OBJECTS", static_cast<PxU32>(QueryID::QUERY_OVERLAP_SPHERE_ALL_OBJECTS) },
+	{ "QUERY_OVERLAP_AABB_ALL_OBJECTS", static_cast<PxU32>(QueryID::QUERY_OVERLAP_AABB_ALL_OBJECTS) },
+	{ "QUERY_OVERLAP_OBB_ALL_OBJECTS", static_cast<PxU32>(QueryID::QUERY_OVERLAP_OBB_ALL_OBJECTS) },
+	{ "QUERY_OVERLAP_CAPSULE_ALL_OBJECTS", static_cast<PxU32>(QueryID::QUERY_OVERLAP_CAPSULE_ALL_OBJECTS) },
+	{ "QUERY_OVERLAP_CONVEX_ALL_OBJECTS", static_cast<PxU32>(QueryID::QUERY_OVERLAP_CONVEX_ALL_OBJECTS) },
+	{ "QUERY_LINEAR_OBB_SWEEP_CLOSEST_OBJECT", static_cast<PxU32>(QueryID::QUERY_LINEAR_OBB_SWEEP_CLOSEST_OBJECT) },
+	{ "QUERY_LINEAR_CAPSULE_SWEEP_CLOSEST_OBJECT", static_cast<PxU32>(QueryID::QUERY_LINEAR_CAPSULE_SWEEP_CLOSEST_OBJECT) },
+	{ "QUERY_LINEAR_CONVEX_SWEEP_CLOSEST_OBJECT", static_cast<PxU32>(QueryID::QUERY_LINEAR_CONVEX_SWEEP_CLOSEST_OBJECT) },
+	{ "QUERY_LINEAR_COMPOUND_GEOMETRY_SWEEP_CLOSEST_OBJECT", static_cast<PxU32>(QueryID::QUERY_LINEAR_COMPOUND_GEOMETRY_SWEEP_CLOSEST_OBJECT) },
+	{ "QUERY_LINEAR_OBB_SWEEP_ALL_OBJECTS", static_cast<PxU32>(QueryID::QUERY_LINEAR_OBB_SWEEP_ALL_OBJECTS) },
+	{ "QUERY_LINEAR_CAPSULE_SWEEP_ALL_OBJECTS", static_cast<PxU32>(QueryID::QUERY_LINEAR_CAPSULE_SWEEP_ALL_OBJECTS) },
+	{ "QUERY_LINEAR_CONVEX_SWEEP_ALL_OBJECTS", static_cast<PxU32>(QueryID::QUERY_LINEAR_CONVEX_SWEEP_ALL_OBJECTS) },
+	{ "QUERY_LINEAR_COMPOUND_GEOMETRY_SWEEP_ALL_OBJECTS", static_cast<PxU32>(QueryID::QUERY_LINEAR_COMPOUND_GEOMETRY_SWEEP_ALL_OBJECTS) },
 	{ NULL, 0 }
 };
 
@@ -113,6 +108,13 @@ PvdMetaDataBinding::PvdMetaDataBinding()
 
 PvdMetaDataBinding::~PvdMetaDataBinding()
 {
+	for( OwnerActorsMap::Iterator iter = mBindingData->mOwnerActorsMap.getIterator();
+		!iter.done(); iter++)
+	{
+		iter->second->~OwnerActorsValueType();
+		PX_FREE( iter->second );
+	}
+
 	PX_DELETE( mBindingData );
 	mBindingData = NULL;
 }
@@ -196,7 +198,7 @@ PX_FORCE_INLINE void registerPvdRaycast( PvdDataStream& inStream )
 	inStream.createClass<PvdRaycast>();
 	definePropertyEnums<PvdRaycast, Pvd::SceneQueryIDConvertor, Pvd::NameValuePair>(inStream, "type");
 	inStream.createProperty<PvdRaycast,PxFilterData>( "filterData" );
-	definePropertyFlags<PvdRaycast, PxEnumTraits< physx::PxSceneQueryFilterFlag::Enum>, PxU32ToName >(inStream, "filterFlags");
+	definePropertyFlags<PvdRaycast, PxEnumTraits< physx::PxQueryFlag::Enum>, PxU32ToName >(inStream, "filterFlags");
 	inStream.createProperty<PvdRaycast,PxVec3>( "origin" );
 	inStream.createProperty<PvdRaycast,PxVec3>( "unitDir" );
 	inStream.createProperty<PvdRaycast,PxF32>( "distance" );
@@ -209,7 +211,7 @@ PX_FORCE_INLINE void registerPvdSweep( PvdDataStream& inStream )
 {
 	inStream.createClass<PvdSweep>();
 	definePropertyEnums<PvdSweep, Pvd::SceneQueryIDConvertor, Pvd::NameValuePair>(inStream, "type");
-	definePropertyFlags<PvdSweep, PxEnumTraits< physx::PxSceneQueryFilterFlag::Enum>, PxU32ToName>(inStream, "filterFlags");
+	definePropertyFlags<PvdSweep, PxEnumTraits< physx::PxQueryFlag::Enum>, PxU32ToName>(inStream, "filterFlags");
 	inStream.createProperty<PvdSweep,PxVec3>( "unitDir" );
 	inStream.createProperty<PvdSweep,PxF32>( "distance" );
 	inStream.createProperty<PvdSweep,String>( "geom_arrayName" );
@@ -231,7 +233,7 @@ PX_FORCE_INLINE void registerPvdOverlap( PvdDataStream& inStream )
 	inStream.createClass<PvdOverlap>();
 	definePropertyEnums<PvdOverlap, Pvd::SceneQueryIDConvertor, Pvd::NameValuePair>(inStream, "type");
 	inStream.createProperty<PvdOverlap,PxFilterData>( "filterData" );
-	definePropertyFlags<PvdOverlap, PxEnumTraits< physx::PxSceneQueryFilterFlag::Enum>, PxU32ToName>(inStream, "filterFlags");
+	definePropertyFlags<PvdOverlap, PxEnumTraits< physx::PxQueryFlag::Enum>, PxU32ToName>(inStream, "filterFlags");
 	inStream.createProperty<PvdOverlap,PxTransform>( "pose" );
 	inStream.createProperty<PvdOverlap,String>( "geom_arrayName" );
 	inStream.createProperty<PvdOverlap,PxU32>( "geom_baseIndex" );
@@ -245,8 +247,9 @@ PX_FORCE_INLINE void registerPvdSqHit( PvdDataStream& inStream )
 {
 	inStream.createClass<PvdSqHit>();
 	inStream.createProperty<PvdSqHit, ObjectRef>( "Shape" );
+	inStream.createProperty<PvdSqHit, ObjectRef>( "Actor" );
 	inStream.createProperty<PvdSqHit, PxU32>( "FaceIndex" );
-	definePropertyFlags<PvdSqHit, PxEnumTraits< physx::PxSceneQueryFlag::Enum>, PxU32ToName>(inStream, "Flags");
+	definePropertyFlags<PvdSqHit, PxEnumTraits< physx::PxHitFlag::Enum>, PxU32ToName>(inStream, "Flags");
 	inStream.createProperty<PvdSqHit, PxVec3>( "Impact" );
 	inStream.createProperty<PvdSqHit, PxVec3>( "Normal" );
 	inStream.createProperty<PvdSqHit, PxF32>( "Distance" );
@@ -269,6 +272,7 @@ void PvdMetaDataBinding::registerSDKProperties( PvdDataStream& inStream )
 		visitAllPvdProperties<PxTolerancesScale>( definitionObj );
 		helper.popName();
 		inStream.createProperty<PxPhysics,ObjectRef>( "Scenes", "children", PropertyType::Array );
+		inStream.createProperty<PxPhysics,ObjectRef>( "SharedShapes", "children", PropertyType::Array );
 		inStream.createProperty<PxPhysics,ObjectRef>( "Materials", "children", PropertyType::Array );
 		inStream.createProperty<PxPhysics,ObjectRef>( "HeightFields", "children", PropertyType::Array );
 		inStream.createProperty<PxPhysics,ObjectRef>( "ConvexMeshes", "children", PropertyType::Array );
@@ -277,6 +281,7 @@ void PvdMetaDataBinding::registerSDKProperties( PvdDataStream& inStream )
 		inStream.createProperty<PxPhysics,PxU32>( "Version.Major" );
 		inStream.createProperty<PxPhysics,PxU32>( "Version.Minor" );
 		inStream.createProperty<PxPhysics,PxU32>( "Version.Bugfix" );
+		inStream.createProperty<PxPhysics,String>( "Version.Build" );	
 		definePropertyStruct<PxTolerancesScale,PxTolerancesScaleGeneratedValues,PxPhysics>( inStream, "TolerancesScale" );
 	}
 	{ //PxGeometry
@@ -381,7 +386,7 @@ void PvdMetaDataBinding::registerSDKProperties( PvdDataStream& inStream )
 		inStream.createProperty<PxScene,ObjectRef>( "ParticleFluids", "children", PropertyType::Array );
 		inStream.createProperty<PxScene,ObjectRef>( "Cloths", "children", PropertyType::Array );
 		inStream.createProperty<PxScene,ObjectRef>( "Joints", "children", PropertyType::Array );
-		inStream.createProperty<PxScene,ObjectRef>( "Constraints", "children", PropertyType::Array );
+		inStream.createProperty<PxScene,ObjectRef>( "Aggregates", "children", PropertyType::Array );
 	}
 	//PxMaterial
 	{
@@ -417,7 +422,7 @@ void PvdMetaDataBinding::registerSDKProperties( PvdDataStream& inStream )
 		}
 		inStream.createClass<PxConvexMesh>();
 		inStream.createProperty<PxConvexMesh,PxF32>( "Mass" );
-		inStream.createProperty<PxConvexMesh,PxQuat>( "LocalInertia" );
+		inStream.createProperty<PxConvexMesh,PxMat33>( "LocalInertia" );
 		inStream.createProperty<PxConvexMesh,PxVec3>( "LocalCenterOfMass" );
 		inStream.createProperty<PxConvexMesh,PxVec3>( "Points", "", PropertyType::Array );
 		inStream.createProperty<PxConvexMesh,PvdHullPolygonData>( "HullPolygons", "", PropertyType::Array );
@@ -428,6 +433,7 @@ void PvdMetaDataBinding::registerSDKProperties( PvdDataStream& inStream )
 	{
 		inStream.createClass<PxTriangleMesh>();
 		inStream.createProperty<PxTriangleMesh,PxVec3>( "Points", "", PropertyType::Array );
+		inStream.createProperty<PxTriangleMesh,PxU32>( "NbTriangles", "", PropertyType::Scalar );
 		inStream.createProperty<PxTriangleMesh,PxU32>( "Triangles", "", PropertyType::Array );
 		inStream.createProperty<PxTriangleMesh,PxU16>( "MaterialIndices", "", PropertyType::Array );
 		inStream.createProperty<PxTriangleMesh,ObjectRef>( "Physics", "parents", PropertyType::Scalar );
@@ -526,10 +532,16 @@ void PvdMetaDataBinding::registerSDKProperties( PvdDataStream& inStream )
 	}
 	{ //PxParticleSystem
 		createClassDeriveAndDefineProperties<PxParticleSystem,PxParticleBase>( inStream );
+		inStream.createProperty<PxParticleSystem,PxU32>( "NbParticles");
+		inStream.createProperty<PxParticleSystem,PxU32>( "ValidParticleRange");
+		inStream.createProperty<PxParticleSystem,PxU32>( "ValidParticleBitmap", "", PropertyType::Array );
 		definePropertyStruct<PxParticleSystem,PxParticleSystemGeneratedValues,PxParticleSystem>( inStream );
 	}
 	{ //PxParticleFluid
 		createClassDeriveAndDefineProperties<PxParticleFluid,PxParticleBase>( inStream );
+		inStream.createProperty<PxParticleFluid,PxU32>( "NbParticles");
+		inStream.createProperty<PxParticleFluid,PxU32>( "ValidParticleRange");
+		inStream.createProperty<PxParticleFluid,PxU32>( "ValidParticleBitmap", "", PropertyType::Array );
 		PvdPropertyDefinitionHelper& helper( inStream.getPropertyDefinitionHelper() );
 		PvdClassInfoDefine definitionObj( helper, getPvdNamespacedNameForType<PxParticleFluid>() );
 		visitParticleFluidBufferProperties( makePvdPropertyFilter( definitionObj ) );
@@ -537,15 +549,25 @@ void PvdMetaDataBinding::registerSDKProperties( PvdDataStream& inStream )
 	}
 #endif
 #if PX_USE_CLOTH_API
+	{// PxClothFabricPhase
+		createClassAndDefineProperties<PxClothFabricPhase>( inStream );
+	}
 	{ //PxClothFabric
 		createClassAndDefineProperties<PxClothFabric>( inStream );
 		definePropertyStruct<PxClothFabric,PxClothFabricGeneratedValues,PxClothFabric>( inStream );
 		inStream.createProperty<PxClothFabric,ObjectRef>( "Physics", "parents" );
 		inStream.createProperty<PxClothFabric,ObjectRef>( "Cloths", "children", PropertyType::Array );
+		inStream.createProperty<PxClothFabric,PxClothFabricPhase>( "Phases", "", PropertyType::Array );
 	}
 	{ //PxCloth
 		{//PxClothParticle
 			createClassAndDefineProperties<PxClothParticle>( inStream );
+		}
+		{//PxClothStretchConfig
+			createClassAndDefineProperties<PxClothStretchConfig>( inStream );
+		}
+		{//PxClothTetherConstraintConfig
+			createClassAndDefineProperties<PxClothTetherConfig>( inStream );
 		}
 		{//PvdPositionAndRadius
 			inStream.createClass<PvdPositionAndRadius>();
@@ -556,14 +578,28 @@ void PvdMetaDataBinding::registerSDKProperties( PvdDataStream& inStream )
 		definePropertyStruct<PxCloth,PxClothGeneratedValues,PxCloth>( inStream );
 		inStream.createProperty<PxCloth,ObjectRef>( "Fabric" );
 		inStream.createProperty<PxCloth,PxClothParticle>( "ParticleBuffer", "", PropertyType::Array );
+		inStream.createProperty<PxCloth,PxClothParticle>( "ParticleAccelerations", "", PropertyType::Array );
 		inStream.createProperty<PxCloth,PvdPositionAndRadius>( "MotionConstraints", "", PropertyType::Array );
 		inStream.createProperty<PxCloth,PvdPositionAndRadius>( "CollisionSpheres", "", PropertyType::Array );
 		inStream.createProperty<PxCloth,PvdPositionAndRadius>( "SeparationConstraints", "", PropertyType::Array );
 		inStream.createProperty<PxCloth,PxU32>( "CollisionSpherePairs", "", PropertyType::Array );
-		inStream.createProperty<PxCloth,PxU32>( "VirtualParticleTriangleAndWeightIndexes", "", PropertyType::Array );
+		inStream.createProperty<PxCloth,PvdPositionAndRadius>( "CollisionPlanes", "", PropertyType::Array );
+		inStream.createProperty<PxCloth,PxU32>( "CollisionConvexMasks", "", PropertyType::Array );
+		inStream.createProperty<PxCloth,PxVec3>( "CollisionTriangles", "", PropertyType::Array );
+		inStream.createProperty<PxCloth,PxU32>( "VirtualParticles", "", PropertyType::Array );
 		inStream.createProperty<PxCloth,PxVec3>( "VirtualParticleWeights", "", PropertyType::Array );
+		inStream.createProperty<PxCloth,PxU32>( "SelfCollisionIndices", "", PropertyType::Array );
+		inStream.createProperty<PxCloth,PxVec4>( "RestPositions", "", PropertyType::Array );
 	}
 #endif
+	{
+		//PxAggregate
+		createClassAndDefineProperties<PxAggregate>( inStream );
+		inStream.createProperty<PxAggregate,ObjectRef>( "Scene", "parents" );
+		definePropertyStruct<PxAggregate,PxAggregateGeneratedValues,PxAggregate>( inStream );
+		inStream.createProperty<PxAggregate, ObjectRef>( "Actors", "children", PropertyType::Array );
+		inStream.createProperty<PxAggregate, ObjectRef>( "Articulations", "children", PropertyType::Array );
+	}
 }
 
 template<typename TClassType, typename TValueType, typename TDataType>
@@ -580,6 +616,23 @@ void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxPhy
 	inStream.setPropertyValue( &inPhysics, "Version.Major", (PxU32)PX_PHYSICS_VERSION_MAJOR );
 	inStream.setPropertyValue( &inPhysics, "Version.Minor", (PxU32)PX_PHYSICS_VERSION_MINOR );
 	inStream.setPropertyValue( &inPhysics, "Version.Bugfix", (PxU32)PX_PHYSICS_VERSION_BUGFIX );
+
+#if defined(PX_CHECKED)
+#if defined(NDEBUG)
+	//This is a checked build
+	String buildType = "Checked";
+#elif defined(_DEBUG)
+	//This is a debug build
+	String buildType = "Debug";
+#endif
+#elif defined(PX_PROFILE)
+	String buildType = "Profile";
+#elif defined(NDEBUG)
+	//This is a release build
+	String buildType = "Release";
+#endif
+	inStream.setPropertyValue( &inPhysics, "Version.Build", buildType );
+
 }
 
 void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxScene& inScene )
@@ -587,7 +640,60 @@ void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxSce
 	PxPhysics& physics( const_cast<PxScene&>( inScene ).getPhysics() );
 	PxTolerancesScale theScale;
 	PxSceneDesc theDesc( theScale );
-	inScene.saveToDesc( theDesc );
+
+	{
+		theDesc.gravity						= inScene.getGravity();
+		
+		theDesc.simulationEventCallback		= inScene.getSimulationEventCallback(PX_DEFAULT_CLIENT);
+		theDesc.contactModifyCallback		= inScene.getContactModifyCallback();
+		theDesc.ccdContactModifyCallback	= inScene.getCCDContactModifyCallback();
+		
+		theDesc.filterShaderData			= inScene.getFilterShaderData();
+		theDesc.filterShaderDataSize		= inScene.getFilterShaderDataSize();
+		theDesc.filterShader				= inScene.getFilterShader();
+		theDesc.filterCallback				= inScene.getFilterCallback();
+
+		theDesc.broadPhaseType				= inScene.getBroadPhaseType();
+		theDesc.broadPhaseCallback			= inScene.getBroadPhaseCallback();
+
+		theDesc.limits						= inScene.getLimits();
+
+		theDesc.meshContactMargin		= inScene.getMeshContactMargin();
+		
+		theDesc.frictionType				= inScene.getFrictionType();
+
+		theDesc.contactCorrelationDistance	= inScene.getContactCorrelationDistance();
+
+		theDesc.bounceThresholdVelocity		= inScene.getBounceThresholdVelocity();
+
+		theDesc.frictionOffsetThreshold		= inScene.getFrictionOffsetThreshold();
+
+		theDesc.flags						= inScene.getFlags();
+
+		theDesc.cpuDispatcher				= inScene.getCpuDispatcher();
+		theDesc.gpuDispatcher				= inScene.getGpuDispatcher();
+		theDesc.spuDispatcher				= inScene.getSpuDispatcher();
+
+		theDesc.staticStructure				= inScene.getStaticStructure();
+		theDesc.dynamicStructure			= inScene.getDynamicStructure();
+		theDesc.dynamicTreeRebuildRateHint	= inScene.getDynamicTreeRebuildRateHint();
+
+		theDesc.userData					= inScene.userData;
+		
+		theDesc.solverBatchSize				= inScene.getSolverBatchSize();
+				
+		//theDesc.nbContactDataBlocks			= inScene.getNbContactDataBlocksUsed();
+		//theDesc.maxNbContactDataBlocks		= inScene.getMaxNbContactDataBlocksUsed();
+			
+		theDesc.contactReportStreamBufferSize = inScene.getContactReportStreamBufferSize();
+
+		theDesc.ccdMaxPasses				= inScene.getCCDMaxPasses();
+
+		//theDesc.simulationOrder				= inScene.getSimulationOrder();
+		
+		theDesc.wakeCounterResetValue		= inScene.getWakeCounterResetValue();
+	}
+
 	PxSceneDescGeneratedValues theValues( &theDesc );
 	inStream.setPropertyMessage( &inScene, theValues );
 	//Create parent/child relationship.
@@ -649,6 +755,9 @@ public:
 			mCur = stack;
 		}
 	}
+
+private:
+	ScopedPropertyValueSender& operator=(const ScopedPropertyValueSender&);
 };
 
 void PvdMetaDataBinding::sendContacts( PvdDataStream& inStream, const PxScene& inScene )
@@ -678,9 +787,9 @@ void PvdMetaDataBinding::sendContacts( PvdDataStream& inStream, const PxScene& i
 
 	Sc::ContactIterator::Pair* pair;
 	Sc::ContactIterator::Contact* contact;
-	while( (pair = inContacts.getNextPair()) )
+	while( (pair = inContacts.getNextPair()) != NULL )
 	{
-		while( (contact = pair->getNextContact()) )
+		while( (contact = pair->getNextContact()) != NULL )
 			sender.append( *contact );
 	}
 }
@@ -689,6 +798,18 @@ void PvdMetaDataBinding::sendStats( PvdDataStream& inStream, const PxScene* inSc
 {
 	PxSimulationStatistics theStats;
 	inScene->getSimulationStatistics( theStats );
+
+#if PX_SUPPORT_GPU_PHYSX
+	if (((NpScene*)inScene)->getScene().getScScene().getSceneGpu())
+	{
+		// gpu triangle mesh cache stats
+		PxTriangleMeshCacheStatistics triMeshCacheStats = NpPhysics::getInstance().getNpPhysicsGpu().getTriangleMeshCacheStatistics(*inScene);
+		theStats.particlesGpuMeshCacheSize = triMeshCacheStats.bytesTotal;
+		theStats.particlesGpuMeshCacheUsed = triMeshCacheStats.bytesUsed;
+		theStats.particlesGpuMeshCacheHitrate = triMeshCacheStats.percentageHitrate;
+	}
+#endif
+
 	PxSimulationStatisticsGeneratedValues values( &theStats );
 	inStream.setPropertyMessage( inScene, values );
 }
@@ -779,7 +900,7 @@ void PvdMetaDataBinding::createInstance( PvdDataStream& inStream, const PxConvex
 	PxVec3 localCom;
 	inData.getMassInformation(mass, reinterpret_cast<PxMat33 &>(localInertia), localCom);
 	inStream.setPropertyValue( &inData, "Mass", mass );
-	inStream.setPropertyValue( &inData, "LocalInertia", PxQuat( localInertia ));
+	inStream.setPropertyValue( &inData, "LocalInertia", localInertia );
 	inStream.setPropertyValue( &inData, "LocalCenterOfMass", localCom);
 	
 	
@@ -835,8 +956,12 @@ void PvdMetaDataBinding::createInstance( PvdDataStream& inStream, const PxTriang
 
 	// index Array:
 	{
-		const bool has16BitIndices = inData.has16BitTriangleIndices();
-		const PxU32 numIndexes = inData.getNbTriangles() * 3;
+		const bool has16BitIndices = inData.getTriangleMeshFlags() & PxTriangleMeshFlag::eHAS_16BIT_TRIANGLE_INDICES ? true : false;
+		const PxU32 numTriangles = inData.getNbTriangles();
+
+		inStream.setPropertyValue( &inData, "NbTriangles", numTriangles );
+
+		const PxU32 numIndexes = numTriangles * 3;
 		const PxU8* trianglePtr = reinterpret_cast<const PxU8*>(inData.getTriangles());
 		//We declared this type as a 32 bit integer above.
 		//PVD will automatically unsigned-extend data that is smaller than the target type.
@@ -928,6 +1053,8 @@ void setGeometry( PvdDataStream& inStream, const PxShape& inObj, BufferRegistrar
 		SEND_PVD_GEOM_TYPE( eTRIANGLEMESH, TriangleMeshGeometry, PxTriangleMeshGeometryGeneratedValues );
 		SEND_PVD_GEOM_TYPE( eHEIGHTFIELD, HeightFieldGeometry, PxHeightFieldGeometryGeneratedValues );
 #undef SEND_PVD_GEOM_TYPE
+		case PxGeometryType::eGEOMETRY_COUNT:
+		case PxGeometryType::eINVALID:
 		default:
 			PX_ASSERT( false );
 			break;
@@ -948,9 +1075,29 @@ void setMaterials( PvdDataStream& inStream, const PxShape& inObj, BufferRegistra
 
 void PvdMetaDataBinding::createInstance( PvdDataStream& inStream, const PxShape& inObj, const PxRigidActor& owner, BufferRegistrar& registrar )
 {
-	if ( inStream.isInstanceValid( &inObj ) == true 
-		|| inStream.isInstanceValid( &owner ) == false ) 
+	if ( !inStream.isInstanceValid( &owner ) )
 		return;
+
+	const OwnerActorsMap::Entry* entry = mBindingData->mOwnerActorsMap.find(&inObj);
+	if( entry != NULL )
+	{
+		if( !mBindingData->mOwnerActorsMap[&inObj]->contains( &owner ) )
+			mBindingData->mOwnerActorsMap[&inObj]->insert( &owner );
+	}
+	else
+	{
+		OwnerActorsValueType* data = reinterpret_cast<OwnerActorsValueType*>(PX_ALLOC(sizeof(OwnerActorsValueType), "mOwnerActorsMapValue"));//( 1 );
+		OwnerActorsValueType* actors = PX_PLACEMENT_NEW(data, OwnerActorsValueType);
+		actors->insert( &owner );
+		
+		mBindingData->mOwnerActorsMap.insert( &inObj, actors );
+	}
+
+	if ( inStream.isInstanceValid( &inObj ) )
+	{
+		inStream.pushBackObjectRef( &owner, "Shapes", &inObj );
+		return;
+	}
 
 	inStream.createInstance( &inObj );
 	inStream.pushBackObjectRef( &owner, "Shapes", &inObj );
@@ -958,6 +1105,8 @@ void PvdMetaDataBinding::createInstance( PvdDataStream& inStream, const PxShape&
 	sendAllProperties( inStream, inObj );
 	setGeometry( inStream, inObj, registrar );
 	setMaterials( inStream, inObj, registrar, mBindingData );
+	if ( !inObj.isExclusive() )
+		inStream.pushBackObjectRef( &owner.getScene()->getPhysics(), "SharedShapes", &inObj );
 }
 
 void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxShape& inObj )
@@ -966,7 +1115,7 @@ void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxSha
 	inStream.setPropertyMessage( &inObj, values );
 }
 
-void PvdMetaDataBinding::releaseAndRecreateGeometry( PvdDataStream& inStream, const PxShape& inObj, PxPhysics& ownerPhysics, BufferRegistrar& registrar )
+void PvdMetaDataBinding::releaseAndRecreateGeometry( PvdDataStream& inStream, const PxShape& inObj, PxPhysics& /*ownerPhysics*/, BufferRegistrar& registrar )
 {
 	const void* geomInst = (reinterpret_cast<const PxU8*>( &inObj ) ) + 4;
 	inStream.destroyInstance( geomInst );
@@ -983,12 +1132,15 @@ void PvdMetaDataBinding::releaseAndRecreateGeometry( PvdDataStream& inStream, co
 
 	//Need update actor cause PVD takes actor-shape as a pair.
 	{
-		PxRigidActor& actor = inObj.getActor();
+		PxRigidActor* actor = inObj.getActor();
+		if(actor != NULL)
+		{
 
-		if(const PxRigidStatic* rgS = actor.isRigidStatic())
+		if(const PxRigidStatic* rgS = actor->isRigidStatic())
 			sendAllProperties( inStream, *rgS );
-		else if(const PxRigidDynamic* rgD = actor.isRigidDynamic())
+		else if(const PxRigidDynamic* rgD = actor->isRigidDynamic())
 			sendAllProperties( inStream, *rgD );
+		}
 	
 	}
 }
@@ -1005,9 +1157,36 @@ void PvdMetaDataBinding::destroyInstance( PvdDataStream& inStream, const PxShape
 	if ( inStream.isInstanceValid( &inObj ) )
 	{
 		inStream.removeObjectRef( &owner, "Shapes", &inObj );
-		const void* geomInst = (reinterpret_cast<const PxU8*>( &inObj ) ) + 4;
-		inStream.destroyInstance( geomInst );
-		inStream.destroyInstance( &inObj );
+
+		bool bDestroy = true;
+		const OwnerActorsMap::Entry* entry0 = mBindingData->mOwnerActorsMap.find(&inObj);
+		if( entry0 != NULL )
+		{
+			entry0->second->erase( &owner );
+			if( entry0->second->size() > 0 )
+				bDestroy = false;
+			else
+			{
+				mBindingData->mOwnerActorsMap[&inObj]->~OwnerActorsValueType();
+				PX_FREE( mBindingData->mOwnerActorsMap[&inObj]);
+				mBindingData->mOwnerActorsMap.erase( &inObj );
+			}
+		}
+
+		if (bDestroy)
+		{
+			const void* geomInst = (reinterpret_cast<const PxU8*>( &inObj ) ) + 4;
+			inStream.destroyInstance( geomInst );
+			inStream.destroyInstance( &inObj );
+			
+			const OwnerActorsMap::Entry* entry = mBindingData->mOwnerActorsMap.find(&inObj);
+			if( entry != NULL )
+			{
+				entry->second->~OwnerActorsValueType();
+				PX_FREE( entry->second );;
+				mBindingData->mOwnerActorsMap.erase(&inObj);
+			}
+		}
 	}
 }
 
@@ -1116,8 +1295,8 @@ void PvdMetaDataBinding::createInstance( PvdDataStream& inStream, const PxArticu
 		PxU32 numChildren = link->getNbChildren();
 		PxArticulationLink** children = mBindingData->allocateTemp<PxArticulationLink*>( numChildren );
 		link->getChildren( children, numChildren );
-		for ( PxU32 idx = 0; idx < numChildren; ++idx )
-			addChild( inStream, link, *children[idx] );
+		for ( PxU32 i = 0; i < numChildren; ++i )
+			addChild( inStream, link, *children[i] );
 	}
 }
 
@@ -1169,6 +1348,12 @@ void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxArt
 	inStream.setPropertyMessage( &inObj, values );
 }
 
+
+void PvdMetaDataBinding::originShift( PvdDataStream& inStream, const PxScene* inScene, PxVec3 shift )
+{
+	inStream.originShift(inScene, shift);
+}
+
 template<typename TReadDataType>
 struct ParticleFluidUpdater
 {
@@ -1189,22 +1374,22 @@ struct ParticleFluidUpdater
 	template<PxU32 TKey, typename TObjectType, typename TPropertyType, PxU32 TEnableFlag>
 	void handleBuffer( const PxBufferPropertyInfo< TKey, TObjectType, PxStrideIterator<const TPropertyType>, TEnableFlag >& inProp, NamespacedName datatype )
 	{
-		PxU32 numValidParticles = mData.numValidParticles;
+		PxU32 nbValidParticles = mData.nbValidParticles;
 		PxU32 validParticleRange = mData.validParticleRange;
 		PxStrideIterator<const TPropertyType> iterator( inProp.get( &mData ) );
 		const PxU32* validParticleBitmap = mData.validParticleBitmap;
 		
-		if( numValidParticles == 0 || iterator.ptr() == NULL || inProp.isEnabled(mRdFlags) == false )
+		if( nbValidParticles == 0 || iterator.ptr() == NULL || inProp.isEnabled(mRdFlags) == false )
 			return;
 
 		// setup the pvd array
 		DataRef<const PxU8> propData;
-		mTempU8Array.resize(numValidParticles * sizeof(TPropertyType));
+		mTempU8Array.resize(nbValidParticles * sizeof(TPropertyType));
 		TPropertyType* tmpArray  = reinterpret_cast<TPropertyType*>(mTempU8Array.begin());
 		propData = DataRef<const PxU8>( mTempU8Array.begin(), mTempU8Array.size() );
-		if(numValidParticles == validParticleRange)
+		if(nbValidParticles == validParticleRange)
 		{
-			for ( PxU32 idx = 0; idx < numValidParticles; ++idx )
+			for ( PxU32 idx = 0; idx < nbValidParticles; ++idx )
 				tmpArray[idx] = iterator[idx];
 		}
 		else
@@ -1218,7 +1403,7 @@ struct ParticleFluidUpdater
 					tmpArray[tIdx++] = iterator[w<<5|Ps::lowestSetBit(b)];
 				}
 			}
-			PX_ASSERT(tIdx == numValidParticles);
+			PX_ASSERT(tIdx == nbValidParticles);
 		}
 		mStream.setPropertyValue( mInstanceId, inProp.mName, propData, datatype );
 	}
@@ -1233,6 +1418,9 @@ struct ParticleFluidUpdater
 	{
 		handleBuffer( inProp, getPvdNamespacedNameForType<TStorageType>() );
 	}
+
+private:
+	ParticleFluidUpdater& operator=(const ParticleFluidUpdater&);
 };
 
 
@@ -1254,11 +1442,18 @@ void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxPar
 	PxParticleSystemGeneratedValues values( &inObj );
 	inStream.setPropertyMessage( &inObj, values );
 }
+
 void PvdMetaDataBinding::sendArrays( PvdDataStream& inStream, const PxParticleSystem& inObj, PxParticleReadData& inData, PxU32 inFlags )
 {
+	inStream.setPropertyValue( &inObj, "NbParticles", inData.nbValidParticles);
+	inStream.setPropertyValue( &inObj, "ValidParticleRange", inData.validParticleRange);
+	if(inData.validParticleRange > 0)
+	inStream.setPropertyValue( &inObj, "ValidParticleBitmap", inData.validParticleBitmap, (inData.validParticleRange >> 5)+1 );
+
 	ParticleFluidUpdater<PxParticleReadData> theUpdater( inData, inStream, (const PxActor*)&inObj, inFlags, mBindingData->mTempU8Array );
 	visitParticleSystemBufferProperties( makePvdPropertyFilter( theUpdater ) );
 }
+
 void PvdMetaDataBinding::destroyInstance( PvdDataStream& inStream, const PxParticleSystem& inObj, const PxScene& ownerScene )
 {
 	removeSceneGroupProperty( inStream, "ParticleSystems", inObj, ownerScene );
@@ -1281,12 +1476,19 @@ void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxPar
 	PxParticleFluidGeneratedValues values( &inObj );
 	inStream.setPropertyMessage( &inObj, values );
 }
+
 void PvdMetaDataBinding::sendArrays( PvdDataStream& inStream, const PxParticleFluid& inObj, PxParticleFluidReadData& inData, PxU32 inFlags )
 {
+	inStream.setPropertyValue( &inObj, "NbParticles", inData.nbValidParticles);
+	inStream.setPropertyValue( &inObj, "ValidParticleRange", inData.validParticleRange);
+	if(inData.validParticleRange > 0)
+	inStream.setPropertyValue( &inObj, "ValidParticleBitmap", inData.validParticleBitmap, (inData.validParticleRange >> 5)+1 );
+
 	ParticleFluidUpdater<PxParticleFluidReadData> theUpdater( inData, inStream, (const PxActor*)&inObj, inFlags, mBindingData->mTempU8Array );
 	visitParticleSystemBufferProperties( makePvdPropertyFilter( theUpdater ) );
 	visitParticleFluidBufferProperties( makePvdPropertyFilter( theUpdater ) );
 }
+
 void PvdMetaDataBinding::destroyInstance( PvdDataStream& inStream, const PxParticleFluid& inObj, const PxScene& ownerScene )
 {
 	removeSceneGroupProperty( inStream, "ParticleFluids", inObj, ownerScene );
@@ -1345,13 +1547,13 @@ void PvdMetaDataBinding::updateDynamicActorsAndArticulations( PvdDataStream& inS
 {
 	PX_COMPILE_TIME_ASSERT( sizeof( PxRigidDynamicUpdateBlock ) == 14 * 4 );
 	{
-		PxU32 actorCount = inScene->getNbActors( PxActorTypeSelectionFlag::eRIGID_DYNAMIC );
+		PxU32 actorCount = inScene->getNbActors( PxActorTypeFlag::eRIGID_DYNAMIC );
 		if ( actorCount )
 		{
 			inStream.beginPropertyMessageGroup<PxRigidDynamicUpdateBlock>();
 			mBindingData->mActors.resize( actorCount );
 			PxActor** theActors = mBindingData->mActors.begin();
-			inScene->getActors( PxActorTypeSelectionFlag::eRIGID_DYNAMIC, theActors, actorCount );
+			inScene->getActors( PxActorTypeFlag::eRIGID_DYNAMIC, theActors, actorCount );
 			updateActor<PxRigidDynamicUpdateBlock>( inStream, reinterpret_cast<PxRigidDynamic**>( theActors ), actorCount, RigidDynamicUpdateOp(), *mBindingData );
 			inStream.endPropertyMessageGroup();
 		}
@@ -1399,8 +1601,8 @@ struct CollectionOperator
 	CollectionOperator( Array<PxU8>& ary, const TObjType& obj, PvdDataStream& stream ) : mTempArray( ary ), mObject( obj ), mStream( stream ) {}
 	void pushName( const char* ) {}
 	void popName() {}
-	template< typename TAccessor > void simpleProperty(PxU32 key, const TAccessor& ) {}
-	template< typename TAccessor > void flagsProperty(PxU32 key, const TAccessor&, const PxU32ToName* ) {}
+	template< typename TAccessor > void simpleProperty(PxU32 /*key*/, const TAccessor& ) {}
+	template< typename TAccessor > void flagsProperty(PxU32 /*key*/, const TAccessor&, const PxU32ToName* ) {}
 
 	template<typename TColType, typename TDataType, typename TCollectionProp >
 	void handleCollection( const TCollectionProp& prop, NamespacedName dtype, PxU32 countMultiplier = 1 )
@@ -1423,6 +1625,9 @@ struct CollectionOperator
 		PX_COMPILE_TIME_ASSERT( sizeof( TColType ) == sizeof( PxU32 ) );
 		handleCollection<TColType,PxU32>( prop, getPvdNamespacedNameForType<PxU32>() );
 	}
+
+private:
+	CollectionOperator& operator=(const CollectionOperator&);
 };
 
 #if PX_USE_CLOTH_API
@@ -1434,7 +1639,15 @@ struct PxClothFabricCollectionOperator : CollectionOperator<PxClothFabric>
 	template< PxU32 TKey, typename TObject, typename TColType >
 	void handleCollection( const PxReadOnlyCollectionPropertyInfo<TKey,TObject,TColType>& prop )
 	{
-		CollectionOperator<PxClothFabric>::handleCollection<TColType,TColType>( prop, getPvdNamespacedNameForType<TColType>(), sizeof( TColType ) );
+		//CollectionOperator<PxClothFabric>::handleCollection<TColType,TColType>( prop, getPvdNamespacedNameForType<TColType>(), sizeof( TColType ) );
+
+		// have to duplicate here because the cloth api expects buffer sizes
+		// in the number of elements, not the number of bytes
+		PxU32 count = prop.size( &mObject );
+		mTempArray.resize( count * sizeof( TColType ) );
+		TColType* start = reinterpret_cast<TColType*>( mTempArray.begin() );
+		prop.get( &mObject, start, count );	
+		mStream.setPropertyValue( &mObject, prop.mName, DataRef<const PxU8>( mTempArray.begin(), mTempArray.size() ), getPvdNamespacedNameForType<TColType>() );
 	}
 
 	//Enumerations or bitflags.
@@ -1444,6 +1657,9 @@ struct PxClothFabricCollectionOperator : CollectionOperator<PxClothFabric>
 		PX_COMPILE_TIME_ASSERT( sizeof( TColType ) == sizeof( PxU32 ) );
 		CollectionOperator<PxClothFabric>::handleCollection<TColType,PxU32>( prop, getPvdNamespacedNameForType<PxU32>() );
 	}
+
+private:
+	PxClothFabricCollectionOperator& operator=(const PxClothFabricCollectionOperator&);
 };
 
 void PvdMetaDataBinding::createInstance( PvdDataStream& inStream, const PxClothFabric& fabric, const PxPhysics& ownerPhysics )
@@ -1457,9 +1673,14 @@ void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxClo
 {
 	PxClothFabricCollectionOperator op( mBindingData->mTempU8Array, fabric, inStream );
 	visitInstancePvdProperties<PxClothFabric>( op );
-
+	
 	PxClothFabricGeneratedValues values( &fabric );
 	inStream.setPropertyMessage( &fabric, values );
+
+	PxU32 count = fabric.getNbPhases();
+	PxClothFabricPhase* phases = mBindingData->allocateTemp<PxClothFabricPhase>( count );
+	if ( count ) fabric.getPhases( phases, count );
+	inStream.setPropertyValue( &fabric, "Phases", DataRef<const PxU8>( (PxU8*)phases, sizeof(PxClothFabricPhase)*count), getPvdNamespacedNameForType<PxClothFabricPhase>() );	
 }
 
 void PvdMetaDataBinding::destroyInstance( PvdDataStream& inStream, const PxClothFabric& fabric, const PxPhysics& ownerPhysics )
@@ -1482,10 +1703,15 @@ void PvdMetaDataBinding::createInstance( PvdDataStream& inStream, const PxCloth&
 void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxCloth& cloth )
 {
 	sendSimpleProperties( inStream, cloth );
+	sendParticleAccelerations( inStream, cloth );
 	sendMotionConstraints( inStream, cloth );
 	sendCollisionSpheres( inStream, cloth );
+	sendCollisionSpheres( inStream, cloth, true );
+	sendCollisionTriangles( inStream, cloth );
 	sendVirtualParticles( inStream, cloth );
 	sendSeparationConstraints( inStream, cloth );
+	sendSelfCollisionIndices( inStream, cloth );
+	sendRestPositions( inStream, cloth );
 }
 void PvdMetaDataBinding::sendSimpleProperties( PvdDataStream& inStream, const PxCloth& cloth )
 {
@@ -1500,28 +1726,391 @@ void PvdMetaDataBinding::sendMotionConstraints( PvdDataStream& inStream, const P
 	inStream.setPropertyValue( &cloth, "MotionConstraints", mBindingData->tempToRef(), getPvdNamespacedNameForType<PvdPositionAndRadius>() );
 }
 
+void PvdMetaDataBinding::sendRestPositions( PvdDataStream& inStream, const PxCloth& cloth )
+{
+	PxU32 count = cloth.getNbRestPositions();
+	PxVec4* positions = mBindingData->allocateTemp<PxVec4>( count );
+	if ( count ) cloth.getRestPositions( positions );
+	inStream.setPropertyValue( &cloth, "RestPositions", mBindingData->tempToRef(), getPvdNamespacedNameForType<PxVec4>() );
+}
+
+void PvdMetaDataBinding::sendParticleAccelerations( PvdDataStream& inStream, const PxCloth& cloth )
+{
+	PxU32 count = cloth.getNbParticleAccelerations();
+	PxVec4* accelerations = mBindingData->allocateTemp<PxVec4>( count );
+	if ( count ) cloth.getParticleAccelerations( accelerations );
+	inStream.setPropertyValue( &cloth, "ParticleAccelerations", mBindingData->tempToRef(), getPvdNamespacedNameForType<PxVec4>() );
+}
+
+void PvdMetaDataBinding::sendSelfCollisionIndices( PvdDataStream& inStream, const PxCloth& cloth )
+{
+	PxU32 count = cloth.getNbSelfCollisionIndices();
+	PxU32* selfCollisionIndices = mBindingData->allocateTemp<PxU32>( count );
+	if ( count ) cloth.getSelfCollisionIndices( selfCollisionIndices );
+	inStream.setPropertyValue( &cloth, "SelfCollisionIndices", mBindingData->tempToRef(), getPvdNamespacedNameForType<PxU32>() );
+}
+
 void PvdMetaDataBinding::sendCollisionSpheres( PvdDataStream& inStream, const PxCloth& cloth, bool sendPairs )
 {
 	PxU32 numSpheres = cloth.getNbCollisionSpheres();
-	PxU32 numIndices = 2*cloth.getNbCollisionSpherePairs();
+	PxU32 numIndices = 2*cloth.getNbCollisionCapsules();
 	PxU32 numPlanes = cloth.getNbCollisionPlanes();
 	PxU32 numConvexes = cloth.getNbCollisionConvexes();
+	PxU32 numTriangles = cloth.getNbCollisionTriangles();
+
 	PxU32 sphereBytes = numSpheres * sizeof( PxClothCollisionSphere );
 	PxU32 pairBytes = numIndices * sizeof( PxU32 );
 	PxU32 planesBytes = numPlanes * sizeof(PxClothCollisionPlane);
 	PxU32 convexBytes = numConvexes * sizeof(PxU32);
+	PxU32 triangleBytes = numTriangles * sizeof(PxClothCollisionTriangle);
 
-	mBindingData->mTempU8Array.resize( sphereBytes + pairBytes + planesBytes + convexBytes );
+	mBindingData->mTempU8Array.resize( sphereBytes + pairBytes + planesBytes + convexBytes + triangleBytes);
 	PxU8* bufferStart = mBindingData->mTempU8Array.begin();
-	PxClothCollisionSphere* sphereBuffer = reinterpret_cast<PxClothCollisionSphere*>( mBindingData->mTempU8Array.begin() );
-	PxU32* indexBuffer = reinterpret_cast<PxU32*>(sphereBuffer + numSpheres);
+	PxClothCollisionSphere* spheresBuffer = reinterpret_cast<PxClothCollisionSphere*>( mBindingData->mTempU8Array.begin() );
+	PxU32* indexBuffer = reinterpret_cast<PxU32*>(spheresBuffer + numSpheres);
 	PxClothCollisionPlane* planeBuffer = reinterpret_cast<PxClothCollisionPlane*>(indexBuffer + numIndices);
 	PxU32* convexBuffer = reinterpret_cast<PxU32*>(planeBuffer + numPlanes);
+	PxClothCollisionTriangle* trianglesBuffer = reinterpret_cast<PxClothCollisionTriangle*>(convexBuffer + numConvexes);
 
-	cloth.getCollisionData( sphereBuffer, indexBuffer, planeBuffer, convexBuffer );
+	cloth.getCollisionData( spheresBuffer, indexBuffer, planeBuffer, convexBuffer, trianglesBuffer );
 	inStream.setPropertyValue( &cloth, "CollisionSpheres", DataRef<const PxU8>( bufferStart, sphereBytes ), getPvdNamespacedNameForType<PvdPositionAndRadius>() );
 	if ( sendPairs )
 		inStream.setPropertyValue( &cloth, "CollisionSpherePairs", DataRef<const PxU8>( bufferStart + sphereBytes, pairBytes ), getPvdNamespacedNameForType<PxU32>() );
+}
+
+// begin code to generate triangle mesh from cloth convex planes
+
+namespace
+{
+	PxReal det(PxVec4 v0, PxVec4 v1, PxVec4 v2, PxVec4 v3)
+	{
+		const PxVec3& d0 = reinterpret_cast<const PxVec3&>(v0);
+		const PxVec3& d1 = reinterpret_cast<const PxVec3&>(v1);
+		const PxVec3& d2 = reinterpret_cast<const PxVec3&>(v2);
+		const PxVec3& d3 = reinterpret_cast<const PxVec3&>(v3);
+
+		return v0.w * d1.cross(d2).dot(d3)
+			- v1.w * d0.cross(d2).dot(d3)
+			+ v2.w * d0.cross(d1).dot(d3)
+			- v3.w * d0.cross(d1).dot(d2);
+	}
+
+	PxVec3 intersect(PxVec4 p0, PxVec4 p1, PxVec4 p2)
+	{
+		const PxVec3& d0 = reinterpret_cast<const PxVec3&>(p0);
+		const PxVec3& d1 = reinterpret_cast<const PxVec3&>(p1);
+		const PxVec3& d2 = reinterpret_cast<const PxVec3&>(p2);
+
+		return (p0.w * d1.cross(d2) 
+			  + p1.w * d2.cross(d0) 
+			  + p2.w * d0.cross(d1))
+			  / d0.dot(d2.cross(d1));
+	}
+
+	const PxU16 sInvalid = PxU16(-1);
+
+	// restriction: only supports a single patch per vertex.
+	struct HalfedgeMesh
+	{
+		struct Halfedge
+		{
+			Halfedge(PxU16 vertex = sInvalid, PxU16 face = sInvalid, 
+				PxU16 next = sInvalid, PxU16 prev = sInvalid)
+				: mVertex(vertex), mFace(face), mNext(next), mPrev(prev)
+			{}
+
+			PxU16 mVertex; // to
+			PxU16 mFace; // left
+			PxU16 mNext; // ccw
+			PxU16 mPrev; // cw
+		};
+
+		PxU16 findHalfedge(PxU16 v0, PxU16 v1)
+		{
+			PxU16 h = mVertices[v0], start = h;
+			while(h != sInvalid && mHalfedges[h].mVertex != v1)
+			{
+				h = mHalfedges[PxU32(h ^ 1)].mNext;
+				if(h == start) 
+					return sInvalid;
+			}
+			return h;
+		}
+
+		void connect(PxU16 h0, PxU16 h1)
+		{
+			mHalfedges[h0].mNext = h1;
+			mHalfedges[h1].mPrev = h0;
+		}
+
+		void addTriangle(PxU16 v0, PxU16 v1, PxU16 v2)
+		{
+			// add new vertices
+			PxU16 n = PxU16(PxMax(v0, PxMax(v1, v2))+1);
+			if(mVertices.size() < n)
+				mVertices.resize(n, sInvalid);
+
+			// collect halfedges, prev and next of triangle
+			PxU16 verts[] = { v0, v1, v2 };
+			PxU16 handles[3], prev[3], next[3];
+			for(PxU16 i=0; i<3; ++i)
+			{
+				PxU16 j = PxU16((i+1)%3);
+				PxU16 h = findHalfedge(verts[i], verts[j]);
+				if(h == sInvalid)
+				{
+					// add new edge
+					h = Ps::to16(mHalfedges.size());
+					mHalfedges.pushBack(Halfedge(verts[j]));
+					mHalfedges.pushBack(Halfedge(verts[i]));
+				}
+				handles[i] = h;
+				prev[i] = mHalfedges[h].mPrev;
+				next[i] = mHalfedges[h].mNext;
+			}
+
+			// patch connectivity
+			for(PxU16 i=0; i<3; ++i)
+			{
+				PxU16 j = PxU16((i+1)%3);
+
+				mHalfedges[handles[i]].mFace = Ps::to16(mFaces.size());
+
+				// connect prev and next
+				connect(handles[i], handles[j]);
+
+				if(next[j] == sInvalid) // new next edge, connect opposite
+					connect(PxU16(handles[j]^1), next[i]!=sInvalid ? next[i] : PxU16(handles[i]^1));
+
+				if(prev[i] == sInvalid) // new prev edge, connect opposite
+					connect(prev[j]!=sInvalid ? prev[j] : PxU16(handles[j]^1), PxU16(handles[i]^1));
+
+				// prev is boundary, update middle vertex
+				if(mHalfedges[PxU32(handles[i]^1)].mFace == sInvalid)
+					mVertices[verts[j]] = PxU16(handles[i]^1);
+			}
+
+			mFaces.pushBack(handles[2]);
+		}
+
+		PxU16 removeTriangle(PxU16 f)
+		{
+			PxU16 result = sInvalid;
+
+			for(PxU16 i=0, h = mFaces[f]; i<3; ++i)
+			{
+				PxU16 v0 = mHalfedges[PxU32(h^1)].mVertex;
+				PxU16 v1 = mHalfedges[PxU32(h)].mVertex;
+
+				mHalfedges[h].mFace = sInvalid;
+
+				if(mHalfedges[PxU32(h^1)].mFace == sInvalid) // was boundary edge, remove
+				{
+					// update halfedge connectivity
+					connect(mHalfedges[h].mPrev, mHalfedges[PxU32(h^1)].mNext);
+					connect(mHalfedges[PxU32(h^1)].mPrev, mHalfedges[h].mNext);
+
+					// update vertex boundary or delete
+					mVertices[v0] = mVertices[v0] == h ? sInvalid : mHalfedges[PxU32(h^1)].mNext;
+					mVertices[v1] = mVertices[v1] == (h^1) ? sInvalid : mHalfedges[h].mNext;
+				} 
+				else 
+				{
+					mVertices[v0] = h; // update vertex boundary
+					result = v1;
+				}
+
+				h = mHalfedges[h].mNext;
+			}
+
+			mFaces[f] = sInvalid;
+			return result;
+		}
+
+		// true if vertex v is in front of face f
+		bool visible(PxU16 v, PxU16 f)
+		{
+			PxU16 h = mFaces[f];
+			if(h == sInvalid)
+				return false;
+
+			PxU16 v0 = mHalfedges[h].mVertex;
+			h = mHalfedges[h].mNext;
+			PxU16 v1 = mHalfedges[h].mVertex;
+			h = mHalfedges[h].mNext;
+			PxU16 v2 = mHalfedges[h].mVertex;
+			h = mHalfedges[h].mNext;
+
+			return det(mPoints[v], mPoints[v0], mPoints[v1], mPoints[v2]) < 0.0f;
+		}
+
+		shdfnd::Array<Halfedge> mHalfedges;
+		shdfnd::Array<PxU16> mVertices; // vertex -> (boundary) halfedge
+		shdfnd::Array<PxU16> mFaces; // face -> halfedge
+		shdfnd::Array<PxVec4> mPoints;
+	};
+}
+
+struct ConvexMeshBuilder
+{
+	ConvexMeshBuilder(const PxVec4* planes)
+		: mPlanes(planes)
+	{}
+
+	void operator()(PxU32 mask, float scale=1.0f);
+
+	const PxVec4* mPlanes;
+	shdfnd::Array<PxVec3> mVertices;
+	shdfnd::Array<PxU16> mIndices;
+};
+
+void ConvexMeshBuilder::operator()(PxU32 planeMask, float scale)
+{
+	PxU16 numPlanes = Ps::to16(shdfnd::bitCount(planeMask));
+
+	if (numPlanes == 1)
+	{
+		PxTransform t = PxTransformFromPlaneEquation(reinterpret_cast<const PxPlane&>(mPlanes[lowestSetBit(planeMask)]));
+
+		if (!t.isValid())
+			return;
+
+		const PxU16 indices[] = { 0, 1, 2, 0, 2, 3 };
+		const PxVec3 vertices[] = { 
+			PxVec3(0.0f,  scale,  scale), 
+			PxVec3(0.0f, -scale,  scale),
+			PxVec3(0.0f, -scale, -scale),			
+			PxVec3(0.0f,  scale, -scale) };
+
+			PxU16 baseIndex = Ps::to16(mVertices.size());
+
+			for (PxU32 i=0; i < 4; ++i)
+				mVertices.pushBack(t.transform(vertices[i]));
+
+			for (PxU32 i=0; i < 6; ++i)
+				mIndices.pushBack(PxU16(indices[i] + baseIndex));
+
+			return;
+	}
+
+	if(numPlanes < 4)
+		return; // todo: handle degenerate cases
+
+	HalfedgeMesh mesh;
+
+	// gather points (planes, that is)
+	mesh.mPoints.reserve(numPlanes);
+	for(; planeMask; planeMask &= planeMask-1)
+		mesh.mPoints.pushBack(mPlanes[shdfnd::lowestSetBit(planeMask)]);
+
+	// initialize to tetrahedron
+	mesh.addTriangle(0, 1, 2);
+	mesh.addTriangle(0, 3, 1);
+	mesh.addTriangle(1, 3, 2);
+	mesh.addTriangle(2, 3, 0);
+
+	// flip if inside-out
+	if(mesh.visible(3, 0))
+		shdfnd::swap(mesh.mPoints[0], mesh.mPoints[1]);
+
+	// iterate through remaining points
+	for(PxU16 i=4; i<mesh.mPoints.size(); ++i)
+	{
+		// remove any visible triangle
+		PxU16 v0 = sInvalid;
+		for(PxU16 j=0; j<mesh.mFaces.size(); ++j)
+		{
+			if(mesh.visible(i, j))
+				v0 = PxMin(v0, mesh.removeTriangle(j));
+		}
+
+		if(v0 == sInvalid)
+			continue;
+
+		// tesselate hole
+		PxU16 start = v0;
+		do {
+			PxU16 h = mesh.mVertices[v0];
+			PxU16 v1 = mesh.mHalfedges[h].mVertex;
+			mesh.addTriangle(v0, v1, i);
+			v0 = v1;
+		} while(v0 != start);
+	}
+
+	// convert triangles to vertices (intersection of 3 planes)
+	shdfnd::Array<PxU32> face2Vertex(mesh.mFaces.size());
+	for(PxU32 i=0; i<mesh.mFaces.size(); ++i)
+	{
+		face2Vertex[i] = mVertices.size();
+
+		PxU16 h = mesh.mFaces[i];
+		if(h == sInvalid)
+			continue;
+
+		PxU16 v0 = mesh.mHalfedges[h].mVertex;
+		h = mesh.mHalfedges[h].mNext;
+		PxU16 v1 = mesh.mHalfedges[h].mVertex;
+		h = mesh.mHalfedges[h].mNext;
+		PxU16 v2 = mesh.mHalfedges[h].mVertex;
+
+		mVertices.pushBack(intersect(mesh.mPoints[v0], mesh.mPoints[v1], mesh.mPoints[v2]));
+	}
+
+	// convert vertices to polygons (face one-ring)
+	for(PxU32 i=0; i<mesh.mVertices.size(); ++i)
+	{
+		PxU16 h = mesh.mVertices[i];
+		if(h == sInvalid)
+			continue;
+
+		PxU16 v0 = Ps::to16(face2Vertex[mesh.mHalfedges[h].mFace]);
+		h = PxU16(mesh.mHalfedges[h].mPrev^1);
+		PxU16 v1 = Ps::to16(face2Vertex[mesh.mHalfedges[h].mFace]);
+
+		while(true)
+		{
+			h = PxU16(mesh.mHalfedges[h].mPrev^1);
+			PxU16 v2 = Ps::to16(face2Vertex[mesh.mHalfedges[h].mFace]);
+
+			if(v0 == v2) 
+				break;
+
+			mIndices.pushBack(v0);
+			mIndices.pushBack(v2);
+			mIndices.pushBack(v1);
+
+			v1 = v2; 
+		}
+	}
+}
+
+void PvdMetaDataBinding::sendCollisionTriangles( PvdDataStream& inStream, const PxCloth& cloth )
+{
+	PxU32 numSpheres = cloth.getNbCollisionSpheres();
+	PxU32 numIndices = 2*cloth.getNbCollisionCapsules();
+	PxU32 numPlanes = cloth.getNbCollisionPlanes();
+	PxU32 numConvexes = cloth.getNbCollisionConvexes();
+	PxU32 numTriangles = cloth.getNbCollisionTriangles();
+
+	PxU32 sphereBytes = numSpheres * sizeof( PxClothCollisionSphere );
+	PxU32 pairBytes = numIndices * sizeof( PxU32 );
+	PxU32 planesBytes = numPlanes * sizeof(PxClothCollisionPlane);
+	PxU32 convexBytes = numConvexes * sizeof(PxU32);
+	PxU32 triangleBytes = numTriangles * sizeof(PxClothCollisionTriangle);
+
+	mBindingData->mTempU8Array.resize( sphereBytes + pairBytes + planesBytes + convexBytes + triangleBytes);
+	PxU8* bufferStart = mBindingData->mTempU8Array.begin();
+	PxClothCollisionSphere* spheresBuffer = reinterpret_cast<PxClothCollisionSphere*>( mBindingData->mTempU8Array.begin() );
+	PxU32* indexBuffer = reinterpret_cast<PxU32*>(spheresBuffer + numSpheres);
+	PxClothCollisionPlane* planeBuffer = reinterpret_cast<PxClothCollisionPlane*>(indexBuffer + numIndices);
+	PxU32* convexBuffer = reinterpret_cast<PxU32*>(planeBuffer + numPlanes);
+	PxClothCollisionTriangle* trianglesBuffer = reinterpret_cast<PxClothCollisionTriangle*>(convexBuffer + numConvexes);
+
+	cloth.getCollisionData( spheresBuffer, indexBuffer, planeBuffer, convexBuffer, trianglesBuffer );
+
+	inStream.setPropertyValue( &cloth, "CollisionPlanes", DataRef<const PxU8>(bufferStart + sphereBytes + pairBytes,  planesBytes), getPvdNamespacedNameForType<PvdPositionAndRadius>() );
+	inStream.setPropertyValue( &cloth, "CollisionConvexMasks", DataRef<const PxU8>(bufferStart + sphereBytes + pairBytes + planesBytes, convexBytes), getPvdNamespacedNameForType<PxU32>() );
+	inStream.setPropertyValue( &cloth, "CollisionTriangles", DataRef<const PxU8>(bufferStart + sphereBytes + pairBytes + planesBytes + convexBytes,  triangleBytes), getPvdNamespacedNameForType<PxVec3>() );
 }
 
 void PvdMetaDataBinding::sendVirtualParticles( PvdDataStream& inStream, const PxCloth& cloth )
@@ -1538,7 +2127,7 @@ void PvdMetaDataBinding::sendVirtualParticles( PvdDataStream& inStream, const Px
 	PxU32* indexStart = reinterpret_cast<PxU32*>( dataStart );
 	if (numIndexes)
 		cloth.getVirtualParticles( indexStart );
-	inStream.setPropertyValue( &cloth, "VirtualParticleTriangleAndWeightIndexes", DataRef<const PxU8>( dataStart, numIndexBytes ), getPvdNamespacedNameForType<PxU32>() );
+	inStream.setPropertyValue( &cloth, "VirtualParticles", DataRef<const PxU8>( dataStart, numIndexBytes ), getPvdNamespacedNameForType<PxU32>() );
 
 	PxVec3* weightStart = reinterpret_cast<PxVec3*>( dataStart );
 	if (numWeights)
@@ -1561,11 +2150,11 @@ void PvdMetaDataBinding::sendSeparationConstraints( PvdDataStream& inStream, con
 
 void PvdMetaDataBinding::updateCloths( PvdDataStream& inStream, const PxScene& inScene )
 {
-	PxU32 actorCount = inScene.getNbActors( PxActorTypeSelectionFlag::eCLOTH );
+	PxU32 actorCount = inScene.getNbActors( PxActorTypeFlag::eCLOTH );
 	if ( actorCount  == 0 ) return;
 	mBindingData->mActors.resize( actorCount );
 	PxActor** theActors = mBindingData->mActors.begin();
-	inScene.getActors( PxActorTypeSelectionFlag::eCLOTH, theActors, actorCount );
+	inScene.getActors( PxActorTypeFlag::eCLOTH, theActors, actorCount );
 	PX_COMPILE_TIME_ASSERT( sizeof( PxClothParticle ) == sizeof( PxVec3 ) + sizeof( PxF32 ) );
 	for ( PxU32 idx =0; idx < actorCount; ++idx )
 	{
@@ -1574,7 +2163,7 @@ void PvdMetaDataBinding::updateCloths( PvdDataStream& inStream, const PxScene& i
 		bool wasSleeping = mBindingData->mSleepingActors.contains( theCloth );
 		if ( isSleeping == false || isSleeping != wasSleeping )
 		{
-			PxClothReadData* theData = theCloth->lockClothReadData();
+			PxClothParticleData* theData = theCloth->lockParticleData();
 			if ( theData != NULL )
 			{
 				PxU32 numBytes = sizeof( PxClothParticle ) * theCloth->getNbParticles();
@@ -1603,6 +2192,124 @@ void PvdMetaDataBinding::destroyInstance( PvdDataStream& inStream, const PxCloth
 
 #endif // PX_USE_CLOTH_API
 
+#define ENABLE_AGGREGATE_PVD_SUPPORT 1
+#ifdef ENABLE_AGGREGATE_PVD_SUPPORT
+
+void PvdMetaDataBinding::createInstance( PvdDataStream& inStream, const PxAggregate& inObj, const PxScene& ownerScene, BufferRegistrar&  )
+{
+	addSceneGroupProperty( inStream, "Aggregates", inObj, ownerScene );
+	sendAllProperties( inStream, inObj );
+}
+
+void PvdMetaDataBinding::sendAllProperties( PvdDataStream& inStream, const PxAggregate& inObj )
+{
+	PxAggregateGeneratedValues values( &inObj );
+	inStream.setPropertyMessage( &inObj, values );
+}
+
+void PvdMetaDataBinding::destroyInstance( PvdDataStream& inStream, const PxAggregate& inObj, const PxScene& ownerScene )
+{
+	removeSceneGroupProperty( inStream, "Aggregates", inObj, ownerScene );
+}
+
+template<bool bPushBack>
+class ChangeOjectRefCmd : public PvdDataStream::PvdCommand
+{
+	ChangeOjectRefCmd &operator=(const ChangeOjectRefCmd&) { PX_ASSERT(0); return *this; } //PX_NOCOPY doesn't work for local classes
+public:
+
+	const void* instance;
+	String propName;
+	const void* propObj;
+
+	ChangeOjectRefCmd(const void* inInst, String inName, const void* inObj):instance(inInst), propName(inName), propObj(inObj)
+	{
+	}
+
+	//Assigned is needed for copying
+	ChangeOjectRefCmd(const ChangeOjectRefCmd& other)
+		:instance(other.instance), propName(other.propName), propObj(other.propObj)
+	{					
+	}
+
+	virtual bool canRun(PvdInstanceDataStream &inStream )
+	{
+		PX_ASSERT(inStream.isInstanceValid(instance));
+		return inStream.isInstanceValid(propObj);
+	}
+	virtual void run( PvdInstanceDataStream &inStream )
+	{
+		if(!inStream.isInstanceValid(instance))
+			return;
+
+		if(bPushBack)
+		{
+			if(inStream.isInstanceValid(propObj))	
+				inStream.pushBackObjectRef( instance, propName, propObj );
+		}
+		else
+		{
+			//the called function will assert if propobj is already removed
+			inStream.removeObjectRef( instance, propName, propObj );
+		}
+	}
+};
+
+template<class Command>
+void changeAggregateSubActors( PvdDataStream& inStream, const PxAggregate& inObj, const PxActor& inActor )
+{
+	const PxArticulationLink* link = inActor.isArticulationLink();
+	String propName = NULL;
+	const void* object = NULL;
+	if( link == NULL )
+	{
+		propName = "Actors";
+		object = &inActor;
+	}
+	else if( link->getInboundJoint() == NULL)
+	{
+		propName = "Articulations";
+		object = &link->getArticulation();
+	}
+	else
+		return;
+	
+	Command* cmd = PX_PLACEMENT_NEW(inStream.allocateMemForCmd(sizeof(Command)),
+		Command)( &inObj, propName, object);
+	
+	if(cmd->canRun( inStream ))
+		cmd->run( inStream );
+	else
+		inStream.pushPvdCommand( *cmd );
+}
+void PvdMetaDataBinding::detachAggregateActor( PvdDataStream& inStream, const PxAggregate& inObj, const PxActor& inActor )
+{
+	typedef ChangeOjectRefCmd<false> RemoveOjectRefCmd;
+	changeAggregateSubActors< RemoveOjectRefCmd >(inStream, inObj, inActor);
+}
+
+void PvdMetaDataBinding::attachAggregateActor( PvdDataStream& inStream, const PxAggregate& inObj, const PxActor& inActor )
+{
+	typedef ChangeOjectRefCmd<true> PushbackOjectRefCmd;
+	changeAggregateSubActors< PushbackOjectRefCmd >(inStream, inObj, inActor);
+}
+#else
+void PvdMetaDataBinding::createInstance( PvdDataStream&,  const PxAggregate&, const PxScene&, BufferRegistrar&  )
+{}
+
+void PvdMetaDataBinding::sendAllProperties( PvdDataStream&, const PxAggregate& )
+{}
+
+void PvdMetaDataBinding::destroyInstance( PvdDataStream&, const PxAggregate&, const PxScene& )
+{}
+
+void PvdMetaDataBinding::detachAggregateActor( PvdDataStream&, const PxAggregate&, const PxActor& )
+{}
+
+void PvdMetaDataBinding::attachAggregateActor( PvdDataStream&, const PxAggregate&, const PxActor& )
+{}
+#endif
+
 template <typename TDataType>
 void sendSceneArray( PvdDataStream& inStream, const PxScene& inScene, const Ps::Array<TDataType>& inArray, const char* propName )
 {
@@ -1625,10 +2332,11 @@ void sendSceneArray( PvdDataStream& inStream, const PxScene& inScene, const Ps::
 		ScopedPropertyValueSender<PvdSqHit, 32> sender( inStream, &inScene, propName );
 		for ( PxU32 i = 0; i < inArray.size(); ++i )
 		{
-			if(!inStream.isInstanceValid(inArray[i].shape))
+			if(!inStream.isInstanceValid(inArray[i].shape) || !inStream.isInstanceValid(inArray[i].actor))
 			{
 				PvdSqHit hit = inArray[i];
-				hit.shape = NULL;;
+				hit.shape = NULL;
+				hit.actor = NULL;
 				sender.append( hit );
 			}
 			else
@@ -1641,7 +2349,7 @@ void PvdMetaDataBinding::sendSceneQueries( PvdDataStream& inStream, const PxScen
 	if(!hasValue)
 		return;
 
-	const physx::NpScene& scene = reinterpret_cast<const NpScene&>(inScene);
+	const physx::NpScene& scene = static_cast<const NpScene&>(inScene);
 
 	VisualDebugger& sdkPvd = *static_cast<VisualDebugger*>(NpPhysics::getInstance().getVisualDebugger());
 	
@@ -1689,8 +2397,13 @@ void PvdMetaDataBinding::sendSceneQueries( PvdDataStream& inStream, const PxScen
 			SEND_PVD_GEOM_TYPE( PxGeometryType::eCAPSULE,    PxCapsuleGeometry,    PxCapsuleGeometryGeneratedValues )
 			SEND_PVD_GEOM_TYPE( PxGeometryType::eCONVEXMESH, PxConvexMeshGeometry, PxConvexMeshGeometryGeneratedValues )
 #undef SEND_PVD_GEOM_TYPE
+		case PxGeometryType::ePLANE:
+		case PxGeometryType::eTRIANGLEMESH:
+		case PxGeometryType::eHEIGHTFIELD:
+		case PxGeometryType::eGEOMETRY_COUNT:
+		case PxGeometryType::eINVALID:
 			default:
-				PX_ASSERT( !"unsupported scene query geometry type" );
+				PX_ALWAYS_ASSERT_MESSAGE( "unsupported scene query geometry type" );
 				break;
 			}
 		}

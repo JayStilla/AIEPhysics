@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -44,7 +44,13 @@ namespace physx
 {
 namespace shdfnd
 {
-#ifndef PX_GNUC
+
+#if defined(PX_VC) 
+    #pragma warning(push)   
+	#pragma warning( disable : 4324 ) // Padding was added at the end of a structure because of a __declspec(align) value.
+#endif
+
+#if !defined(PX_GNUC) && !defined(PX_GHS)
 	__declspec(align(PX_SLIST_ALIGNMENT))
 #endif
 	class SListEntry
@@ -64,10 +70,15 @@ namespace shdfnd
 
 		SListEntry *mNext;
 	}
-#ifdef PX_GNUC
+#if defined(PX_GNUC) || defined(PX_GHS)
 	__attribute__ ((aligned(PX_SLIST_ALIGNMENT)));
+#else
+	;
 #endif
-;
+
+#if defined(PX_VC) 
+     #pragma warning(pop) 
+#endif
 
 	// template-less implementation
 	struct PX_FOUNDATION_API SListImpl

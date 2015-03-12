@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -51,8 +51,8 @@ namespace Cm
 		{}
 
 		//! Construct from two PxcVectors
-		PX_FORCE_INLINE SpatialVector(const PxVec3& linear, const PxVec3& angular)
-			: linear(linear), pad0(0.0f), angular(angular), pad1(0.0f)
+		PX_FORCE_INLINE SpatialVector(const PxVec3& lin, const PxVec3& ang)
+			: linear(lin), pad0(0.0f), angular(ang), pad1(0.0f)
 		{
 		}
 
@@ -72,7 +72,7 @@ namespace Cm
 		}
 
 
-		static SpatialVector zero() {	return SpatialVector(PxVec3(0),PxVec3(0)); }
+		static PX_FORCE_INLINE SpatialVector zero() {	return SpatialVector(PxVec3(0),PxVec3(0)); }
 
 		PX_FORCE_INLINE SpatialVector operator+(const SpatialVector& v) const
 		{
@@ -120,6 +120,11 @@ namespace Cm
 		PX_FORCE_INLINE bool isFinite() const
 		{
 			return linear.isFinite() && angular.isFinite();
+		}
+
+		PX_FORCE_INLINE Cm::SpatialVector scale(PxReal l, PxReal a) const
+		{
+			return Cm::SpatialVector(linear*l, angular*a);
 		}
 
 		PxVec3 linear;

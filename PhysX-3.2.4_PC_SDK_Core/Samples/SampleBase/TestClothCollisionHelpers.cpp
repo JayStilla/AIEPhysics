@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 #include "TestClothCollisionHelpers.h"
@@ -41,7 +41,7 @@
 
 //----------------------------------------------------------------------------//
 Test::ClothCollision::ClothCollision() :
-    mClothPose(PxVec3(0.0f), PxQuat::createIdentity())
+    mClothPose(PxVec3(0.0f), PxQuat(PxIdentity))
 {
 }
 
@@ -104,22 +104,6 @@ PxU32 Test::ClothCollision::addCapsule(const PxVec3& position1, PxReal radius1,
 }
 
 //----------------------------------------------------------------------------//
-// convert internal data to sdk cloth collision data
-bool Test::ClothCollision::generateClothCollisionData(PxClothCollisionData &collData) const
-{
-    if ( (mCapsuleIndices.size() % 2) != 0)
-        return false;
-
-	// convert to sdk cloth collision data
-	collData.numSpheres = mSpheres.size();
-	collData.spheres = mSpheres.begin();
-	collData.pairIndexBuffer = mCapsuleIndices.begin();
-    collData.numPairs = mCapsuleIndices.size() / 2;
-
-    return true;
-}
-
-//----------------------------------------------------------------------------//
 void Test::ClothCollision::setClothPose(const PxTransform &clothPose)
 {
     mClothPose = clothPose;
@@ -149,9 +133,21 @@ PxU32 Test::ClothCollision::getNbSpheres() const
 }
 
 //----------------------------------------------------------------------------//
+PxU32 Test::ClothCollision::getNbCapsules() const
+{
+	return mCapsuleIndices.size()/2;
+}
+
+//----------------------------------------------------------------------------//
 const PxClothCollisionSphere* Test::ClothCollision::getSpheres() const
 {
 	return mSpheres.begin();
+}
+
+//----------------------------------------------------------------------------//
+const PxU32* Test::ClothCollision::getCapsules() const
+{
+	return mCapsuleIndices.begin();
 }
 
 //----------------------------------------------------------------------------//

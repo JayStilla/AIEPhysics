@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -71,30 +71,30 @@ SampleCustomGravityCameraController::SampleCustomGravityCameraController(PxContr
 
 	mNbRecords = 0;
 
-	mTest = PxMat33::createIdentity();
+	mTest = PxMat33(PxIdentity);
 }
 
 void SampleCustomGravityCameraController::collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents)
 {
 	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_MOVE_FORWARD,	SCAN_CODE_FORWARD,		XKEY_W,		PS3KEY_W,		AKEY_UNKNOWN,	SCAN_CODE_FORWARD,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_FORWARD);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_MOVE_BACKWARD,	SCAN_CODE_BACKWARD,		XKEY_S,		PS3KEY_S,		AKEY_UNKNOWN,	SCAN_CODE_BACKWARD,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_BACKWARD);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_MOVE_LEFT,		SCAN_CODE_LEFT,			XKEY_A,		PS3KEY_A,		AKEY_UNKNOWN,	SCAN_CODE_LEFT,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_LEFT);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_MOVE_RIGHT,		SCAN_CODE_RIGHT,		XKEY_D,		PS3KEY_D,		AKEY_UNKNOWN,	SCAN_CODE_RIGHT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_RIGHT);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_SHIFT_SPEED,		SCAN_CODE_LEFT_SHIFT,	XKEY_SHIFT,	PS3KEY_SHIFT,	AKEY_UNKNOWN,	OSXKEY_SHIFT,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_SHIFT);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_JUMP,			SCAN_CODE_SPACE,		XKEY_SPACE,	PS3KEY_SPACE,	AKEY_UNKNOWN,	OSXKEY_SPACE,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_SPACE);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_MOVE_FORWARD,	SCAN_CODE_FORWARD,		XKEY_W,		X1KEY_W,		PS3KEY_W,		PS4KEY_W,		AKEY_UNKNOWN,	SCAN_CODE_FORWARD,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_FORWARD,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_MOVE_BACKWARD,	SCAN_CODE_BACKWARD,		XKEY_S,		X1KEY_S,		PS3KEY_S,		PS4KEY_S,		AKEY_UNKNOWN,	SCAN_CODE_BACKWARD,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_BACKWARD,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_MOVE_LEFT,		SCAN_CODE_LEFT,			XKEY_A,		X1KEY_A,		PS3KEY_A,		PS4KEY_A,		AKEY_UNKNOWN,	SCAN_CODE_LEFT,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_LEFT,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_MOVE_RIGHT,		SCAN_CODE_RIGHT,		XKEY_D,		X1KEY_D,		PS3KEY_D,		PS4KEY_D,		AKEY_UNKNOWN,	SCAN_CODE_RIGHT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_RIGHT,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_SHIFT_SPEED,		SCAN_CODE_LEFT_SHIFT,	XKEY_SHIFT,	X1KEY_SHIFT,	PS3KEY_SHIFT,	PS4KEY_SHIFT,	AKEY_UNKNOWN,	OSXKEY_SHIFT,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_SHIFT,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_JUMP,			SCAN_CODE_SPACE,		XKEY_SPACE,	X1KEY_SPACE,	PS3KEY_SPACE,	PS4KEY_SPACE,	AKEY_UNKNOWN,	OSXKEY_SPACE,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_SPACE,		WIIUKEY_UNKNOWN);
 
 	//analog mouse events
-	ANALOG_INPUT_EVENT_DEF(CAMERA_GAMEPAD_ROTATE_LEFT_RIGHT, GAMEPAD_ROTATE_SENSITIVITY,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X, LINUXKEY_UNKNOWN);
-	ANALOG_INPUT_EVENT_DEF(CAMERA_GAMEPAD_ROTATE_UP_DOWN, GAMEPAD_ROTATE_SENSITIVITY,		GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y, LINUXKEY_UNKNOWN);
-	ANALOG_INPUT_EVENT_DEF(CAMERA_GAMEPAD_MOVE_LEFT_RIGHT, GAMEPAD_DEFAULT_SENSITIVITY,		GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X, LINUXKEY_UNKNOWN);
-	ANALOG_INPUT_EVENT_DEF(CAMERA_GAMEPAD_MOVE_FORWARD_BACK, GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y, LINUXKEY_UNKNOWN);
+	ANALOG_INPUT_EVENT_DEF(CAMERA_GAMEPAD_ROTATE_LEFT_RIGHT, GAMEPAD_ROTATE_SENSITIVITY,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X, LINUXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_X);
+	ANALOG_INPUT_EVENT_DEF(CAMERA_GAMEPAD_ROTATE_UP_DOWN, GAMEPAD_ROTATE_SENSITIVITY,		GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y, LINUXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_Y);
+	ANALOG_INPUT_EVENT_DEF(CAMERA_GAMEPAD_MOVE_LEFT_RIGHT, GAMEPAD_DEFAULT_SENSITIVITY,		GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X, LINUXKEY_UNKNOWN,		GAMEPAD_LEFT_STICK_X);
+	ANALOG_INPUT_EVENT_DEF(CAMERA_GAMEPAD_MOVE_FORWARD_BACK, GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y, LINUXKEY_UNKNOWN,		GAMEPAD_LEFT_STICK_Y);
 
 	//digital gamepad events
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_JUMP,    GAMEPAD_SOUTH,	GAMEPAD_SOUTH,	GAMEPAD_SOUTH,	AKEY_UNKNOWN,	GAMEPAD_SOUTH,	GAMEPAD_SOUTH,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_JUMP,    GAMEPAD_SOUTH,	GAMEPAD_SOUTH,	GAMEPAD_SOUTH, GAMEPAD_SOUTH,	GAMEPAD_SOUTH,	AKEY_UNKNOWN,	GAMEPAD_SOUTH,	GAMEPAD_SOUTH,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_SOUTH);
 
     //touch events
-    TOUCH_INPUT_EVENT_DEF(CAMERA_JUMP,	"Jump",	AQUICK_BUTTON_1,	IQUICK_BUTTON_1);
+    TOUCH_INPUT_EVENT_DEF(CAMERA_JUMP,	"Jump",	AQUICK_BUTTON_1,	IQUICK_BUTTON_1, TOUCH_QUICK_BUTTON_1);
 
 }
 
@@ -172,7 +172,7 @@ static PxQuat rotationArc(const PxVec3& v0, const PxVec3& v1, bool& res)
 	if(s<0.001f)
 	{
 		res = false;
-		return PxQuat::createIdentity();
+		return PxQuat(PxIdentity);
 	}
 
 	PxVec3 p = (_v0.cross(_v1)) / s;
@@ -186,6 +186,8 @@ static PxQuat rotationArc(const PxVec3& v0, const PxVec3& v1, bool& res)
 
 void SampleCustomGravityCameraController::update(Camera& camera, PxReal dtime)
 {
+	PxSceneReadLock scopedLock(mBase.getActiveScene());
+
 	const PxExtendedVec3& currentPos = mCCT.getPosition();
 	const PxVec3 curPos = toVec3(currentPos);
 
@@ -251,7 +253,7 @@ void SampleCustomGravityCameraController::update(Camera& camera, PxReal dtime)
 
 
 		const PxF32 heightDelta = gJump.getHeight(dtime);
-//		printf("%f\n", heightDelta);
+//		shdfnd::printFormatted("%f\n", heightDelta);
 		PxVec3 upDisp = upVector;
 		if(heightDelta!=0.0f)
 			upDisp *= heightDelta;
@@ -260,16 +262,17 @@ void SampleCustomGravityCameraController::update(Camera& camera, PxReal dtime)
 		const PxVec3 disp = targetKeyDisplacement + targetPadDisplacement + upDisp;
 
 //upDisp.normalize();
-//printf("%f | %f | %f\n", upDisp.x, upDisp.y, upDisp.z);
-//		printf("%f | %f | %f\n", targetKeyDisplacement.x, targetKeyDisplacement.y, targetKeyDisplacement.z);
-//		printf("%f | %f | %f\n\n", targetPadDisplacement.x, targetPadDisplacement.y, targetPadDisplacement.z);
+//shdfnd::printFormatted("%f | %f | %f\n", upDisp.x, upDisp.y, upDisp.z);
+//		shdfnd::printFormatted("%f | %f | %f\n", targetKeyDisplacement.x, targetKeyDisplacement.y, targetKeyDisplacement.z);
+//		shdfnd::printFormatted("%f | %f | %f\n\n", targetPadDisplacement.x, targetPadDisplacement.y, targetPadDisplacement.z);
 
 		mCCT.setUpDirection(upVector);
-		const PxU32 flags = mCCT.move(disp, 0.001f, dtime, PxControllerFilters());
-		if(flags & PxControllerFlag::eCOLLISION_DOWN)
+//		const PxU32 flags = mCCT.move(disp, 0.001f, dtime, PxControllerFilters());
+		const PxU32 flags = mCCT.move(disp, 0.0f, dtime, PxControllerFilters());
+		if(flags & PxControllerCollisionFlag::eCOLLISION_DOWN)
 		{
 			gJump.stopJump();
-//			printf("Stop jump\n");
+//			shdfnd::printFormatted("Stop jump\n");
 		}
 	}
 
@@ -343,8 +346,7 @@ mTest = localToWorld;
 		mRightV = rot.column0;
 
 		camera.setView(PxTransform(view));
-		PxVec3 viewDir = camera.getViewDir();
-		PX_ASSERT(viewDir.isFinite());
+		PX_ASSERT(camera.getViewDir().isFinite());
 
 		////
 
@@ -375,14 +377,14 @@ mTest = localToWorld;
 	{
 		PxControllerState cctState;
 		mCCT.getState(cctState);
-		printf("\nCCT state:\n");
-		printf("delta:             %.02f | %.02f | %.02f\n", cctState.deltaXP.x, cctState.deltaXP.y, cctState.deltaXP.z);
-		printf("touchedShape:      %p\n", cctState.touchedShape);
-		printf("touchedObstacleHandle:   %d\n", cctState.touchedObstacleHandle);
-		printf("standOnAnotherCCT: %d\n", cctState.standOnAnotherCCT);
-		printf("standOnObstacle:   %d\n", cctState.standOnObstacle);
-		printf("isMovingUp:        %d\n", cctState.isMovingUp);
-		printf("collisionFlags:    %d\n", cctState.collisionFlags);
+		shdfnd::printFormatted("\nCCT state:\n");
+		shdfnd::printFormatted("delta:             %.02f | %.02f | %.02f\n", cctState.deltaXP.x, cctState.deltaXP.y, cctState.deltaXP.z);
+		shdfnd::printFormatted("touchedShape:      %p\n", cctState.touchedShape);
+		shdfnd::printFormatted("touchedObstacleHandle:   %d\n", cctState.touchedObstacleHandle);
+		shdfnd::printFormatted("standOnAnotherCCT: %d\n", cctState.standOnAnotherCCT);
+		shdfnd::printFormatted("standOnObstacle:   %d\n", cctState.standOnObstacle);
+		shdfnd::printFormatted("isMovingUp:        %d\n", cctState.isMovingUp);
+		shdfnd::printFormatted("collisionFlags:    %d\n", cctState.collisionFlags);
 	}
 
 }

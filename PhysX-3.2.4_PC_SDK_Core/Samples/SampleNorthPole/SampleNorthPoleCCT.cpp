@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #include "PxPhysicsAPI.h"
 #include "extensions/PxExtensionsAPI.h"
@@ -44,6 +44,8 @@ using namespace SampleFramework;
 
 void SampleNorthPole::tryStandup()
 {
+	PxSceneWriteLock scopedLock(*mScene);
+
 	// overlap with upper part
 	PxReal r = mController->getRadius();
 	PxReal dh = mStandingSize-mCrouchingSize-2*r;
@@ -53,8 +55,10 @@ void SampleNorthPole::tryStandup()
 	PxVec3 pos((float)position.x,(float)position.y+mStandingSize*.5f+r,(float)position.z);
 	PxQuat orientation(PxHalfPi, PxVec3(0.0f, 0.0f, 1.0f));
 
-	PxShape* hit;
-	if(getActiveScene().overlapMultiple(geom, PxTransform(pos,orientation),&hit,1) != 0) return;
+	PxOverlapBuffer hit;
+	if(getActiveScene().overlap(geom, PxTransform(pos,orientation),hit,
+		PxQueryFilterData(PxQueryFlag::eANY_HIT|PxQueryFlag::eSTATIC|PxQueryFlag::eDYNAMIC)))
+		return;
 
 	// if no hit, we can stand up
 	resizeController(mStandingSize);
@@ -63,6 +67,7 @@ void SampleNorthPole::tryStandup()
 
 void SampleNorthPole::resizeController(PxReal height)
 {
+	PxSceneWriteLock scopedLock(*mScene);
 	mController->resize(height);
 }
 
@@ -76,12 +81,12 @@ PxCapsuleController* SampleNorthPole::createCharacter(const PxExtendedVec3& posi
 	cDesc.slopeLimit		= 0.0f;
 	cDesc.contactOffset		= 0.1f;
 	cDesc.stepOffset		= 0.02f;
-	cDesc.callback			= this;
+	cDesc.reportCallback	= this;
 	cDesc.behaviorCallback	= this;
 
 	mControllerInitialPosition = cDesc.position;
 
-	PxCapsuleController* ctrl = static_cast<PxCapsuleController*>(mControllerManager->createController(getPhysics(),&getActiveScene(),cDesc));
+	PxCapsuleController* ctrl = static_cast<PxCapsuleController*>(mControllerManager->createController(cDesc));
 
 	// remove controller shape from scene query for standup overlap test
 	PxRigidDynamic* actor = ctrl->getActor();
@@ -108,7 +113,7 @@ PxCapsuleController* SampleNorthPole::createCharacter(const PxExtendedVec3& posi
 
 void SampleNorthPole::onShapeHit(const PxControllerShapeHit& hit)
 {
-	PxRigidDynamic* actor = hit.shape->getActor().is<PxRigidDynamic>();
+	PxRigidDynamic* actor = hit.shape->getActor()->is<PxRigidDynamic>();
 	if(actor)
 	{
 		// We only allow horizontal pushes. Vertical pushes when we stand on dynamic objects creates
@@ -124,6 +129,8 @@ void SampleNorthPole::onShapeHit(const PxControllerShapeHit& hit)
 
 void SampleNorthPole::resetScene()
 {	
+	PxSceneWriteLock scopedLock(*mScene);
+
 	mController->setPosition(mControllerInitialPosition);
 	mNorthPoleCamera->setView(0,0);
 
@@ -134,6 +141,7 @@ void SampleNorthPole::resetScene()
 	}
 
 	createSnowMen();
+	buildHeightField();
 
 	for(unsigned int b = 0; b < NUM_BALLS; b++)
 	{
@@ -158,27 +166,27 @@ void SampleNorthPole::collectInputEvents(std::vector<const SampleFramework::Inpu
 	getApplication().getPlatform()->getSampleUserInput()->unregisterInputEvent(CAMERA_MOVE_BUTTON);
 
 	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(CROUCH,			SCAN_CODE_DOWN,	XKEY_C,	PS3KEY_C,	AKEY_UNKNOWN,	SCAN_CODE_DOWN,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_DOWN);
-	DIGITAL_INPUT_EVENT_DEF(RESET_SCENE,	WKEY_R,			XKEY_R,	PS3KEY_R,	AKEY_UNKNOWN,	OSXKEY_R,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_R);
+	DIGITAL_INPUT_EVENT_DEF(CROUCH,			SCAN_CODE_DOWN,	XKEY_C,		X1KEY_C,	PS3KEY_C,	PS4KEY_C,	AKEY_UNKNOWN,	SCAN_CODE_DOWN,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_DOWN,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(RESET_SCENE,	WKEY_R,			XKEY_R,		X1KEY_R,	PS3KEY_R,	PS4KEY_R,	AKEY_UNKNOWN,	OSXKEY_R,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_R,		WIIUKEY_UNKNOWN);
 
 	//digital gamepad events
-	DIGITAL_INPUT_EVENT_DEF(CROUCH,			GAMEPAD_WEST,				GAMEPAD_WEST,				GAMEPAD_WEST,				AKEY_UNKNOWN,	GAMEPAD_WEST,				GAMEPAD_WEST,				IKEY_UNKNOWN, LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(RESET_SCENE,	GAMEPAD_NORTH,				GAMEPAD_NORTH,				GAMEPAD_NORTH,				AKEY_UNKNOWN,	GAMEPAD_NORTH,				GAMEPAD_NORTH,				IKEY_UNKNOWN, LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(THROW_BALL,		GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, AKEY_UNKNOWN,	GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT,	IKEY_UNKNOWN, LINUXKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CROUCH,			GAMEPAD_WEST,				GAMEPAD_WEST,				GAMEPAD_WEST,				GAMEPAD_WEST,				GAMEPAD_WEST,				AKEY_UNKNOWN,	GAMEPAD_WEST,				GAMEPAD_WEST,				IKEY_UNKNOWN, LINUXKEY_UNKNOWN,	GAMEPAD_WEST);
+	DIGITAL_INPUT_EVENT_DEF(RESET_SCENE,	GAMEPAD_NORTH,				GAMEPAD_NORTH,				GAMEPAD_NORTH,				GAMEPAD_NORTH,				GAMEPAD_NORTH,				AKEY_UNKNOWN,	GAMEPAD_NORTH,				GAMEPAD_NORTH,				IKEY_UNKNOWN, LINUXKEY_UNKNOWN,	GAMEPAD_NORTH);
+	DIGITAL_INPUT_EVENT_DEF(THROW_BALL,		GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, AKEY_UNKNOWN,	GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT,	IKEY_UNKNOWN, LINUXKEY_UNKNOWN,	GAMEPAD_RIGHT_SHOULDER_BOT);
 
 	//digital mouse events
 	if (!isPaused())
 	{
-		DIGITAL_INPUT_EVENT_DEF(THROW_BALL,	MOUSE_BUTTON_LEFT, XKEY_UNKNOWN, PS3KEY_UNKNOWN, AKEY_UNKNOWN, MOUSE_BUTTON_LEFT, PSP2KEY_UNKNOWN, IKEY_UNKNOWN, MOUSE_BUTTON_LEFT);
+		DIGITAL_INPUT_EVENT_DEF(THROW_BALL,	MOUSE_BUTTON_LEFT, XKEY_UNKNOWN, X1KEY_UNKNOWN, PS3KEY_UNKNOWN, PS4KEY_UNKNOWN, AKEY_UNKNOWN, MOUSE_BUTTON_LEFT, PSP2KEY_UNKNOWN, IKEY_UNKNOWN, MOUSE_BUTTON_LEFT,	WIIUKEY_UNKNOWN);
 	}
     
     //touch events
-    TOUCH_INPUT_EVENT_DEF(RESET_SCENE,			"Reset",			ABUTTON_5,		IBUTTON_5);
-	TOUCH_INPUT_EVENT_DEF(CROUCH,               "Crouch",			ABUTTON_6,		IBUTTON_6);
-	TOUCH_INPUT_EVENT_DEF(THROW_BALL,           "Throw Ball",   AQUICK_BUTTON_1,	IQUICK_BUTTON_1);
+    TOUCH_INPUT_EVENT_DEF(RESET_SCENE,			"Reset",		ABUTTON_5,			IBUTTON_5, TOUCH_BUTTON_5);
+	TOUCH_INPUT_EVENT_DEF(CROUCH,               "Crouch",		ABUTTON_6,			IBUTTON_6, TOUCH_BUTTON_6);
+	TOUCH_INPUT_EVENT_DEF(THROW_BALL,           "Throw Ball",	AQUICK_BUTTON_1,	IQUICK_BUTTON_1, TOUCH_QUICK_BUTTON_1);
 }
 
-bool SampleNorthPole::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
+void SampleNorthPole::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
 {
 	switch (ie.m_Id)
 	{
@@ -213,7 +221,5 @@ bool SampleNorthPole::onDigitalInputEvent(const SampleFramework::InputEvent& ie,
 	}
 
 	PhysXSample::onDigitalInputEvent(ie,val);
-
-	return true;
 }
 

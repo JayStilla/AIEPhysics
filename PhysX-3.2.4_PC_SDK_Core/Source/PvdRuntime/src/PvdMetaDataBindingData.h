@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 #ifndef PX_META_DATA_PVD_BINDING_DATA_H
@@ -31,6 +31,7 @@
 #include "PxSimpleTypes.h"
 #include "PsArray.h"
 #include "PsHashSet.h"
+#include "PsHashMap.h"
 
 namespace physx
 {
@@ -39,6 +40,9 @@ namespace Pvd
 	using namespace physx::debugger;
 	using namespace physx::shdfnd;
 
+	typedef HashSet<const PxRigidActor*>					OwnerActorsValueType;
+	typedef HashMap<const PxShape*, OwnerActorsValueType*>	OwnerActorsMap;
+
 	struct PvdMetaDataBindingData : public UserAllocated
 	{
 		Array<PxU8>							mTempU8Array;
@@ -46,6 +50,7 @@ namespace Pvd
 		Array<PxArticulation*>				mArticulations;
 		Array<PxArticulationLink*>			mArticulationLinks;
 		HashSet<PxActor*>					mSleepingActors;
+		OwnerActorsMap						mOwnerActorsMap;
 
 		PvdMetaDataBindingData() :
 			mTempU8Array(PX_DEBUG_EXP("TempU8Array")),

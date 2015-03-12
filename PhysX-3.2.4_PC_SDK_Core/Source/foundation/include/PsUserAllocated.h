@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -74,15 +74,15 @@ namespace shdfnd
         template <typename Alloc>
         PX_INLINE void operator delete(void* ptr, Alloc alloc, const char* fileName, int line)
         {
-			PX_FORCE_PARAMETER_REFERENCE(fileName);
-			PX_FORCE_PARAMETER_REFERENCE(line);
+			PX_UNUSED(fileName);
+			PX_UNUSED(line);
 			alloc.deallocate(ptr);
         }
         template <typename Alloc>
         PX_INLINE void operator delete[](void* ptr, Alloc alloc, const char* fileName, int line)
         {
-			PX_FORCE_PARAMETER_REFERENCE(fileName);
-			PX_FORCE_PARAMETER_REFERENCE(line);
+			PX_UNUSED(fileName);
+			PX_UNUSED(line);
 			alloc.deallocate(ptr);
         }
 

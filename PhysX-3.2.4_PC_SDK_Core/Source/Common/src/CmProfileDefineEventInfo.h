@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 // no include guard on purpose!
 #define CM_PROFILE_DEFINE_EVENT_INFO_H
@@ -51,13 +51,15 @@ PX_PROFILE_END_SUBSYSTEM( Subsystem1 )
 #include "PsUtilities.h"
 
 #define PX_PROFILE_BEGIN_SUBSYSTEM( subsys )
-#define PX_PROFILE_EVENT( subsystem, name, priority ) PxProfileEventName( #subsystem "." #name, PxProfileEventId( EventIds::subsystem##name, PX_PROFILE_EVENT_FILTER_VALUE( subsystem, name ) ) ),
+#define PX_PROFILE_EVENT( subsystem, name, priority ) PxProfileEventName( #subsystem "." #name, PxProfileEventId( physx::profile::EventIds::subsystem##name, PX_PROFILE_EVENT_FILTER_VALUE( subsystem, name ) ) ),
+#define PX_PROFILE_EVENT_DETAIL( subsystem, name, priority ) PxProfileEventName( "." #subsystem "." #name, PxProfileEventId( physx::profile::EventIds::subsystem##name, PX_PROFILE_EVENT_FILTER_VALUE( subsystem, name ) ) ),	
 #define PX_PROFILE_END_SUBSYSTEM( subsys ) 
 static PxProfileEventName gEventNames[] = {
 #include PX_PROFILE_EVENT_DEFINITION_HEADER
 };
 #undef PX_PROFILE_BEGIN_SUBSYSTEM
 #undef PX_PROFILE_EVENT
+#undef PX_PROFILE_EVENT_DETAIL
 #undef PX_PROFILE_END_SUBSYSTEM
 
 static PxU32 gEventNamesCount = PX_ARRAY_SIZE( gEventNames );

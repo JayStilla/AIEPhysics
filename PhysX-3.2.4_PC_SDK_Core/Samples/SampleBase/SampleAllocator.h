@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -31,7 +31,7 @@
 #define SAMPLE_ALLOCATOR_H
 
 #include "foundation/PxAllocatorCallback.h"
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "PsMutex.h"
 #include "PxTkNamespaceMangle.h"
 
@@ -44,6 +44,7 @@ using namespace physx;
 						~PxSampleAllocator();
 
 		virtual void*	allocate(size_t size, const char* typeName, const char* filename, int line);
+				void*	allocate(size_t size, const char* filename, int line)	{ return allocate(size, NULL, filename, line); }
 		virtual void	deallocate(void* ptr);
 
 		protected:
@@ -68,6 +69,7 @@ using namespace physx;
 	class SampleAllocateable
 	{
 		public:
+		PX_FORCE_INLINE	void*	operator new		(size_t, void* ptr)													{ return ptr;	}
 		PX_FORCE_INLINE	void*	operator new		(size_t size, const char* handle, const char * filename, int line)	{ return getSampleAllocator()->allocate(size, handle, filename, line);	}
 		PX_FORCE_INLINE	void*	operator new[]		(size_t size, const char* handle, const char * filename, int line)	{ return getSampleAllocator()->allocate(size, handle, filename, line);	}
 		PX_FORCE_INLINE	void	operator delete		(void* p)															{ getSampleAllocator()->deallocate(p);	}

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -47,7 +47,7 @@ namespace aos
 		const Vec3V delta = V3Sub(p1, p0);
 		const FloatV m = V3Length(delta);
 		const BoolV con = FIsGrtr(m, FZero());
-		const Vec3V fatDelta = V3Mul(V3Div(delta, m), fatCoeff);
+		const Vec3V fatDelta = V3Scale(V3ScaleInv(delta, m), fatCoeff);
 		p0 = V3Sel(con, V3Sub(p0, fatDelta), p0);
 		p1 = V3Sel(con, V3Add(p1, fatDelta), p1);
 	}

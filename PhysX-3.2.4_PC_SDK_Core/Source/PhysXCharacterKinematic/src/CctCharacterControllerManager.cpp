@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -37,6 +37,7 @@
 #include "PsUtilities.h"
 #include "PsMathUtils.h"
 #include "PxRigidDynamic.h"
+#include "PxScene.h"
 
 using namespace physx;
 using namespace Cct;
@@ -45,11 +46,15 @@ static const PxF32 gMaxOverlapRecover = 4.0f;	// PT: TODO: expose this
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-CharacterControllerManager::CharacterControllerManager() :
-	mRenderBuffer			(NULL),
-	mDebugRenderingFlags	(0),
-	mMaxEdgeLength			(1.0f),
-	mTessellation			(false)
+CharacterControllerManager::CharacterControllerManager(PxScene& scene) :
+	mScene									(scene),
+	mRenderBuffer							(NULL),
+	mDebugRenderingFlags					(0),
+	mMaxEdgeLength							(1.0f),
+	mTessellation							(false),
+	mOverlapRecovery						(true),
+	mPreciseSweeps							(true),
+	mPreventVerticalSlidingAgainstCeiling	(false)
 {
 }
 
@@ -68,9 +73,17 @@ void CharacterControllerManager::release()
 	while(getNbControllers()!= 0)
 		releaseController(*getController(0));
 
+	while(getNbObstacleContexts()!= 0)
+		mObstacleContexts[0]->release();
+
 	delete this;
 
 	Ps::Foundation::decRefCount();
+}
+
+PxScene& CharacterControllerManager::getScene() const
+{
+	return mScene;
 }
 
 PxRenderBuffer& CharacterControllerManager::getRenderBuffer()
@@ -81,7 +94,7 @@ PxRenderBuffer& CharacterControllerManager::getRenderBuffer()
 	return *mRenderBuffer;
 }
 
-void CharacterControllerManager::setDebugRenderingFlags(PxU32 flags)
+void CharacterControllerManager::setDebugRenderingFlags(PxControllerDebugRenderFlags flags)
 {
 	mDebugRenderingFlags = flags;
 
@@ -107,14 +120,18 @@ Controller** CharacterControllerManager::getControllers()
 
 PxController* CharacterControllerManager::getController(PxU32 index) 
 {
-	PX_ASSERT(index < mControllers.size());
+	if(index>=mControllers.size())
+	{
+		Ps::getFoundation().error(PxErrorCode::eINVALID_PARAMETER, __FILE__, __LINE__, "PxControllerManager::getController(): out-of-range index");
+		return NULL;
+	}
+
 	PX_ASSERT(mControllers[index]);
 	return mControllers[index]->getPxController();
 }
 
-PxController* CharacterControllerManager::createController(PxPhysics& sdk, PxScene* scene, const PxControllerDesc& desc)
+PxController* CharacterControllerManager::createController(const PxControllerDesc& desc)
 {
-	PX_ASSERT(desc.isValid());
 	if(!desc.isValid())
 		return NULL;
 
@@ -123,17 +140,17 @@ PxController* CharacterControllerManager::createController(PxPhysics& sdk, PxSce
 	PxController* N = NULL;
 	if(desc.getType()==PxControllerShapeType::eBOX)
 	{
-		BoxController* boxController = PX_NEW(BoxController)(desc, sdk, scene);
+		BoxController* boxController = PX_NEW(BoxController)(desc, mScene.getPhysics(), &mScene);
 		newController = boxController;
 		N = boxController;
 	}
 	else if(desc.getType()==PxControllerShapeType::eCAPSULE)
 	{
-		CapsuleController* capsuleController = PX_NEW(CapsuleController)(desc, sdk, scene);
+		CapsuleController* capsuleController = PX_NEW(CapsuleController)(desc, mScene.getPhysics(), &mScene);
 		newController = capsuleController;
 		N = capsuleController;
 	}
-	else PX_ASSERT(0);
+	else PX_ALWAYS_ASSERT_MESSAGE( "INTERNAL ERROR - invalid CCT type, should have been caught by isValid().");
 
 	if(newController)
 	{
@@ -186,16 +203,45 @@ void CharacterControllerManager::purgeControllers()
 		releaseController(*mControllers[0]->getPxController());
 }
 
-PxObstacleContext* CharacterControllerManager::createObstacleContext()
+PxU32 CharacterControllerManager::getNbObstacleContexts() const
 {
-	return PX_NEW(ObstacleContext)(*this);
+	return mObstacleContexts.size();
 }
 
-void CharacterControllerManager::onObstacleRemoved(ObstacleHandle index, ObstacleHandle movedIndex) const
+PxObstacleContext* CharacterControllerManager::getObstacleContext(PxU32 index)
+{
+	if(index>=mObstacleContexts.size())
+	{
+		Ps::getFoundation().error(PxErrorCode::eINVALID_PARAMETER, __FILE__, __LINE__, "PxControllerManager::getObstacleContext(): out-of-range index");
+		return NULL;
+	}
+
+	PX_ASSERT(mObstacleContexts[index]);
+	return mObstacleContexts[index];
+}
+
+PxObstacleContext* CharacterControllerManager::createObstacleContext()
+{
+	ObstacleContext* oc = PX_NEW(ObstacleContext)(*this);
+
+	mObstacleContexts.pushBack(oc);
+
+	return oc;
+}
+
+void CharacterControllerManager::releaseObstacleContext(ObstacleContext& oc)
+{
+	PX_ASSERT(mObstacleContexts.find(&oc) != mObstacleContexts.end());
+	mObstacleContexts.findAndReplaceWithLast(&oc);
+
+	PX_DELETE(&oc);
+}
+
+void CharacterControllerManager::onObstacleRemoved(ObstacleHandle index) const
 {
 	for(PxU32 i = 0; i<mControllers.size(); i++)
 	{
-		mControllers[i]->mCctModule.onObstacleRemoved(index,movedIndex);
+		mControllers[i]->mCctModule.onObstacleRemoved(index);
 	}
 }
 
@@ -244,6 +290,49 @@ void CharacterControllerManager::setTessellation(bool flag, float maxEdgeLength)
 {
 	mTessellation = flag;
 	mMaxEdgeLength = maxEdgeLength;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void CharacterControllerManager::setOverlapRecoveryModule(bool flag)
+{
+	mOverlapRecovery = flag;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void CharacterControllerManager::setPreciseSweeps(bool flag)
+{
+	mPreciseSweeps = flag;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void CharacterControllerManager::setPreventVerticalSlidingAgainstCeiling(bool flag)
+{
+	mPreventVerticalSlidingAgainstCeiling = flag;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void CharacterControllerManager::shiftOrigin(const PxVec3& shift)
+{
+	for(PxU32 i=0; i < mControllers.size(); i++)
+	{
+		mControllers[i]->onOriginShift(shift);
+	}
+
+	for(PxU32 i=0; i < mObstacleContexts.size(); i++)
+	{
+		mObstacleContexts[i]->onOriginShift(shift);
+	}
+
+	if (mRenderBuffer)
+		mRenderBuffer->shift(-shift);
+
+	// assumption is that these are just used for temporary stuff
+	PX_ASSERT(!mBoxes.size());
+	PX_ASSERT(!mCapsules.size());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -563,7 +652,7 @@ void CharacterControllerManager::computeInteractions(PxF32 elapsedTime, PxContro
 
 	//
 
-	const PxU32 nbEntities = runningBoxes - boxes;
+	const PxU32 nbEntities = PxU32(runningBoxes - boxes);
 
 	Ps::Array<PxU32> pairs;	// PT: TODO: get rid of alloc
 	CompleteBoxPruning(boxes, nbEntities, pairs, Gu::Axes(physx::Gu::AXES_XZY));	// PT: TODO: revisit for variable up axis
@@ -585,15 +674,14 @@ void CharacterControllerManager::computeInteractions(PxF32 elapsedTime, PxContro
 			InteractionCharacterCharacter(ctrl0, ctrl1, elapsedTime);
 	}
 
-	PX_FREE(boxes);}
+	PX_FREE(boxes);
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //Public factory methods
 
-PX_C_EXPORT PX_PHYSX_CHARACTER_API PxControllerManager* PX_CALL_CONV PxCreateControllerManager(PxFoundation& foundation)
+PX_C_EXPORT PX_PHYSX_CHARACTER_API PxControllerManager* PX_CALL_CONV PxCreateControllerManager(PxScene& scene)
 {
-	PX_UNUSED(foundation);
-	PX_ASSERT(&foundation == &Ps::Foundation::getInstance());
 	Ps::Foundation::incRefCount();
-	return PX_NEW(CharacterControllerManager);
+	return PX_NEW(CharacterControllerManager)(scene);
 }

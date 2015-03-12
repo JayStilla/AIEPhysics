@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,6 +34,7 @@
 #include "RendererMemoryMacros.h"
 #include "RenderMaterial.h"
 
+#include "PsFile.h"
 #include "PxPhysicsAPI.h"
 #include "extensions/PxExtensionsAPI.h"
 
@@ -70,6 +71,7 @@ static const PxReal			gSubMarineDensity = 3.0f;
 static PxI32				gSubmarineHealth = 100;
 static PxU32				gKeyFlags = 0;
 static bool					gTreasureFound = false;
+static bool					gResetScene = false;
 
 static Crab*				gCrab = NULL;
 
@@ -106,7 +108,7 @@ SampleSubmarine::SampleSubmarine(PhysXSampleApplication& app)
 	, mSubmarineCameraController(NULL)
 {
 	mCreateGroundPlane	= false;
-	mUseFixedStepper	= true;
+	//mStepperType = FIXED_STEPPER;
 }
 
 SampleSubmarine::~SampleSubmarine()
@@ -124,22 +126,21 @@ void SampleSubmarine::customizeSample(SampleSetup& setup)
 
 void SampleSubmarine::onInit()
 {
-#if defined(PX_PS3)
-	mNbThreads = 1;
-#elif defined(PX_X360)
-	mNbThreads = 2;
-#else
-	mNbThreads = 3;
+	mNbThreads = PxMax(PxI32(shdfnd::Thread::getNbPhysicalCores())-1, 0);
+#ifdef PX_PS3
+	mNbThreads = 1; // known issue, 0 worker threads and SPU batched query can deadlock.
 #endif
 
 	PhysXSample::onInit();
+
+	PxSceneWriteLock scopedLock(*mScene);
 
 	mSubmarineCameraController = SAMPLE_NEW(SubmarineCameraController)();
 	setCameraController(mSubmarineCameraController);
 
 	mApplication.setMouseCursorHiding(true);
 	mApplication.setMouseCursorRecentering(true);
-	mSubmarineCameraController->init(PxTransform::createIdentity());
+	mSubmarineCameraController->init(PxTransform(PxIdentity));
 	mSubmarineCameraController->setMouseSensitivity(0.5f);
 	mSubmarineCameraController->setMouseLookOnMouseButton(false);
 
@@ -238,7 +239,7 @@ PxRigidActor* SampleSubmarine::loadTerrain(const char* name, const PxReal height
 		PxTransform pose(PxVec3(-((PxReal)nbRows*rowScale) / 2.0f, 
 			0.0f, 
 			-((PxReal)nbColumns*columnScale) / 2.0f), 
-			PxQuat::createIdentity());
+			PxQuat(PxIdentity));
 		heightFieldActor = getPhysics().createRigidStatic(pose);
 		if(!heightFieldActor) fatalError("createRigidStatic failed!");
 		PxShape* shape = heightFieldActor->createShape(PxHeightFieldGeometry(heightField, PxMeshGeometryFlags(), heightScale, rowScale, columnScale), getDefaultMaterial());
@@ -264,7 +265,7 @@ PxRigidActor* SampleSubmarine::loadTerrain(const char* name, const PxReal height
 		// add mesh to renderer
 		RAWMesh data;
 		data.mName = name;
-		data.mTransform = PxTransform::createIdentity();
+		data.mTransform = PxTransform(PxIdentity);
 		data.mNbVerts = nbColumns * nbRows;
 		data.mVerts = vertexes;
 		data.mVertexNormals = NULL;
@@ -275,7 +276,7 @@ PxRigidActor* SampleSubmarine::loadTerrain(const char* name, const PxReal height
 
 		RenderMeshActor* hf_mesh = createRenderMeshFromRawMesh(data);
 		if(!hf_mesh) fatalError("createRenderMeshFromRawMesh failed!");
-		hf_mesh->setPhysicsShape(shape);
+		hf_mesh->setPhysicsShape(shape, heightFieldActor);
 		shape->setFlag(PxShapeFlag::eVISUALIZATION, false);
 		SAMPLE_FREE(indices);
 		SAMPLE_FREE(uvs);
@@ -315,19 +316,19 @@ PxRigidDynamic* SampleSubmarine::createSubmarine(const PxVec3& inPosition, const
 
 	// cabin
 	PxSphereGeometry cabinGeom(1.5f);
-	PxTransform	cabinPose = PxTransform::createIdentity(); 
+	PxTransform	cabinPose = PxTransform(PxIdentity); 
 	cabinPose.p.x = -0.5f;
 
 	// engine
 	PxBoxGeometry engineGeom(0.25f, 1.0f, 1.0f);
-	PxTransform	enginePose = PxTransform::createIdentity(); 
+	PxTransform	enginePose = PxTransform(PxIdentity); 
 	enginePose.p.x = cabinPose.p.x + cabinGeom.radius + engineGeom.halfExtents.x;
 
 	// tanks
 	PxCapsuleGeometry tankGeom(0.5f, 1.8f);
-	PxTransform	tank1Pose = PxTransform::createIdentity(); 
+	PxTransform	tank1Pose = PxTransform(PxIdentity); 
 	tank1Pose.p = PxVec3(0,-cabinGeom.radius, cabinGeom.radius);
-	PxTransform	tank2Pose = PxTransform::createIdentity(); 
+	PxTransform	tank2Pose = PxTransform(PxIdentity); 
 	tank2Pose.p = PxVec3(0,-cabinGeom.radius, -cabinGeom.radius);
 
 	localPoses.push_back(cabinPose);
@@ -362,7 +363,7 @@ PxRigidDynamic* SampleSubmarine::createSubmarine(const PxVec3& inPosition, const
 	globalPose.q = PxQuat(yRot, PxVec3(0,1,0));
 	mSubmarineActor->setGlobalPose(globalPose);
 
-	mSubmarineActor->setCMassLocalPose(PxTransform::createIdentity());
+	mSubmarineActor->setCMassLocalPose(PxTransform(PxIdentity));
 
 	return mSubmarineActor;
 }
@@ -402,8 +403,8 @@ Seamine* SampleSubmarine::createSeamine(const PxVec3& inPosition, PxReal inHeigh
 		link->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, true);
 
 		// create distance joint between link and prevActor
-		PxTransform linkFrameA = prevActor ? PxTransform(halfLinkOffset, PxQuat::createIdentity()) : PxTransform(mineStartPos, PxQuat::createIdentity());
-		PxTransform linkFrameB = PxTransform(-halfLinkOffset, PxQuat::createIdentity());
+		PxTransform linkFrameA = prevActor ? PxTransform(halfLinkOffset, PxQuat(PxIdentity)) : PxTransform(mineStartPos, PxQuat(PxIdentity));
+		PxTransform linkFrameB = PxTransform(-halfLinkOffset, PxQuat(PxIdentity));
 		PxDistanceJoint *joint = PxDistanceJointCreate(getPhysics(), prevActor, linkFrameA, link, linkFrameB);
 		if(!joint) fatalError("PxDistanceJointCreate failed!");
 
@@ -412,7 +413,7 @@ Seamine* SampleSubmarine::createSeamine(const PxVec3& inPosition, PxReal inHeigh
 		joint->setMinDistance(0.0f);
 		// setup damping & spring
 		joint->setDamping(1.0f * link->getMass());
-		joint->setSpring(400.0f * link->getMass());
+		joint->setStiffness(400.0f * link->getMass());
 		joint->setDistanceJointFlags(PxDistanceJointFlag::eMAX_DISTANCE_ENABLED | PxDistanceJointFlag::eMIN_DISTANCE_ENABLED | PxDistanceJointFlag::eSPRING_ENABLED);
 
 		// add to joints array for cleanup
@@ -437,8 +438,8 @@ Seamine* SampleSubmarine::createSeamine(const PxVec3& inPosition, PxReal inHeigh
 
 
 	// create distance joint between mine head and prevActor
-	PxTransform linkFrameA = PxTransform(halfLinkOffset, PxQuat::createIdentity());
-	PxTransform linkFrameB = PxTransform(PxVec3(0, -mineHeadRadius - linkSpacing*0.5f, 0), PxQuat::createIdentity());
+	PxTransform linkFrameA = PxTransform(halfLinkOffset, PxQuat(PxIdentity));
+	PxTransform linkFrameB = PxTransform(PxVec3(0, -mineHeadRadius - linkSpacing*0.5f, 0), PxQuat(PxIdentity));
 	PxDistanceJoint *joint = PxDistanceJointCreate(getPhysics(), prevActor, linkFrameA, mineHead, linkFrameB);
 	if(!joint) fatalError("PxDistanceJointCreate failed!");
 
@@ -447,7 +448,7 @@ Seamine* SampleSubmarine::createSeamine(const PxVec3& inPosition, PxReal inHeigh
 	joint->setMinDistance(0.0f);
 	// setup damping & spring
 	joint->setDamping(1.0f * mineHead->getMass());
-	joint->setSpring(400.0f * mineHead->getMass());
+	joint->setStiffness(400.0f * mineHead->getMass());
 	joint->setDistanceJointFlags(PxDistanceJointFlag::eMAX_DISTANCE_ENABLED | PxDistanceJointFlag::eMIN_DISTANCE_ENABLED | PxDistanceJointFlag::eSPRING_ENABLED);
 
 	// add to joints array for cleanup
@@ -469,6 +470,8 @@ static const char* getPlatformName()
 	return "PS3";
 #elif defined(PX_ARM)
 	return "ARM";
+#elif defined(PX_WIIU)
+	return "WIIU";
 #else
 	return "";
 #endif
@@ -484,30 +487,29 @@ void SampleSubmarine::createDynamicActors()
 	for(PxU32 i = 0; i < numMines; i++)
 	{
 		// raycast against floor (height field) to find the height to attach the mine
-		PxRaycastHit rayHit;
+		PxRaycastBuffer rayHit;
 		bool hit = false;
 		do
 		{
 			PxVec3 offset = PxVec3(PxReal(getSampleRandom().rand(-mineFieldRadius, mineFieldRadius)), 0, PxReal(getSampleRandom().rand(-mineFieldRadius, mineFieldRadius)));
 			PxVec3 raycastStart = mineFieldCenter + offset*minMineDistance;
-			hit = getActiveScene().raycastSingle(raycastStart, PxVec3(0,-1,0), 100.0f, PxSceneQueryFlag::eIMPACT, rayHit);
-		} 
-		while(!hit || (rayHit.impact.y > 25.0f) || rayHit.shape->getActor().is<PxRigidDynamic>());
-		createSeamine(rayHit.impact, getSampleRandom().rand(10.0f, 25.0f));
+			hit = getActiveScene().raycast(raycastStart, PxVec3(0,-1,0), 100.0f, rayHit);
+		} while(!hit || (rayHit.block.position.y > 25.0f) || rayHit.block.actor->is<PxRigidDynamic>());
+		createSeamine(rayHit.block.position, getSampleRandom().rand(10.0f, 25.0f));
 	}
 
 	// create treasure
 	{
 		static const PxVec3 treasureDim = PxVec3(5, 3, 4)*0.5f;
 
-		PxRaycastHit rayHit;
+		PxRaycastBuffer rayHit;
 		PxVec3 raycastStart = PxVec3(-19, 64, -24);
-		getActiveScene().raycastSingle(raycastStart, PxVec3(0,-1,0), 100.0f, PxSceneQueryFlag::eIMPACT, rayHit);
+		getActiveScene().raycast(raycastStart, PxVec3(0,-1,0), 100.0f, rayHit);
 
 #ifdef RENDERER_PSP2
-		gTreasureActor = createBox(rayHit.impact+treasureDim, treasureDim, NULL, mTreasureMaterial, 1)->is<PxRigidDynamic>();
+		gTreasureActor = createBox(rayHit.block.position+treasureDim, treasureDim, NULL, mTreasureMaterial, 1)->is<PxRigidDynamic>();
 #else
-		gTreasureActor = createBox(rayHit.impact+treasureDim, treasureDim, NULL, mManagedMaterials[MATERIAL_BLUE], 1)->is<PxRigidDynamic>();
+		gTreasureActor = createBox(rayHit.block.position+treasureDim, treasureDim, NULL, mManagedMaterials[MATERIAL_BLUE], 1)->is<PxRigidDynamic>();
 #endif
 		if(!gTreasureActor) fatalError("createBox failed!");
 		gTreasureActor->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, true);
@@ -522,28 +524,28 @@ void SampleSubmarine::createDynamicActors()
 	
 	char theCrabName[256];
 	sprintf(theCrabName, "crab_%s.bin", getPlatformName());
-	
 	// If we have already had crab copy, just load it, or will create crab and export it
 	char thePathBuffer[1024];
 	const char* theCrabPath = getSampleOutputDirManager().getFilePath( theCrabName, thePathBuffer, false );
-	FILE *fp = fopen( theCrabPath, "r" );
+	SampleFramework::File* fp = NULL;
+	physx::shdfnd::fopen_s(&fp, theCrabPath, "r" );
 	if( fp )
 	{
-		printf("loading the crab from file status: ");
+		shdfnd::printFormatted("loading the crab from file status: \n");
 		gCrab = SAMPLE_NEW(Crab)(*this, theCrabPath, mManagedMaterials[MATERIAL_RED]);
 		if (gCrab && !gCrab->getCrabBody())
 		{
 			delete gCrab;
 			gCrab = NULL;
 		}
-		printf(gCrab ? "successful\n":"failed\n");						
+		shdfnd::printFormatted(gCrab ? "successful\n":"failed\n");						
 		fclose (fp); 
 	}
 
 	if( !gCrab )
 	{
 		gCrab = SAMPLE_NEW(Crab)(*this, PxVec3(0, 50, 0), mManagedMaterials[MATERIAL_RED]);
-		printf("crab file not found ... exporting crab file\n");
+		shdfnd::printFormatted("crab file not found ... exporting crab file\n");
 		gCrab->save(theCrabPath);
 	}
 	
@@ -562,9 +564,16 @@ void SampleSubmarine::createDynamicActors()
 
 void SampleSubmarine::resetScene()
 {
+	mScene->fetchResults(true);
+
+	gResetScene = false;
 	const size_t nbCrabs = mCrabs.size();
 	for(PxU32 i=0;i<nbCrabs;i++)
+	{
+		if(mStepperType==INVERTED_FIXED_STEPPER)
+			mCrabs[i]->release();
 		delete mCrabs[i];
+	}
 	mCrabs.clear();
 
 	const size_t nbJoints = mJoints.size();
@@ -615,27 +624,39 @@ void SampleSubmarine::resetScene()
 
 void SampleSubmarine::onShutdown()
 {
-	const size_t nbCrabs = mCrabs.size();
-	for(PxU32 i=0;i<nbCrabs;i++)
-		delete mCrabs[i];
-	mCrabs.clear();
+	mScene->fetchResults(true);
+
+	{
+		PxSceneWriteLock scopedLock(*mScene);
+
+		const size_t nbCrabs = mCrabs.size();
+		for(PxU32 i=0;i<nbCrabs;i++)
+			delete mCrabs[i];
+		mCrabs.clear();
+
+		// free crabs' memory
+		const size_t nbDelCrabsMem = mCrabsMemoryDeleteList.size();
+		for(PxU32 i = 0; i < nbDelCrabsMem; i++)
+			SAMPLE_FREE(mCrabsMemoryDeleteList[i]);
+		mCrabsMemoryDeleteList.clear();
+
+		gCrab = NULL;
+
+		const size_t nbJoints = mJoints.size();
+		for(PxU32 i=0;i<nbJoints;i++)
+			mJoints[i]->release();
+		mJoints.clear();
+
+		const size_t nbSeamines = mSeamines.size();
+		for(PxU32 i=0;i<nbSeamines;i++)
+			delete mSeamines[i];
+		mSeamines.clear();
+
+		gTreasureActor = NULL;
+
+		DELETESINGLE(mSubmarineCameraController);
+	}
 	
-	gCrab = NULL;
-
-	const size_t nbJoints = mJoints.size();
-	for(PxU32 i=0;i<nbJoints;i++)
-		mJoints[i]->release();
-	mJoints.clear();
-
-	const size_t nbSeamines = mSeamines.size();
-	for(PxU32 i=0;i<nbSeamines;i++)
-		delete mSeamines[i];
-	mSeamines.clear();
-
-	gTreasureActor = NULL;
-
-	DELETESINGLE(mSubmarineCameraController);
-
 	PhysXSample::onShutdown();
 }
 
@@ -645,6 +666,12 @@ void SampleSubmarine::onSubstep(float dtime)
 {
 	// user input -> forces
 	handleInput();
+
+	// delay free crabs' memory
+	const size_t nbDelCrabsMem = mCrabsMemoryDeleteList.size();
+	for(PxU32 i = 0; i < nbDelCrabsMem; i++)
+		SAMPLE_FREE(mCrabsMemoryDeleteList[i]);
+	mCrabsMemoryDeleteList.clear();
 
 	// change current every 0.01s
 	static PxReal sElapsedTime = 0.0f;
@@ -661,6 +688,7 @@ void SampleSubmarine::onSubstep(float dtime)
 		gBuoyancy = yRot.rotate(gBuoyancy);
 
 		// apply external forces to seamines
+		PxSceneWriteLock scopedLock(*mScene);
 		const size_t nbSeamines = mSeamines.size();
 		for(PxU32 i = 0; i < nbSeamines; i++)
 		{
@@ -676,6 +704,8 @@ void SampleSubmarine::onSubstep(float dtime)
 
 	if(mSubmarineActor)
 	{
+		PxSceneWriteLock scopedLock(*mScene);
+
 		//convert forces from submarine the submarine's body local space to global space
 		PxQuat submarineOrientation = mSubmarineActor->getGlobalPose().q;
 		gForce = submarineOrientation.rotate(gForce);
@@ -692,7 +722,7 @@ void SampleSubmarine::onSubstep(float dtime)
 	}
 }
 
-void SampleSubmarine::onSubstepSetup(float dt, pxtask::BaseTask* completionTask)
+void SampleSubmarine::onSubstepSetup(float dt, PxBaseTask* completionTask)
 {
 	// set Crabs continuation to ensure the completion task
 	// is not run before Crab update has completed
@@ -712,12 +742,21 @@ void SampleSubmarine::onSubstepStart(float dtime)
 	for(PxU32 i = 0; i < nbCrabs; i++)
 	{
 		Crab* crab = mCrabs[i];
+		// inverted stepper: skip crab updates right after creation, 
+		// crab task is not in the pipeline at this point (onSubstepSetup not yet called).
+		if(crab->getTaskManager() == NULL)
+			continue;
 		crab->removeReference();
 	}
 }
 
 void SampleSubmarine::onTickPreRender(float dtime)
 {
+	mScene->lockWrite();
+
+	if(gResetScene)
+		resetScene();
+
 	// handle mine (and submarine) explosion
 	if(mSubmarineActor)
 	{
@@ -775,6 +814,8 @@ void SampleSubmarine::onTickPreRender(float dtime)
 		{
 			PxRigidDynamic* prevBody = crab->getCrabBody();
 			PxVec3 prevPos = prevBody->getGlobalPose().p;
+			if(mStepperType==INVERTED_FIXED_STEPPER)
+				crab->release();
 			delete crab;
 			mCrabs[i] = SAMPLE_NEW(Crab)(*this, prevPos, mManagedMaterials[MATERIAL_RED]);
 			if(gCrab == crab)
@@ -788,6 +829,8 @@ void SampleSubmarine::onTickPreRender(float dtime)
 	if(mCameraAttachedToActor)
 		mSubmarineCameraController->updateFollowingMode(getCamera(), dtime, mCameraAttachedToActor->getGlobalPose().p);
 
+	mScene->unlockWrite();
+
 	// start the simulation
 	PhysXSample::onTickPreRender(dtime);
 }
@@ -799,11 +842,11 @@ void SampleSubmarine::explode(PxRigidActor* actor, const PxVec3& explosionPos, c
 	size_t numRenderActors = mRenderActors.size();
 	for(PxU32 i = 0; i < numRenderActors; i++)
 	{
-		if(&(mRenderActors[i]->getPhysicsShape()->getActor()) == actor)
+		if(mRenderActors[i]->getPhysicsActor() == actor)
 		{
 			PxShape* shape = mRenderActors[i]->getPhysicsShape();
-			PxTransform pose = PxShapeExt::getGlobalPose(*shape);
-			
+			PxTransform pose = PxShapeExt::getGlobalPose(*shape, *actor);
+
 			PxGeometryHolder geom = shape->getGeometry();
 
 			// create new actor from shape (to split compound)
@@ -811,16 +854,16 @@ void SampleSubmarine::explode(PxRigidActor* actor, const PxVec3& explosionPos, c
 			if(!newActor) fatalError("createRigidDynamic failed!");
 
 			PxShape* newShape = newActor->createShape(geom.any(), *mMaterial);
-			newShape->userData = mRenderActors[i];
-			mRenderActors[i]->setPhysicsShape(newShape);
-			
+			unlink(mRenderActors[i], shape, actor);
+			link(mRenderActors[i], newShape, newActor);
+
 			newActor->setActorFlag(PxActorFlag::eVISUALIZATION, true);
 			newActor->setLinearDamping(10.5f);
 			newActor->setAngularDamping(0.5f);
 			PxRigidBodyExt::updateMassAndInertia(*newActor, 1.0f);
 			mScene->addActor(*newActor);
 			mPhysicsActors.push_back(newActor);
-			
+
 			PxVec3 explosion = pose.p - explosionPos;
 			PxReal len = explosion.normalize();
 			explosion *= (explosionStrength / len);
@@ -863,6 +906,7 @@ void SampleSubmarine::customizeSceneDesc(PxSceneDesc& sceneDesc)
 {
 	sceneDesc.filterShader				= SampleSubmarineFilterShader;
 	sceneDesc.simulationEventCallback	= this;
+	sceneDesc.flags						|= PxSceneFlag::eREQUIRE_RW_LOCK;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -896,10 +940,10 @@ void SampleSubmarine::onTrigger(PxTriggerPair* pairs, PxU32 count)
 	for(PxU32 i=0; i < count; i++)
 	{
 		// ignore pairs when shapes have been deleted
-		if (pairs[i].flags & (PxTriggerPairFlag::eDELETED_SHAPE_TRIGGER | PxTriggerPairFlag::eDELETED_SHAPE_OTHER))
+		if (pairs[i].flags & (PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER | PxTriggerPairFlag::eREMOVED_SHAPE_OTHER))
 			continue;
 
-		if((&pairs[i].otherShape->getActor() == mSubmarineActor) && (&pairs[i].triggerShape->getActor() == gTreasureActor))
+		if((pairs[i].otherActor == mSubmarineActor) && (pairs[i].triggerActor == gTreasureActor))
 		{
 			gTreasureFound = true;
 		}
@@ -1070,42 +1114,42 @@ void SampleSubmarine::collectInputEvents(std::vector<const SampleFramework::Inpu
 	getApplication().getPlatform()->getSampleUserInput()->unregisterInputEvent(SPAWN_DEBUG_OBJECT);
 
 	//digital mouse events
-	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_FORWARD,				MOUSE_BUTTON_LEFT,			XKEY_UNKNOWN,				PS3KEY_UNKNOWN,					AKEY_UNKNOWN,			MOUSE_BUTTON_LEFT,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			MOUSE_BUTTON_LEFT);
-	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_BACKWARD,				MOUSE_BUTTON_RIGHT,			XKEY_UNKNOWN,				PS3KEY_UNKNOWN,					AKEY_UNKNOWN,			MOUSE_BUTTON_RIGHT,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			MOUSE_BUTTON_RIGHT);
+	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_FORWARD,				MOUSE_BUTTON_LEFT,			XKEY_UNKNOWN,				X1KEY_UNKNOWN,	PS3KEY_UNKNOWN,					PS4KEY_UNKNOWN,					AKEY_UNKNOWN,			MOUSE_BUTTON_LEFT,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			MOUSE_BUTTON_LEFT,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_BACKWARD,				MOUSE_BUTTON_RIGHT,			XKEY_UNKNOWN,				X1KEY_UNKNOWN,	PS3KEY_UNKNOWN,					PS4KEY_UNKNOWN,					AKEY_UNKNOWN,			MOUSE_BUTTON_RIGHT,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			MOUSE_BUTTON_RIGHT,		WIIUKEY_UNKNOWN);
 
 	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(CRAB_FORWARD,					SCAN_CODE_FORWARD,			XKEY_W,						PS3KEY_W,						AKEY_UNKNOWN,			SCAN_CODE_FORWARD,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_FORWARD);
-	DIGITAL_INPUT_EVENT_DEF(CRAB_BACKWARD,					SCAN_CODE_BACKWARD,			XKEY_S,						PS3KEY_S,						AKEY_UNKNOWN,			SCAN_CODE_BACKWARD,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_BACKWARD);
-	DIGITAL_INPUT_EVENT_DEF(CRAB_LEFT,						SCAN_CODE_LEFT,				XKEY_A,						PS3KEY_A,						AKEY_UNKNOWN,			SCAN_CODE_LEFT,				PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_LEFT);
-	DIGITAL_INPUT_EVENT_DEF(CRAB_RIGHT,						SCAN_CODE_RIGHT,			XKEY_D,						PS3KEY_D,						AKEY_UNKNOWN,			SCAN_CODE_RIGHT,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_RIGHT);
-	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_UP,					SCAN_CODE_FORWARD,			XKEY_E,						PS3KEY_E,						AKEY_UNKNOWN,			SCAN_CODE_FORWARD,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_FORWARD);
-	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_DOWN,					SCAN_CODE_BACKWARD,			XKEY_D,						PS3KEY_D,						AKEY_UNKNOWN,			SCAN_CODE_BACKWARD,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_BACKWARD);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_SWITCH,					SCAN_CODE_DOWN,				XKEY_C,						PS3KEY_C,						AKEY_UNKNOWN,			SCAN_CODE_DOWN,				PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_DOWN);
-	DIGITAL_INPUT_EVENT_DEF(SCENE_RESET,					WKEY_R,						XKEY_R,						PS3KEY_R,						AKEY_UNKNOWN,			OSXKEY_R,					PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			LINUXKEY_R);
+	DIGITAL_INPUT_EVENT_DEF(CRAB_FORWARD,					SCAN_CODE_FORWARD,			XKEY_W,						X1KEY_W,		PS3KEY_W,						PS4KEY_W,						AKEY_UNKNOWN,			SCAN_CODE_FORWARD,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_FORWARD,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CRAB_BACKWARD,					SCAN_CODE_BACKWARD,			XKEY_S,						X1KEY_S,		PS3KEY_S,						PS4KEY_S,						AKEY_UNKNOWN,			SCAN_CODE_BACKWARD,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_BACKWARD,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CRAB_LEFT,						SCAN_CODE_LEFT,				XKEY_A,						X1KEY_A,		PS3KEY_A,						PS4KEY_A,						AKEY_UNKNOWN,			SCAN_CODE_LEFT,				PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_LEFT,			WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CRAB_RIGHT,						SCAN_CODE_RIGHT,			XKEY_D,						X1KEY_D,		PS3KEY_D,						PS4KEY_D,						AKEY_UNKNOWN,			SCAN_CODE_RIGHT,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_RIGHT,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_UP,					SCAN_CODE_FORWARD,			XKEY_E,						X1KEY_E,		PS3KEY_E,						PS4KEY_E,						AKEY_UNKNOWN,			SCAN_CODE_FORWARD,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_FORWARD,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_DOWN,					SCAN_CODE_BACKWARD,			XKEY_D,						X1KEY_D,		PS3KEY_D,						PS4KEY_D,						AKEY_UNKNOWN,			SCAN_CODE_BACKWARD,			PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_BACKWARD,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_SWITCH,					SCAN_CODE_DOWN,				XKEY_C,						X1KEY_C,		PS3KEY_C,						PS4KEY_C,						AKEY_UNKNOWN,			SCAN_CODE_DOWN,				PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			SCAN_CODE_DOWN,			WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(SCENE_RESET,					WKEY_R,						XKEY_R,						X1KEY_R,		PS3KEY_R,						PS4KEY_R,						AKEY_UNKNOWN,			OSXKEY_R,					PSP2KEY_UNKNOWN,			IKEY_UNKNOWN,			LINUXKEY_R,				WIIUKEY_UNKNOWN);
 
 	//digital gamepad events
-	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_FORWARD,				GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,		AKEY_UNKNOWN,			GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	IKEY_UNKNOWN,			LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_BACKWARD,				GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,		AKEY_UNKNOWN,			GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	IKEY_UNKNOWN,			LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_UP,					GAMEPAD_RIGHT_SHOULDER_TOP,	GAMEPAD_RIGHT_SHOULDER_TOP,	GAMEPAD_RIGHT_SHOULDER_TOP,		AKEY_UNKNOWN,			GAMEPAD_RIGHT_SHOULDER_TOP,	GAMEPAD_DIGI_UP,			IKEY_UNKNOWN,			LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_DOWN,					GAMEPAD_LEFT_SHOULDER_TOP,	GAMEPAD_LEFT_SHOULDER_TOP,	GAMEPAD_LEFT_SHOULDER_TOP,		AKEY_UNKNOWN,			GAMEPAD_LEFT_SHOULDER_TOP,	GAMEPAD_DIGI_DOWN,			IKEY_UNKNOWN,			LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_SWITCH,					GAMEPAD_RIGHT_STICK,		GAMEPAD_RIGHT_STICK,		GAMEPAD_RIGHT_STICK,			AKEY_UNKNOWN,			GAMEPAD_RIGHT_STICK,		GAMEPAD_SOUTH,              IKEY_UNKNOWN,			LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(SCENE_RESET,					GAMEPAD_LEFT_STICK,			GAMEPAD_LEFT_STICK,			GAMEPAD_LEFT_STICK,				AKEY_UNKNOWN,			GAMEPAD_LEFT_STICK,			GAMEPAD_NORTH,              IKEY_UNKNOWN,			LINUXKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_FORWARD,				GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,		GAMEPAD_RIGHT_SHOULDER_BOT,		AKEY_UNKNOWN,			GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,		GAMEPAD_RIGHT_SHOULDER_BOT);
+	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_BACKWARD,				GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,		GAMEPAD_LEFT_SHOULDER_BOT,		AKEY_UNKNOWN,			GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,		GAMEPAD_LEFT_SHOULDER_BOT);
+	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_UP,					GAMEPAD_RIGHT_SHOULDER_TOP,	GAMEPAD_RIGHT_SHOULDER_TOP,	GAMEPAD_RIGHT_SHOULDER_TOP,	GAMEPAD_RIGHT_SHOULDER_TOP,		GAMEPAD_RIGHT_SHOULDER_TOP,		AKEY_UNKNOWN,			GAMEPAD_RIGHT_SHOULDER_TOP,	GAMEPAD_DIGI_UP,			IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,		GAMEPAD_RIGHT_SHOULDER_TOP);
+	DIGITAL_INPUT_EVENT_DEF(SUBMARINE_DOWN,					GAMEPAD_LEFT_SHOULDER_TOP,	GAMEPAD_LEFT_SHOULDER_TOP,	GAMEPAD_LEFT_SHOULDER_TOP,	GAMEPAD_LEFT_SHOULDER_TOP,		GAMEPAD_LEFT_SHOULDER_TOP,		AKEY_UNKNOWN,			GAMEPAD_LEFT_SHOULDER_TOP,	GAMEPAD_DIGI_DOWN,			IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,		GAMEPAD_LEFT_SHOULDER_TOP);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_SWITCH,					GAMEPAD_RIGHT_STICK,		GAMEPAD_RIGHT_STICK,		GAMEPAD_RIGHT_STICK,		GAMEPAD_RIGHT_STICK,			GAMEPAD_RIGHT_STICK,			AKEY_UNKNOWN,			GAMEPAD_RIGHT_STICK,		GAMEPAD_SOUTH,              IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,		GAMEPAD_RIGHT_STICK);
+	DIGITAL_INPUT_EVENT_DEF(SCENE_RESET,					GAMEPAD_LEFT_STICK,			GAMEPAD_LEFT_STICK,			GAMEPAD_LEFT_STICK,			GAMEPAD_LEFT_STICK,				GAMEPAD_LEFT_STICK,				AKEY_UNKNOWN,			GAMEPAD_LEFT_STICK,			GAMEPAD_NORTH,              IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,		GAMEPAD_LEFT_STICK);
 	
 	// analog gamepad events
-	ANALOG_INPUT_EVENT_DEF(CRAB_LEFT_RIGHT, GAMEPAD_DEFAULT_SENSITIVITY,				GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,			GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X, 	LINUXKEY_UNKNOWN);
-	ANALOG_INPUT_EVENT_DEF(CRAB_FORWARD_BACKWARD, GAMEPAD_DEFAULT_SENSITIVITY,			GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,			GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y, 	LINUXKEY_UNKNOWN);
-	ANALOG_INPUT_EVENT_DEF(SUBMARINE_FORWARD_BACKWARD, GAMEPAD_DEFAULT_SENSITIVITY,		WKEY_UNKNOWN,				XKEY_UNKNOWN,				PS3KEY_UNKNOWN,					GAMEPAD_LEFT_STICK_Y,	OSXKEY_UNKNOWN,         	PSP2KEY_UNKNOWN,			GAMEPAD_LEFT_STICK_Y,	LINUXKEY_UNKNOWN);
+	ANALOG_INPUT_EVENT_DEF(CRAB_LEFT_RIGHT, GAMEPAD_DEFAULT_SENSITIVITY,				GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,			GAMEPAD_LEFT_STICK_X,			GAMEPAD_LEFT_STICK_X,			GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X, 	LINUXKEY_UNKNOWN,	GAMEPAD_LEFT_STICK_X);
+	ANALOG_INPUT_EVENT_DEF(CRAB_FORWARD_BACKWARD, GAMEPAD_DEFAULT_SENSITIVITY,			GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,			GAMEPAD_LEFT_STICK_Y,			GAMEPAD_LEFT_STICK_Y,			GAMEPAD_LEFT_STICK_Y,	GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y, 	LINUXKEY_UNKNOWN,	GAMEPAD_LEFT_STICK_Y);
+	ANALOG_INPUT_EVENT_DEF(SUBMARINE_FORWARD_BACKWARD, GAMEPAD_DEFAULT_SENSITIVITY,		GAMEPAD_LEFT_STICK_Y,				XKEY_UNKNOWN,				X1KEY_UNKNOWN,					PS3KEY_UNKNOWN,					PS4KEY_UNKNOWN,					GAMEPAD_LEFT_STICK_Y,	OSXKEY_UNKNOWN,         	PSP2KEY_UNKNOWN,			GAMEPAD_LEFT_STICK_Y,	LINUXKEY_UNKNOWN,	WIIUKEY_UNKNOWN);
 
     //touch events
-    TOUCH_INPUT_EVENT_DEF(SCENE_RESET,		"Reset",		ABUTTON_5,	IBUTTON_5);
-	TOUCH_INPUT_EVENT_DEF(CAMERA_SWITCH,	"Switch Cam",	ABUTTON_6,	IBUTTON_6);
-	TOUCH_INPUT_EVENT_DEF(SUBMARINE_UP,		"Rise",			ABUTTON_7,	IBUTTON_7);
-	TOUCH_INPUT_EVENT_DEF(SUBMARINE_DOWN,	"Drop",			ABUTTON_8,	IBUTTON_8);
+    TOUCH_INPUT_EVENT_DEF(SCENE_RESET,		"Reset",		ABUTTON_5,	IBUTTON_5, TOUCH_BUTTON_5);
+	TOUCH_INPUT_EVENT_DEF(CAMERA_SWITCH,	"Switch Cam",	ABUTTON_6,	IBUTTON_6, TOUCH_BUTTON_6);
+	TOUCH_INPUT_EVENT_DEF(SUBMARINE_UP,		"Rise",			ABUTTON_7,	IBUTTON_7, TOUCH_BUTTON_7);
+	TOUCH_INPUT_EVENT_DEF(SUBMARINE_DOWN,	"Drop",			ABUTTON_8,	IBUTTON_8, TOUCH_BUTTON_8);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool SampleSubmarine::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
+void SampleSubmarine::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
 {
 	if(mSubmarineActor && mCameraAttachedToActor == mSubmarineActor)
 	{
@@ -1164,15 +1208,13 @@ bool SampleSubmarine::onDigitalInputEvent(const SampleFramework::InputEvent& ie,
 			break;
 		case SCENE_RESET:
 			{
-				resetScene();
+				gResetScene = true;
 			}
 			break;
 		}
 	}
 
 	PhysXSample::onDigitalInputEvent(ie,val);
-
-	return true;
 }
 
 void SampleSubmarine::onAnalogInputEvent(const SampleFramework::InputEvent& ie, float val)
@@ -1242,6 +1284,8 @@ void SampleSubmarine::handleInput()
 
 		if(gKeyFlags & (Movement::eSUBMAINE_FWD|Movement::eSUBMAINE_BCKWD))
 		{
+			PxSceneReadLock scopedLock(*mScene);
+
 			static const PxReal camEpsilon = 0.001f;
 			PxTransform subPose = mSubmarineActor->getGlobalPose();
 			PxVec3 cameraDir = getCamera().getViewDir();

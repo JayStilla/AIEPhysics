@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -44,7 +44,7 @@ namespace physx { namespace profile {
 	struct MemoryEventParser
 	{
 		typedef WrapperReflectionAllocator<PxU8> TAllocatorType;
-		typedef HashMap<PxU32, char*, Hash<PxU32>, TAllocatorType > THdlToStringMap;
+		typedef shdfnd::HashMap<PxU32, char*, shdfnd::Hash<PxU32>, TAllocatorType > THdlToStringMap;
 		typedef EventDeserializer<TSwapBytes>	TDeserializerType;
 		
 		FoundationWrapper	mWrapper;

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -45,7 +45,7 @@
 namespace physx
 {
 #endif
-#if defined(PX_WINDOWS) || defined(PX_WINMODERN) || defined(DOXYGEN) 
+#if defined (PX_WINDOWS) ||  defined(PX_WINMODERN) || defined (DOXYGEN) || defined(PX_XBOXONE)
 
 	typedef signed __int64		PxI64;
 	typedef signed int			PxI32;
@@ -129,8 +129,8 @@ namespace physx
 
 	typedef float				PxF32;
 	typedef double				PxF64;
-    
-#elif defined(PX_WII)
+
+#elif defined(PX_WIIU)
 	typedef signed long long	PxI64;
 	typedef signed int			PxI32;
 	typedef signed short		PxI16;
@@ -143,6 +143,21 @@ namespace physx
 
 	typedef float				PxF32;
 	typedef double				PxF64;
+
+#elif defined(PX_PS4)
+	typedef signed long long	PxI64;
+	typedef signed int			PxI32;
+	typedef signed short		PxI16;
+	typedef signed char			PxI8;
+	
+	typedef unsigned long long	PxU64;
+	typedef unsigned int		PxU32;
+	typedef unsigned short		PxU16;
+	typedef unsigned char		PxU8;
+	
+	typedef float				PxF32;
+	typedef double				PxF64;
+
 #else
 	#error Unknown platform!
 

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #ifndef GL_INCLUDES_H
 #define GL_INCLUDES_H
@@ -38,6 +38,8 @@
     #include <osx/OSXGLIncludes.h>
 #elif defined(RENDERER_XBOX360)
     #include <xbox360/Xbox360GLIncludes.h>
+#elif defined(RENDERER_PS4)
+    #include <ps4/PS4GLIncludes.h>
 #elif defined(RENDERER_LINUX)
     #include <linux/LinuxGLIncludes.h>
 #elif defined(RENDERER_ANDROID)

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -46,14 +46,20 @@ class SampleCCTCameraController : public CameraController
 		virtual			void				onPointerInputEvent(const SampleFramework::InputEvent&, physx::PxU32, physx::PxU32, physx::PxReal, physx::PxReal, bool val);
 		virtual			void				collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents);
 
-		virtual			void						update(Camera& camera, PxReal dtime);
-
+		virtual			void				update(Camera& camera, PxReal dtime);
+		virtual			PxReal				getCameraSpeed()
+		{ 
+			return mKeyShiftDown ? mRunningSpeed : mWalkingSpeed ; 
+		}
+						void						setCameraMaxSpeed(PxReal speed)			{ mCameraMaxSpeed = speed; }
 						void						setView(PxReal pitch, PxReal yaw);
 						void						startJump();
 
 		PX_FORCE_INLINE ControlledActor*			getControlledActor()					{ return mCCTs[mControlledIndex];	}
 		PX_FORCE_INLINE void						setJumpForce(PxReal force)				{ mJumpForce = force;				}
 		PX_FORCE_INLINE void						setGravity(PxReal g)					{ mGravity = g;						}
+		PX_FORCE_INLINE void						enableCCT(bool bState)					{ mCCTEnabled = bState;			    }
+		PX_FORCE_INLINE bool						getCCTState()							{ return mCCTEnabled;				}
 
 		// The CCT's physics & rendering positions don't always match if the CCT
 		// is updated with variable timesteps and the physics with fixed-timesteps.
@@ -65,13 +71,16 @@ class SampleCCTCameraController : public CameraController
 		PX_FORCE_INLINE void						setObstacleContext(PxObstacleContext* context)		{ mObstacleContext = context;	}
 		PX_FORCE_INLINE void						setFilterData(const PxFilterData* filterData)		{ mFilterData = filterData;		}
 		PX_FORCE_INLINE void						setFilterCallback(PxSceneQueryFilterCallback* cb)	{ mFilterCallback = cb;			}
+		PX_FORCE_INLINE void						setCCTFilterCallback(PxControllerFilterCallback* cb){ mCCTFilterCallback = cb;		}
 
 	private:
+						SampleCCTCameraController& operator=(const SampleCCTCameraController&);
 						PhysXSample&				mBase;	// PT: TODO: find a way to decouple us from PhysXSampleApplication. Only needed for "recenterCursor". Maybe the app could inherit from the cam...
 
 						PxObstacleContext*			mObstacleContext;	// User-defined additional obstacles
 						const PxFilterData*			mFilterData;		// User-defined filter data for 'move' function
 						PxSceneQueryFilterCallback*	mFilterCallback;	// User-defined filter data for 'move' function
+						PxControllerFilterCallback*	mCCTFilterCallback;	// User-defined filter data for 'move' function
 
 						PxU32						mControlledIndex;
 						PxU32						mNbCCTs;
@@ -85,9 +94,12 @@ class SampleCCTCameraController : public CameraController
 						PxReal						mSensibility;
 
 						bool						mFwd,mBwd,mLeft,mRight,mKeyShiftDown;
+						bool						mCCTEnabled;
 
 						PxReal						mRunningSpeed;
 						PxReal						mWalkingSpeed;
+						PxReal						mGamepadWalkingSpeed;
+						PxReal						mCameraMaxSpeed;
 						PxReal						mJumpForce;
 						PxReal						mGravity;
 

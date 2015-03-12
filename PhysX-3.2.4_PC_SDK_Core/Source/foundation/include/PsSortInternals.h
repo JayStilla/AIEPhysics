@@ -23,9 +23,9 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
-// Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
+// Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
 
 
 #ifndef PX_FOUNDATION_PSSORTINTERNALS_H
@@ -36,9 +36,14 @@
 */
 
 #include "foundation/PxAssert.h"
+#include "foundation/PxMemory.h"
 #include "PsUtilities.h"
 #include "PsUserAllocated.h"
-#include "PsIntrinsics.h"
+
+#if !defined(PX_GNUC) && !defined(PX_GHS)
+#pragma warning(push)
+#pragma warning(disable:4127) // Disable the conditional is constant warning for this header, it is used intentionally
+#endif
 
 namespace physx
 {
@@ -146,7 +151,7 @@ namespace shdfnd
 			{
 				mCapacity *=2;
 				PxI32 *newMem = (PxI32 *)mAllocator.allocate(sizeof(PxI32)*mCapacity, __FILE__, __LINE__ );
-				memCopy(newMem,mMemory,mSize*sizeof(PxI32));
+				PxMemCopy(newMem,mMemory,mSize*sizeof(PxI32));
 				if(mRealloc) 
 					mAllocator.deallocate(mMemory);
 				mRealloc = true;
@@ -177,5 +182,10 @@ namespace shdfnd
 
 } // namespace shdfnd
 } // namespace physx
+
+
+#if defined(PX_WINDOWS) || defined(PX_XBOXONE)
+#pragma warning(pop)
+#endif
 
 #endif

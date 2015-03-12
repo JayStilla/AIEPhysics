@@ -23,14 +23,14 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-#ifndef PX_PHYSICS_GEOMUTILS_GU_MTD
-#define PX_PHYSICS_GEOMUTILS_GU_MTD
+#ifndef GU_MTD_H
+#define GU_MTD_H
 
-#include "PxPhysXCommon.h"
+#include "PxPhysXCommonConfig.h"
 
 namespace physx
 {
@@ -39,6 +39,7 @@ namespace physx
 	class PxPlane;
 	class PxGeometry;
 	class PxTransform;
+	class PxHeightFieldGeometry;
 
 namespace Gu
 {
@@ -62,7 +63,7 @@ namespace Gu
 
 	PX_PHYSX_COMMON_API	bool	computeMTD_SphereConvex		(PxVec3& mtd, PxF32& depth, const Sphere& sphere, const PxConvexMeshGeometry& convexGeom, const PxTransform& convexPose);
 	PX_PHYSX_COMMON_API	bool	computeMTD_BoxConvex		(PxVec3& mtd, PxF32& depth, const Box& box, const PxConvexMeshGeometry& convexGeom, const PxTransform& convexPose);
-	PX_PHYSX_COMMON_API	bool	computeMTD_CapsuleConvex	(PxVec3& mtd, PxF32& depth, const Capsule& capsule, const PxConvexMeshGeometry& convexGeom, const PxTransform& convexPose);
+	PX_PHYSX_COMMON_API	bool	computeMTD_CapsuleConvex	(PxVec3& mtd, PxF32& depth, const Capsule& capsule, const PxTransform& capsulePose, const PxConvexMeshGeometry& convexGeom, const PxTransform& convexPose);
 	PX_PHYSX_COMMON_API	bool	computeMTD_ConvexConvex		(PxVec3& mtd, PxF32& depth, const PxConvexMeshGeometry& convexGeom0, const PxTransform& convexPose0, const PxConvexMeshGeometry& convexGeom1, const PxTransform& convexPose1);
 
 	PX_PHYSX_COMMON_API	bool	computeMTD_SpherePlane		(PxVec3& mtd, PxF32& depth, const Sphere& sphere, const PxPlane& plane);
@@ -74,6 +75,12 @@ namespace Gu
 	PX_PHYSX_COMMON_API	bool	computeMTD_BoxMesh			(PxVec3& mtd, PxF32& depth, const Box& box, const PxTriangleMeshGeometry& meshGeom, const PxTransform& meshPose);
 	PX_PHYSX_COMMON_API	bool	computeMTD_CapsuleMesh		(PxVec3& mtd, PxF32& depth, const Capsule& capsule, const PxTriangleMeshGeometry& meshGeom, const PxTransform& meshPose);
 	PX_PHYSX_COMMON_API	bool	computeMTD_ConvexMesh		(PxVec3& mtd, PxF32& depth, const PxConvexMeshGeometry& convexGeom, const PxTransform& convexPose, const PxTriangleMeshGeometry& meshGeom, const PxTransform& meshPose);
+
+	PX_PHYSX_COMMON_API	bool	computeMTD_SphereHeightField(PxVec3& mtd, PxF32& depth, const Sphere& sphere, const PxHeightFieldGeometry& meshGeom, const PxTransform& meshPose);
+	PX_PHYSX_COMMON_API	bool	computeMTD_CapsuleHeightField(PxVec3& mtd, PxF32& depth, const Capsule& sphere, const PxHeightFieldGeometry& meshGeom, const PxTransform& meshPose);
+	PX_PHYSX_COMMON_API bool	computeMTD_BoxHeightField	(PxVec3& mtd, PxF32& depth, const Box& box, const PxHeightFieldGeometry& meshGeom, const PxTransform& meshPose);
+	PX_PHYSX_COMMON_API bool	computeMTD_ConvexHeightField(PxVec3& mtd, PxF32& depth, const PxConvexMeshGeometry& convexGeom, const PxTransform& convexPose, const PxHeightFieldGeometry& meshGeom, const PxTransform& meshPose);
+
 
 	#define GEOM_MTD_CALLBACK_PARAMS	PxVec3& mtd, PxF32& depth, const PxGeometry& geom0, const PxTransform& transform0, const PxGeometry& geom1, const PxTransform& transform1
 	typedef bool (*GeomMTDFunc)	(GEOM_MTD_CALLBACK_PARAMS);

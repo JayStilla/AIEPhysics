@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 
 #ifndef GLES2_RENDERER_MATERIAL_H
@@ -44,6 +44,8 @@
 
 #include <set>
 
+#include <set>
+
 namespace SampleRenderer
 {
 
@@ -54,10 +56,10 @@ class GLES2RendererMaterial : public RendererMaterial
 		virtual ~GLES2RendererMaterial(void);
 		virtual void setModelMatrix(const float *matrix) 
 		{
-			PX_FORCE_PARAMETER_REFERENCE(matrix);
+			PX_UNUSED(matrix);
 			PX_ALWAYS_ASSERT();
 		}
-		virtual Renderer& getRenderer() { return m_renderer; }
+		virtual const Renderer& getRenderer() const { return m_renderer; }
 		
 		/* Actually executes glUniform* and submits data saved in the m_program[m_currentPass].vsUniformsVec4/psUniformsVec4 */
 		void submitUniforms();

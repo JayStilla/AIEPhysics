@@ -1,37 +1,29 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #include <RendererConfig.h>
 
@@ -116,9 +108,6 @@ D3D9Renderer::D3DXInterface::D3DXInterface(void)
 #if defined(RENDERER_WINDOWS)
 #define D3DX_DLL "d3dx9_" RENDERER_TEXT2(D3DX_SDK_VERSION) ".dll"
 
-
-
-
 	m_library = LoadLibraryA(D3DX_DLL);
 	if(!m_library)
 	{
@@ -133,7 +122,10 @@ RENDERER_ASSERT(m_##_name, "Unable to find D3DX9 Function " #_name " in " D3DX_D
 		FIND_D3DX_FUNCTION(D3DXCompileShaderFromFileA)
 		FIND_D3DX_FUNCTION(D3DXGetVertexShaderProfile)
 		FIND_D3DX_FUNCTION(D3DXGetPixelShaderProfile)
+		FIND_D3DX_FUNCTION(D3DXSaveSurfaceToFileInMemory)
+		FIND_D3DX_FUNCTION(D3DXCreateBuffer)
 		FIND_D3DX_FUNCTION(D3DXSaveSurfaceToFileA)
+		FIND_D3DX_FUNCTION(D3DXGetShaderConstantTable)
 
 #undef FIND_D3DX_FUNCTION
 	}
@@ -178,6 +170,13 @@ HRESULT D3D9Renderer::D3DXInterface::CompileShaderFromFileA(LPCSTR srcFile, CONS
 
 }
 
+HRESULT D3D9Renderer::D3DXInterface::GetShaderConstantTable(const DWORD* pFunction, LPD3DXCONSTANTTABLE *constantTable)
+{
+	HRESULT result = D3DERR_NOTAVAILABLE;
+	CALL_D3DX_FUNCTION(D3DXGetShaderConstantTable, (pFunction, constantTable));
+	return result;
+}
+
 HRESULT D3D9Renderer::D3DXInterface::SaveSurfaceToFileA( LPCSTR pDestFile, D3DXIMAGE_FILEFORMAT DestFormat, LPDIRECT3DSURFACE9 pSrcSurface, CONST PALETTEENTRY* pSrcPalette, CONST RECT*  pSrcRect)
 {
 
@@ -186,6 +185,7 @@ HRESULT D3D9Renderer::D3DXInterface::SaveSurfaceToFileA( LPCSTR pDestFile, D3DXI
 	return result;
 
 }
+
 LPCSTR D3D9Renderer::D3DXInterface::GetVertexShaderProfile(LPDIRECT3DDEVICE9 device)
 {
 
@@ -201,6 +201,21 @@ LPCSTR D3D9Renderer::D3DXInterface::GetPixelShaderProfile(LPDIRECT3DDEVICE9 devi
 	CALL_D3DX_FUNCTION(D3DXGetPixelShaderProfile, (device));
 	return result;
 }
+
+HRESULT D3D9Renderer::D3DXInterface::SaveSurfaceToFileInMemory(LPD3DXBUFFER *ppDestBuf, D3DXIMAGE_FILEFORMAT DestFormat, LPDIRECT3DSURFACE9 pSrcSurface, const PALETTEENTRY *pSrcPalette, const RECT *pSrcRect)
+{
+	HRESULT result = D3DERR_NOTAVAILABLE;
+	CALL_D3DX_FUNCTION(D3DXSaveSurfaceToFileInMemory, (ppDestBuf, DestFormat, pSrcSurface, pSrcPalette, pSrcRect));
+	return result;
+}
+
+HRESULT D3D9Renderer::D3DXInterface::CreateBuffer(DWORD NumBytes, LPD3DXBUFFER *ppBuffer)
+{
+	HRESULT result = D3DERR_NOTAVAILABLE;
+	CALL_D3DX_FUNCTION(D3DXCreateBuffer, (NumBytes, ppBuffer));
+	return result;
+}
+
 
 #undef CALL_D3DX_FUNCTION
 
@@ -218,7 +233,7 @@ D3D9Renderer::ShaderEnvironment::ShaderEnvironment(void)
 ***************/ 
 
 D3D9Renderer::D3D9Renderer(IDirect3D9* inDirect3d, const char* devName, PxU32 dispWidth, PxU32 dispHeight, IDirect3DDevice9* inDevice, bool inIsDeviceEx, const char* assetDir)
-	: Renderer( DRIVER_DIRECT3D9, assetDir )
+	: Renderer( DRIVER_DIRECT3D9, NULL, assetDir )
 {
 	initialize(inIsDeviceEx);
 	m_d3d = inDirect3d;
@@ -231,6 +246,7 @@ D3D9Renderer::D3D9Renderer(IDirect3D9* inDirect3d, const char* devName, PxU32 di
 	// onDeviceReset();
 }
 
+
 void D3D9Renderer::initialize( bool isDeviceEx )
 {
 	m_textVDecl						= NULL;
@@ -238,16 +254,21 @@ void D3D9Renderer::initialize( bool isDeviceEx )
 	m_pixelCenterOffset      = 0.5f;
 	m_displayWidth           = 0;
 	m_displayHeight          = 0;
+	m_displayBuffer          = 0;
 	m_d3d                    = 0;
 	m_d3dDevice              = 0;
 	m_d3dDepthStencilSurface = 0;
+	m_d3dSurface             = 0;
+	m_d3dSwapChain           = 0;
+	m_d3dSwapDepthStencilSurface = 0;
+	m_d3dSwapSurface         = 0;
 	m_isDeviceEx			 = isDeviceEx;
 
-	m_viewMatrix				= PxMat44::createIdentity();
+	m_viewMatrix				= PxMat44(PxIdentity);
 }
 
 D3D9Renderer::D3D9Renderer(const RendererDesc &desc, const char* assetDir) :
-Renderer	(DRIVER_DIRECT3D9, assetDir)
+Renderer	(DRIVER_DIRECT3D9, desc.errorCallback, assetDir)
 {
 	initialize(false);
 	SampleFramework::SamplePlatform* m_platform = SampleFramework::SamplePlatform::platform();
@@ -261,16 +282,18 @@ Renderer	(DRIVER_DIRECT3D9, assetDir)
 		m_d3dPresentParams.BackBufferFormat       = D3DFMT_X8R8G8B8;
 		m_d3dPresentParams.EnableAutoDepthStencil = 0;
 		m_d3dPresentParams.AutoDepthStencilFormat = D3DFMT_D24S8;
-		m_d3dPresentParams.PresentationInterval   = D3DPRESENT_INTERVAL_IMMEDIATE; // turns off V-sync;
+		m_d3dPresentParams.PresentationInterval   = desc.vsync ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
 
 		HRESULT res = m_platform->initializeD3D9Display(&m_d3dPresentParams, 
 														m_deviceName, 
 														m_displayWidth, 
 														m_displayHeight, 
 														&m_d3dDevice);
+
 		RENDERER_ASSERT(res==D3D_OK, "Failed to create Direct3D9 Device.");
 		if(res==D3D_OK)
 		{
+			m_d3dPresentParamsChanged = false;
 			checkResize(false);
 			onDeviceReset();
 		}
@@ -282,6 +305,10 @@ D3D9Renderer::~D3D9Renderer(void)
 	assert(!m_textVDecl);
 	SampleFramework::SamplePlatform* m_platform = SampleFramework::SamplePlatform::platform();
 
+	releaseAllMaterials();
+
+	releaseSwapchain();
+
 	if(m_d3dDepthStencilSurface)
 	{
 		m_d3dDevice->SetDepthStencilSurface(NULL);
@@ -291,6 +318,7 @@ D3D9Renderer::~D3D9Renderer(void)
 	m_platform->D3D9DeviceBlockUntilIdle();
 	if(m_d3dDevice)              m_d3dDevice->Release();
 	if(m_d3d)                    m_d3d->Release();
+	if(m_displayBuffer)          m_displayBuffer->Release();
 }
 
 bool D3D9Renderer::checkResize(bool isDeviceLost)
@@ -304,9 +332,12 @@ bool D3D9Renderer::checkResize(bool isDeviceLost)
 		SampleFramework::SamplePlatform::platform()->getWindowSize(width, height);
 		if(width && height && (width != m_displayWidth || height != m_displayHeight) || isDeviceLost)
 		{
-			bool needsReset = (m_displayWidth&&m_displayHeight ? true : false);
+			bool needsReset = (m_displayWidth&&m_displayHeight&&(isDeviceLost||!useSwapchain()) ? true : false);
 			m_displayWidth  = width;
 			m_displayHeight = height;
+
+			m_d3dPresentParams.BackBufferWidth  = (UINT)m_displayWidth;
+			m_d3dPresentParams.BackBufferHeight = (UINT)m_displayHeight;
 
 			D3DVIEWPORT9 viewport = {0};
 			m_d3dDevice->GetViewport(&viewport);
@@ -321,26 +352,111 @@ bool D3D9Renderer::checkResize(bool isDeviceLost)
 				if(res == D3D_OK || res == D3DERR_DEVICENOTRESET)	//if device is lost, device has to be ready for reset
 				{
 					onDeviceLost();
-					m_d3dPresentParams.BackBufferWidth  = (UINT)m_displayWidth;
-					m_d3dPresentParams.BackBufferHeight = (UINT)m_displayHeight;
-					res = m_d3dDevice->Reset(&m_d3dPresentParams);
-					RENDERER_ASSERT(res == D3D_OK, "Failed to reset Direct3D9 Device.");
-					if(res == D3D_OK)
+					isDeviceReset = resetDevice();
+					if (isDeviceReset)
 					{
-						isDeviceReset = true;
+						onDeviceReset();
+						m_d3dDevice->SetViewport(&viewport);
 					}
-					m_d3dDevice->SetViewport(&viewport);
-					onDeviceReset();
 				}
 			}
 			else
 			{
+				if(m_d3dSurface == NULL)
+					m_d3dDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &m_d3dSurface);
+				buildSwapchain();
 				m_d3dDevice->SetViewport(&viewport);
 			}
 		}
 	}
 #endif
 	return isDeviceReset;
+}
+
+bool D3D9Renderer::resetDevice(void)
+{
+	
+	HRESULT res = m_d3dDevice->Reset(&m_d3dPresentParams);
+	RENDERER_ASSERT(res == D3D_OK, "Failed to reset Direct3D9 Device.");
+	if(res == D3D_OK)
+	{
+		m_d3dPresentParamsChanged = false;
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+void D3D9Renderer::buildSwapchain(void)
+{
+	if (!useSwapchain())
+		return;
+
+#if RENDERER_ENABLE_DIRECT3D9_SWAPCHAIN
+	// Set the DX9 surfaces back to the originals
+	m_d3dDevice->SetRenderTarget(0, m_d3dSurface);
+	m_d3dDevice->SetDepthStencilSurface(m_d3dDepthStencilSurface);
+
+	// Release the swapchain resources
+	releaseSwapchain();
+
+	// Recreate the swapchain resources
+	m_d3dDevice->CreateAdditionalSwapChain(&m_d3dPresentParams, &m_d3dSwapChain);
+	m_d3dSwapChain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &m_d3dSwapSurface);
+	m_d3dDevice->CreateDepthStencilSurface(m_displayWidth,m_displayHeight,D3DFMT_D24S8, D3DMULTISAMPLE_NONE, 0, false, &m_d3dSwapDepthStencilSurface, 0);
+
+	// Re-assign the DX9 surfaces to use the swapchain
+	m_d3dDevice->SetRenderTarget(0, m_d3dSwapSurface);
+	m_d3dDevice->SetDepthStencilSurface(m_d3dSwapDepthStencilSurface);
+#endif
+}
+
+void SampleRenderer::D3D9Renderer::releaseSwapchain()
+{
+#if RENDERER_ENABLE_DIRECT3D9_SWAPCHAIN
+	if(m_d3dSwapChain) 
+	{
+		m_d3dSwapChain->Release();
+		m_d3dSwapChain = 0;
+	}
+	if(m_d3dSwapDepthStencilSurface) 
+	{
+		m_d3dSwapDepthStencilSurface->Release();
+		m_d3dSwapDepthStencilSurface = 0;
+	}
+	if(m_d3dSwapSurface) 
+	{
+		m_d3dSwapSurface->Release();
+		m_d3dSwapSurface = 0;
+	}
+#endif
+}
+
+bool SampleRenderer::D3D9Renderer::useSwapchain() const
+{
+	return RENDERER_ENABLE_DIRECT3D9_SWAPCHAIN==1;
+}
+
+bool SampleRenderer::D3D9Renderer::validSwapchain() const
+{
+#if RENDERER_ENABLE_DIRECT3D9_SWAPCHAIN
+	return m_d3dSwapChain && m_d3dSwapDepthStencilSurface && m_d3dSwapSurface;
+#else
+	return false;
+#endif
+}
+
+HRESULT SampleRenderer::D3D9Renderer::presentSwapchain()
+{
+#if RENDERER_ENABLE_DIRECT3D9_SWAPCHAIN
+	RENDERER_ASSERT(m_d3dSwapChain, "Invalid D3D9 swapchain");
+	if(m_d3dSwapChain)
+		return m_d3dSwapChain->Present(0, 0, 0, 0, 0);
+	else
+#endif
+		return D3DERR_NOTAVAILABLE;
 }
 
 void D3D9Renderer::releaseDepthStencilSurface(void)
@@ -360,6 +476,12 @@ void D3D9Renderer::onDeviceLost(void)
 		m_d3dDepthStencilSurface->Release();
 		m_d3dDepthStencilSurface = 0;
 	}
+	if (m_d3dSurface)
+	{
+		m_d3dSurface->Release();
+		m_d3dSurface = 0;
+	}
+	releaseSwapchain();
 }
 
 void D3D9Renderer::onDeviceReset(void)
@@ -372,7 +494,9 @@ void D3D9Renderer::onDeviceReset(void)
 		m_d3dDevice->SetRenderState(D3DRS_LIGHTING, 0);
 #endif
 		m_d3dDevice->SetRenderState(D3DRS_ZENABLE,  1);
+		m_d3dDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &m_d3dSurface);
 		buildDepthStencilSurface();
+		buildSwapchain();
 	}
 	notifyResourcesResetDevice();
 }
@@ -428,11 +552,15 @@ bool D3D9Renderer::swapBuffers(void)
 	bool isDeviceReset = false;
 	if(m_d3dDevice)
 	{
-		HRESULT result = SampleFramework::SamplePlatform::platform()->D3D9Present();
+		HRESULT result = S_OK;
+		if (useSwapchain() && validSwapchain())
+			result = presentSwapchain();
+		else
+			result = SampleFramework::SamplePlatform::platform()->D3D9Present();
 		RENDERER_ASSERT(result == D3D_OK || result == D3DERR_DEVICELOST, "Unknown Direct3D9 error when swapping buffers.");
 		if(result == D3D_OK || result == D3DERR_DEVICELOST)
 		{
-			isDeviceReset = checkResize(result == D3DERR_DEVICELOST);
+			isDeviceReset = checkResize(result == D3DERR_DEVICELOST || m_d3dPresentParamsChanged);
 		}
 	}
 	return isDeviceReset;
@@ -454,7 +582,7 @@ RendererVertexBuffer *D3D9Renderer::createVertexBuffer(const RendererVertexBuffe
 		RENDERER_ASSERT(desc.isValid(), "Invalid Vertex Buffer Descriptor.");
 		if(desc.isValid())
 		{
-			vb = new D3D9RendererVertexBuffer(*m_d3dDevice, *this, desc, m_deferredVBUnlock);
+			vb = new D3D9RendererVertexBuffer(*m_d3dDevice, *this, desc);
 		}
 	}
 	if(vb) addResource(*vb);
@@ -507,6 +635,13 @@ RendererTexture2D *D3D9Renderer::createTexture2D(const RendererTexture2DDesc &de
 	}
 	if(texture) addResource(*texture);
 	return texture;
+}
+
+RendererTexture3D *D3D9Renderer::createTexture3D(const RendererTexture3DDesc &desc)
+{
+	//RENDERER_ASSERT(0, "Not implemented!");
+	// TODO: Properly implement. 
+	return 0;
 }
 
 RendererTarget *D3D9Renderer::createTarget(const RendererTargetDesc &desc)
@@ -577,6 +712,14 @@ RendererLight *D3D9Renderer::createLight(const RendererLightDesc &desc)
 	return light;
 }
 
+void D3D9Renderer::setVsync(bool on)
+{
+	UINT newVal = on ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
+	m_d3dPresentParamsChanged |= m_d3dPresentParams.PresentationInterval != newVal;
+	m_d3dPresentParams.PresentationInterval = newVal;
+	//RENDERER_ASSERT(0, "Not implemented!");
+}
+
 void D3D9Renderer::disableDepthTest()
 {
 	m_d3dDevice->SetRenderState(D3DRS_ZENABLE,  0);
@@ -605,7 +748,7 @@ void D3D9Renderer::endRender(void)
 	}
 }
 
-void D3D9Renderer::bindViewProj(const physx::PxMat44 &eye, const PxMat44 &proj)
+void D3D9Renderer::bindViewProj(const physx::PxMat44 &eye, const RendererProjection &proj)
 {
 	m_viewMatrix = eye.inverseRT();
 	convertToD3D9(m_environment.viewMatrix, m_viewMatrix);
@@ -642,21 +785,28 @@ void D3D9Renderer::bindMeshContext(const RendererMeshContext &context)
 	physx::PxMat44 model;
 	physx::PxMat44 modelView;
 	if(context.transform) model = *context.transform;
-	else                  model = PxMat44::createIdentity();
+	else                  model = PxMat44(PxIdentity);
 	modelView = m_viewMatrix * model;
 
 	convertToD3D9(m_environment.modelMatrix,     model);
 	convertToD3D9(m_environment.modelViewMatrix, modelView);
 
 	// it appears that D3D winding is backwards, so reverse them...
+	PxVec3 column0  = PxVec3(model.column0.x, model.column0.y, model.column0.z);
+	PxVec3 column1  = PxVec3(model.column1.x, model.column1.y, model.column1.z);
+	PxVec3 column2  = PxVec3(model.column2.x, model.column2.y, model.column2.z);
+
+	bool negScale = PxMat33(column0, column1, column2).getDeterminant() < 0.0f;
+
+	// it appears that D3D winding is backwards, so reverse them...
 	DWORD cullMode = D3DCULL_CCW;
 	switch(context.cullMode)
 	{
 	case RendererMeshContext::CLOCKWISE: 
-		cullMode = D3DCULL_CCW;
+		cullMode = negScale ? D3DCULL_CW : D3DCULL_CCW;
 		break;
 	case RendererMeshContext::COUNTER_CLOCKWISE: 
-		cullMode = D3DCULL_CW;
+		cullMode = negScale ? D3DCULL_CCW : D3DCULL_CW;
 		break;
 	case RendererMeshContext::NONE: 
 		cullMode = D3DCULL_NONE;
@@ -664,6 +814,8 @@ void D3D9Renderer::bindMeshContext(const RendererMeshContext &context)
 	default:
 		RENDERER_ASSERT(0, "Invalid Cull Mode");
 	}
+	if (!blendingCull() && NULL != context.material && context.material->getBlending())
+		cullMode = D3DCULL_NONE;
 
 	m_d3dDevice->SetRenderState(D3DRS_CULLMODE, cullMode);
 
@@ -713,6 +865,31 @@ void D3D9Renderer::endMultiPass(void)
 	}
 }
 
+void D3D9Renderer::beginTransparentMultiPass(void)
+{
+	if(m_d3dDevice)
+	{
+		setEnableBlendingOverride(true);
+		m_d3dDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,  1);
+		m_d3dDevice->SetRenderState(D3DRS_SRCBLEND,          D3DBLEND_SRCALPHA);
+		m_d3dDevice->SetRenderState(D3DRS_DESTBLEND,         D3DBLEND_ONE);
+		//m_d3dDevice->SetRenderState(D3DRS_ZFUNC,             D3DCMP_EQUAL);
+		m_d3dDevice->SetRenderState(D3DRS_ZFUNC,             D3DCMP_LESSEQUAL);
+		m_d3dDevice->SetRenderState(D3DRS_ZWRITEENABLE,      false);
+	}
+}
+
+void D3D9Renderer::endTransparentMultiPass(void)
+{
+	if(m_d3dDevice)
+	{
+		setEnableBlendingOverride(false);
+		m_d3dDevice->SetRenderState(D3DRS_ALPHABLENDENABLE,  0);
+		m_d3dDevice->SetRenderState(D3DRS_ZFUNC,             D3DCMP_LESS);
+		m_d3dDevice->SetRenderState(D3DRS_ZWRITEENABLE,      true);
+	}
+}
+
 void D3D9Renderer::renderDeferredLight(const RendererLight &light)
 {
 	RENDERER_ASSERT(0, "Not implemented!");
@@ -756,19 +933,14 @@ void D3D9Renderer::removeResource(D3D9RendererResource &resource)
 	{
 		resource.m_d3dRenderer = 0;
 		const PxU32 numResources  = (PxU32)m_resources.size();
-		PxU32       foundResource = numResources;
-		for(PxU32 i=0; i<numResources; i++)
+		for (PxU32 i = 0; i < numResources; i++)
 		{
 			if(m_resources[i] == &resource)
 			{
-				foundResource = i;
+				// the order of resources needs to remain intact, otherwise a render target that has a dependency on a texture might get onDeviceReset'ed earlier which is an error
+				m_resources.erase(m_resources.begin() + i);
 				break;
 			}
-		}
-		if(foundResource < numResources)
-		{
-			m_resources[foundResource] = m_resources.back();
-			m_resources.pop_back();
 		}
 	}
 }
@@ -857,6 +1029,12 @@ void D3D9Renderer::closeTexter()
 {
 	if(m_textVDecl)
 	{
+		IDirect3DVertexDeclaration9* currDecl = NULL;
+		m_d3dDevice->GetVertexDeclaration(&currDecl);
+		if (currDecl == m_textVDecl)
+		{
+			m_d3dDevice->SetVertexDeclaration(NULL);
+		}
 		m_textVDecl->Release();
 		m_textVDecl = NULL;
 	}
@@ -902,11 +1080,11 @@ void D3D9Renderer::resetTextRenderStates()
 #if defined(RENDERER_XBOX360)
 	m_d3dDevice->SetRenderState(D3DRS_VIEWPORTENABLE, true);
 #endif
-	m_d3dDevice->SetVertexDeclaration(NULL);
 }
 
 void D3D9Renderer::renderTextBuffer(const void* vertices, PxU32 nbVerts, const PxU16* indices, PxU32 nbIndices, RendererMaterial* material)
 {
+	PX_UNUSED(material);
 	// PT: font texture must have been selected prior to calling this function
 	const int PrimCount = nbIndices/3;
 	const int Stride = sizeof(TextVertex);
@@ -966,37 +1144,47 @@ void D3D9Renderer::resetScreenquadRenderStates()
 #endif
 }
 
-bool D3D9Renderer::captureScreen(const char* filename)
+bool D3D9Renderer::captureScreen( PxU32 &width, PxU32& height, PxU32& sizeInBytes, const void*& screenshotData )
 {
 #if defined(RENDERER_XBOX360)
 	return false;
-#endif
-	if(!filename)
-		return false;
-	
+#else
+	bool bSuccess = false;
 
-	LPDIRECT3DSURFACE9 pSurface = NULL;
-
-	HRESULT hr;
-	bool bRet = false;
-	do
+	IDirect3DSurface9* backBuffer = NULL;
+	if (useSwapchain() && validSwapchain())
 	{
-		hr = m_d3dDevice->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &pSurface );
-		if(FAILED(hr))
-			break;
-				
-		
-		hr = m_d3dx.SaveSurfaceToFileA(filename, D3DXIFF_BMP, pSurface, NULL, NULL);
-		if(FAILED(hr))
-			break;
-		
-		bRet = true;
-	}while(0);
-	
-	
-	if(pSurface)
-		pSurface->Release();
-    
-	return bRet;
+#if RENDERER_ENABLE_DIRECT3D9_SWAPCHAIN	
+		bSuccess = SUCCEEDED(m_d3dSwapChain->GetBackBuffer(0, D3DBACKBUFFER_TYPE_MONO, &backBuffer));
+#endif		
+	}
+	else
+	{
+		bSuccess = SUCCEEDED(m_d3dDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer));
+	}
+
+	if (bSuccess)
+	{
+		bSuccess = false;
+		if(m_displayBuffer)
+		{
+			m_displayBuffer->Release();
+			m_displayBuffer = 0;
+		}
+
+		if(SUCCEEDED(m_d3dx.SaveSurfaceToFileInMemory(&m_displayBuffer, D3DXIFF_BMP, backBuffer, NULL, NULL)))
+		{
+			getWindowSize(width, height);
+			sizeInBytes    = (physx::PxU32)m_displayBuffer->GetBufferSize();
+			screenshotData = m_displayBuffer->GetBufferPointer();
+			bSuccess       = true;
+		}
+		backBuffer->Release();
+	}
+
+	return bSuccess;
+#endif
 }
+
 #endif // #if defined(RENDERER_ENABLE_DIRECT3D9)
+

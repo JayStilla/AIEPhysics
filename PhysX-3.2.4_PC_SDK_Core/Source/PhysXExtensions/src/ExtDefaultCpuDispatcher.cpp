@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -47,38 +47,40 @@ PxDefaultCpuDispatcher* physx::PxDefaultCpuDispatcherCreate(PxU32 numThreads, Px
 }
 
 
-PxU32 Ext::DefaultCpuDispatcher::getAffinityMask(PxU32 numThreads)
+#if !defined(PX_X360) && !defined(PX_WIIU) && !defined(PX_PSP2)
+void Ext::DefaultCpuDispatcher::getAffinityMasks(PxU32* affinityMasks, PxU32 threadCount)
 {
-	PX_FORCE_PARAMETER_REFERENCE(numThreads);
-	// PX_ASSERT(numThreads);
-#ifdef PX_X360
-	switch(numThreads)
+	for(PxU32 i=0; i < threadCount; i++)
 	{
-	case 1: return 0x01;
-	case 2: return 0x14;
-	case 3: return 0x15;
-	case 4: return 0x3c;
-	case 5: return 0x3e;
-	case 6: return 0x3f;
-	default: return 0x0;
+		affinityMasks[i] = 0;
 	}
-#else
-	return 0;
-#endif
 }
+#endif
 
 
 Ext::DefaultCpuDispatcher::DefaultCpuDispatcher(PxU32 numThreads, PxU32* affinityMasks)
 	: mQueueEntryPool(EXT_TASK_QUEUE_ENTRY_POOL_SIZE, "QueueEntryPool"), mNumThreads(numThreads), mShuttingDown(false)
+#ifdef PX_PROFILE
+	,mRunProfiled(true)
+#else
+	,mRunProfiled(false)
+#endif
 {
-	PxU32 defaultAffinityMask = 0;
+	PxU32* defaultAffinityMasks = NULL;
 
 	if(!affinityMasks)
-		defaultAffinityMask = getAffinityMask(numThreads);
+	{
+		defaultAffinityMasks = (PxU32*)PX_ALLOC(numThreads * sizeof(PxU32), PX_DEBUG_EXP("ThreadAffinityMasks"));
+		getAffinityMasks(defaultAffinityMasks, numThreads);
+		affinityMasks = defaultAffinityMasks;
+	}
 	 
 	// initialize threads first, then start
 
 	mWorkerThreads = reinterpret_cast<CpuWorkerThread*>(PX_ALLOC(numThreads * sizeof(CpuWorkerThread), PX_DEBUG_EXP("CpuWorkerThread")));
+	const PxU32 nameLength = 32;
+	mThreadNames = reinterpret_cast<PxU8*>(PX_ALLOC(nameLength * numThreads, PX_DEBUG_EXP("CpuWorkerThreadName")));
+
 	if (mWorkerThreads)
 	{
 		for(PxU32 i = 0; i < numThreads; ++i)
@@ -89,21 +91,19 @@ Ext::DefaultCpuDispatcher::DefaultCpuDispatcher(PxU32 numThreads, PxU32* affinit
 
 		for(PxU32 i = 0; i < numThreads; ++i)
 		{
+			mWorkerThreads[i].setAffinityMask(affinityMasks[i]);
 			mWorkerThreads[i].start(Ps::Thread::getDefaultStackSize());
-			if (affinityMasks)
-				mWorkerThreads[i].setAffinityMask(affinityMasks[i]);
-			else
-			{
-				mWorkerThreads[i].setAffinityMask(defaultAffinityMask);
-#ifdef PX_X360
-				defaultAffinityMask &= defaultAffinityMask-1; // clear lowest bit
-#endif
-			}
 
-			char threadName[32];
-			string::sprintf_s(threadName, 32, "PxWorker%02d", i);
-			mWorkerThreads[i].setName(threadName);
+			if (mThreadNames)
+			{
+				char* threadName = reinterpret_cast<char*>(mThreadNames + (i*nameLength));
+				string::sprintf_s(threadName, nameLength, "PxWorker%02d", i);
+				mWorkerThreads[i].setName(threadName);
+			}
 		}
+
+		if (defaultAffinityMasks)
+			PX_FREE(defaultAffinityMasks);
 	}
 	else
 	{
@@ -126,22 +126,25 @@ Ext::DefaultCpuDispatcher::~DefaultCpuDispatcher()
 		mWorkerThreads[i].~CpuWorkerThread();
 
 	PX_FREE(mWorkerThreads);
+
+	if (mThreadNames)
+		PX_FREE(mThreadNames);
 }
 
 
-void Ext::DefaultCpuDispatcher::submitTask(pxtask::BaseTask& task)
+void Ext::DefaultCpuDispatcher::submitTask(PxBaseTask& task)
 {
+	Ps::Thread::Id currentThread = Ps::Thread::getId();
 	if(!mNumThreads)
 	{
-		PX_FPU_GUARD;
-
 		// no worker threads, run directly
-		task.runProfiled();
+		if(mRunProfiled)
+			task.runProfiled(static_cast<PxU32>(currentThread));
+		else
+			task.run();
 		task.release();
 		return;
-	}
-
-	Ps::Thread::Id currentThread = Ps::Thread::getId();
+	}	
 
 	// TODO: Could use TLS to make this more efficient
 	for(PxU32 i = 0; i < mNumThreads; ++i)
@@ -158,6 +161,27 @@ void Ext::DefaultCpuDispatcher::submitTask(pxtask::BaseTask& task)
 	}
 }
 
+PxBaseTask* Ext::DefaultCpuDispatcher::fetchNextTask()
+{
+	PxBaseTask* task = getJob();
+
+	if(!task)
+		task = stealJob();
+
+	return task;
+}
+
+void Ext::DefaultCpuDispatcher::runTask(PxBaseTask& task)
+{
+	if(mRunProfiled)
+	{
+		const PxU32 threadId = static_cast<PxU32>(Ps::Thread::getId());
+		task.runProfiled(threadId);
+	}
+	else
+		task.run();
+}
+
 PxU32 Ext::DefaultCpuDispatcher::getWorkerCount() const
 {
 	return mNumThreads;	
@@ -169,15 +193,15 @@ void Ext::DefaultCpuDispatcher::release()
 }
 
 
-pxtask::BaseTask* Ext::DefaultCpuDispatcher::getJob(void)
+PxBaseTask* Ext::DefaultCpuDispatcher::getJob(void)
 {
 	return TaskQueueHelper::fetchTask(mJobList, mQueueEntryPool);
 }
 
 
-pxtask::BaseTask* Ext::DefaultCpuDispatcher::stealJob()
+PxBaseTask* Ext::DefaultCpuDispatcher::stealJob()
 {
-	pxtask::BaseTask* ret = NULL;
+	PxBaseTask* ret = NULL;
 
 	for(PxU32 i = 0; i < mNumThreads; ++i)
 	{

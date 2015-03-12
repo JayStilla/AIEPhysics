@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -101,7 +101,7 @@
 
 		PX_FORCE_INLINE	void						setPos(const PxVec3& pos)			{ mPos = pos;			mDirtyView = true;	}
 		PX_FORCE_INLINE	void						setRot(const PxVec3& rot)			{ mRot = rot;			mDirtyView = true;	}
-		PX_FORCE_INLINE	void						setView(const PxTransform& view)	{ mViewMatrix = view;	mDirtyView = false;	}
+		PX_FORCE_INLINE	void						setView(const PxTransform& view)	{ mViewMatrix = view;	mPos = view.p; mDirtyView = false;	}
 
 		PX_FORCE_INLINE	const PxTransform&			getViewMatrix()				const
 													{

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -109,8 +109,8 @@ public:
 	{}
 
 	//! Construct from four base vectors
-	PX_CUDA_CALLABLE Matrix34(const PxVec3& base0, const PxVec3& base1, const PxVec3& base2, const PxVec3& base3)
-		: base0(base0), base1(base1), base2(base2), base3(base3)
+	PX_CUDA_CALLABLE PX_FORCE_INLINE Matrix34(const PxVec3& b0, const PxVec3& b1, const PxVec3& b2, const PxVec3& b3)
+		: base0(b0), base1(b1), base2(b2), base3(b3)
 	{}
 
 	//! Construct from float[12]
@@ -475,7 +475,9 @@ public:
 		d[3][3] = 1.0f;
 	}
 
+	PX_CUDA_CALLABLE PX_FORCE_INLINE		PxVec3& operator[](unsigned int num)			{return (&base0)[num];}
 	PX_CUDA_CALLABLE PX_FORCE_INLINE		PxVec3& operator[](int num)			{return (&base0)[num];}
+	PX_CUDA_CALLABLE PX_FORCE_INLINE const	PxVec3& operator[](unsigned int num) const	{return (&base0)[num];}
 	PX_CUDA_CALLABLE PX_FORCE_INLINE const	PxVec3& operator[](int num) const	{return (&base0)[num];}
 
 	//Data, see above for format!

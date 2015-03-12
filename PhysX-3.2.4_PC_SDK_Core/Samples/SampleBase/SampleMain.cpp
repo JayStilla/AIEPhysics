@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -33,14 +33,43 @@
 #include "RendererMemoryMacros.h"
 #include "SampleAllocator.h"
 #include "PhysXSampleApplication.h"
+#include "PsFile.h"
 
 using namespace SampleFramework;
+
+#if defined(RENDERER_WINMODERN)
+
+namespace SampleFramework
+{
+	void createApplication(void (*initializeFunc)(), bool (*updateFunc)(), void (*terminateFunc)());
+}
+#endif
 
 #if defined(RENDERER_ANDROID)
 #include "SamplePlatform.h"
 
 struct android_app;
 static android_app* gState;
+#endif
+
+#if defined(RENDERER_IOS) || defined(RENDERER_PS3) || defined(RENDERER_MACOSX) || defined(RENDERER_WINMODERN)
+// IOS does not easily support instrumenting the event
+// loop like other OSs. Therefore for IOS the (input) event loop
+// and the game loop stay for it in the same thread.
+//
+// PS3 reports a warning when a thread is starved.  This happens
+// when gApp tries to start but then needs to wait until the main loop
+// yields.  One consequence of this is that the inputs are polled from
+// the main loop before they have been initialized.
+//
+// MACOSX non-deterministically crashed with one thread ran
+// SampleRenderer::createGLView (renderer initialization)
+// and the other SampleRenderer::emitEvents (processing ESC key event).
+// Apparently connecting the glView to the window interfers with
+// OSX event processing for some reason.
+#define SEPARATE_EVENT_LOOP 0
+#else
+#define SEPARATE_EVENT_LOOP 1
 #endif
 
 static PhysXSampleApplication* gApp = NULL;
@@ -72,6 +101,11 @@ void mainInitialize()
 		gApp->close();
 
 	gApp->open(gSettings.mWidth, gSettings.mHeight, gSettings.mName, gSettings.mFullscreen);
+#if SEPARATE_EVENT_LOOP
+	gApp->start(Ps::Thread::getDefaultStackSize());
+#else
+	if(gApp->isOpen()) gApp->onOpen();
+#endif
 }
 
 void mainTerminate()
@@ -85,8 +119,17 @@ bool mainContinue()
 {
 	if (gApp->isOpen() && !gApp->isCloseRequested())
 	{
-		gApp->doInput();
-		gApp->update();
+		if(gApp->getInputMutex().trylock())
+		{
+			gApp->handleMouseVisualization();
+			gApp->doInput();
+			gApp->update();
+#if !SEPARATE_EVENT_LOOP
+			gApp->updateEngine();
+#endif
+			gApp->getInputMutex().unlock();
+		}
+		Thread::yield();
 #if defined(RENDERER_ANDROID)
 		if (SamplePlatform::platform()->isOpen())
 			return true;
@@ -95,17 +138,20 @@ bool mainContinue()
 #endif
 	}
 
+#if SEPARATE_EVENT_LOOP
+	gApp->signalQuit();
+	gApp->waitForQuit();
+#else
 	if (gApp->isOpen() || gApp->isCloseRequested())
-	{
 		gApp->close();
-	}
+#endif
 		
 	return false;
 }
 
 void mainLoop()
 {
-	while (mainContinue());
+	while(mainContinue());
 }
 
 
@@ -117,6 +163,17 @@ void mainLoop()
 		const char* argv[] = { "dummy", 0 };
 		gSampleCommandLine = new SampleCommandLine(1, argv);
 		mainInitialize();
+		
+		const char* argFilePath = getSampleMediaFilename("user/androidCmdLine.cfg"); 
+		File* argFp = NULL;
+		physx::shdfnd::fopen_s(&argFp, argFilePath, "r");
+		if (argFp)
+		{
+			fclose(argFp);
+			SampleCommandLine pvdCmdline(1, argv, argFilePath);
+			gApp->setPvdParams(pvdCmdline);
+		}
+	
 		mainLoop();
 		mainTerminate();
 		exit(0);
@@ -125,7 +182,7 @@ void mainLoop()
 
 #elif defined(RENDERER_IOS)
 
-	#include "IosSamplePlatform.h"
+	#include "ios/IosSamplePlatform.h"
 
 	int main(int argc, const char *const* argv)
 	{
@@ -134,6 +191,30 @@ void mainLoop()
 		return 0;
 	}
 
+#elif defined(PX_XBOXONE)
+
+namespace SampleFramework
+{
+	void createApplication(void (*initializeFunc)(), bool (*updateFunc)(), void (*terminateFunc)(), SampleCommandLine*& commandLine);
+}
+
+int main(Platform::Array<Platform::String^>^ args)
+{
+	SampleFramework::createApplication(mainInitialize, mainContinue, mainTerminate, gSampleCommandLine);
+	return 0;
+}
+#elif defined(RENDERER_WINMODERN)
+namespace SampleFramework
+{
+	void createMainApplication()
+	{
+		char *argv[32];
+        int argc =	1;
+        argv[0] = "dummy"; 	
+		gSampleCommandLine = new SampleCommandLine((unsigned int)argc, argv);
+		SampleFramework::createApplication(mainInitialize, mainContinue, mainTerminate);
+	}
+}
 #elif defined(RENDERER_WINDOWS)
 
 	int main()
@@ -149,18 +230,34 @@ void mainLoop()
 
 	int main()
 	{
-		const char* argv[] = {
-			"XboxStuff",
-			0
-		};
-		gSampleCommandLine = new SampleCommandLine(1, argv);
+		const char *argv[32];
+	    int argc = 0;
+	    volatile LPSTR commandLineString;
+        commandLineString = GetCommandLine(); // xbox call to get command line argument string
+
+        //skip directly modify the process's share command line string ,in case that it be used in elsewhere
+        size_t len = strlen(commandLineString);
+        LPSTR cmdString = (LPSTR)alloca(len+1);
+        memcpy(cmdString, commandLineString,len);
+        cmdString[len] = '\0';
+
+	    /* first pull out the application name argv[0] */
+	    argv[argc] = strtok(cmdString, " ");
+
+	    /* pull out the other args */
+	    while (argv[argc] != NULL)
+	    {
+		    argc++;
+		    argv[argc] = strtok(NULL, " ");
+	    }
+		gSampleCommandLine = new SampleCommandLine(argc, argv);
 		mainInitialize();
 		mainLoop();
 		mainTerminate();
 		return 0;
 	}
 	
-#elif defined(RENDERER_PS3)
+#elif defined(RENDERER_PS3) || defined(RENDERER_PS4)
 
 	int main(int argc, char** argv)
 	{
@@ -181,7 +278,7 @@ void mainLoop()
 		const char* xtermCommand = "xterm -e ";
 		bool foundSpecial = false;
 		
-		for(PxU32 i = 0; i < argc; i++)
+		for(PxU32 i = 0; i < (PxU32)argc; i++)
 		{
 			foundSpecial = foundSpecial || (::strncmp(argv[i], specialCommand, ::strlen(specialCommand)) == 0);
 			commandLen += ::strlen(argv[i]);
@@ -196,7 +293,7 @@ void mainLoop()
 			commandString = (char*)::malloc(commandLen * sizeof(char));
 			
 			::strcpy(commandString, xtermCommand);
-			for(PxU32 i = 0; i < argc; i++)
+			for(PxU32 i = 0; i < (PxU32)argc; i++)
 			{
 				::strcat(commandString, argv[i]);
 				::strcat(commandString, " ");
@@ -207,7 +304,7 @@ void mainLoop()
 			::free(commandString);
 			
 			if(ret < 0)
-				printf("Failed to run %s! If xterm is missing, try running with this parameter: %s\n", argv[0], specialCommand);
+				shdfnd::printFormatted("Failed to run %s! If xterm is missing, try running with this parameter: %s\n", argv[0], specialCommand);
 		}
 		else
 		{

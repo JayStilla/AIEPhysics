@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -38,9 +38,7 @@
 
 #include "PhysXSample.h"
 #include "PsFile.h"
-
 using namespace PxToolkit;
-
 // if enabled: runs the crab AI in sync, not as a parallel task to physx.
 #define DEBUG_RENDERING 0
 
@@ -107,7 +105,14 @@ Crab::~Crab()
 	mActors.clear();
 	
 	if(mMemory)
-		SAMPLE_FREE(mMemory);
+	{
+		// if we run the inverted stepper, then releases of SDK objects in onTickPreRender get deferred
+		// therefore we have to defer freeing mMemory until the SDK objects got released.
+		if(mSampleSubmarine->getStepperType() == INVERTED_FIXED_STEPPER)
+			mSampleSubmarine->getCrabsMemoryDeleteList().push_back(mMemory);
+		else
+			SAMPLE_FREE(mMemory);
+	}
 
 	delete mSqRayBuffer;
 }
@@ -127,39 +132,47 @@ static void setShapeFlag(PxRigidActor* actor, PxShapeFlag::Enum flag, bool flagV
 
 PxVec3 Crab::getPlaceOnFloor(PxVec3 start)
 {
-	PxRaycastHit rayHit;
-	mSampleSubmarine->getActiveScene().raycastSingle(start, PxVec3(0,-1,0), 1000.0f, PxSceneQueryFlag::eIMPACT, rayHit);
+	PxRaycastBuffer rayHit;
+	mSampleSubmarine->getActiveScene().raycast(start, PxVec3(0,-1,0), 1000.0f, rayHit);
 
-	return rayHit.impact + PxVec3(0,mLegHeight,0);
+	return rayHit.block.position + PxVec3(0,mLegHeight,0);
 }
 
-static const PxSerialObjectRef mMaterial_id		= (PxSerialObjectRef)0x01;
-static const PxSerialObjectRef mCrabBody_id		= (PxSerialObjectRef)0x02;
-static const PxSerialObjectRef mMotorJoint0_id	= (PxSerialObjectRef)0x03;
-static const PxSerialObjectRef mMotorJoint1_id	= (PxSerialObjectRef)0x04; 
+static const PxSerialObjectId mMaterial_id		= (PxSerialObjectId)0x01;
+static const PxSerialObjectId mCrabBody_id		= (PxSerialObjectId)0x02;
+static const PxSerialObjectId mMotorJoint0_id	= (PxSerialObjectId)0x03;
+static const PxSerialObjectId mMotorJoint1_id	= (PxSerialObjectId)0x04; 
 
 void Crab::save(const char* filename)
 {
-	PxCollection* thePxCollection = mSampleSubmarine->getPhysics().createCollection();
-	thePxCollection->addExternalRef(*mSampleSubmarine->mMaterial, mMaterial_id);
-
-	for( unsigned i = 0; i < mActors.size(); ++i )
+	PxPhysics& physics = mSampleSubmarine->getPhysics();
+	PxCollection* thePxCollection = PxCreateCollection();
+	PxSerializationRegistry* sr = PxSerialization::createSerializationRegistry(physics);	
+	for(PxU32 i = 0; i < mActors.size(); ++i)
 	{		
-		mActors[i]->collectForExport( *thePxCollection );
+		thePxCollection->add(*mActors[i]);
 	}
 	
-	for(unsigned i = 0; i < mJoints.size(); ++i)
+	for(PxU32 i = 0; i < mJoints.size(); ++i)
 	{
-		mJoints[i]->collectForExport( *thePxCollection );
+		thePxCollection->add(*mJoints[i]);
 	}
 	
-	thePxCollection->setObjectRef(*mCrabBody,		mCrabBody_id);
-	thePxCollection->setObjectRef(*mMotorJoint[0],  mMotorJoint0_id);
-	thePxCollection->setObjectRef(*mMotorJoint[1],  mMotorJoint1_id);
+	thePxCollection->addId(*mCrabBody,		 mCrabBody_id);
+	thePxCollection->addId(*mMotorJoint[0],  mMotorJoint0_id);
+	thePxCollection->addId(*mMotorJoint[1],  mMotorJoint1_id);
+	
+	PxCollection* theExtRef = PxCreateCollection();
+	theExtRef->add(*mSampleSubmarine->mMaterial, mMaterial_id);
+	
+	PxSerialization::complete(*thePxCollection, *sr, theExtRef);
 
-	PxToolkit::FileOutputStream s(filename);
-	thePxCollection->serialize( s );
+	PxDefaultFileOutputStream s(filename);
+	PxSerialization::serializeCollectionToBinary(s, *thePxCollection, *sr, theExtRef);
+	
+	theExtRef->release();
 	thePxCollection->release();
+	sr->release();
 }
 
 static PxU32 GetFileSize(const char* name)
@@ -170,8 +183,8 @@ static PxU32 GetFileSize(const char* name)
 #define SEEK_END 2
 #endif
 
-	FILE* fp;
-	if(physx::fopen_s(&fp, name, "rb"))
+	SampleFramework::File* fp;
+	if(physx::shdfnd::fopen_s(&fp, name, "rb"))
 		return 0;
 	fseek(fp, 0, SEEK_END);
 	PxU32 eof_ftell = ftell(fp);
@@ -183,8 +196,8 @@ void Crab::load(const char* filename)
 {
 	PxPhysics& thePhysics = mSampleSubmarine->getPhysics();
 
-	FILE* fp = NULL;
-	if(!physx::fopen_s(&fp, filename, "rb"))
+	SampleFramework::File* fp = NULL;
+	if(!physx::shdfnd::fopen_s(&fp, filename, "rb"))
 	{
 		PxU32 theFileSize = GetFileSize(filename);
 		
@@ -197,26 +210,24 @@ void Crab::load(const char* filename)
 		PX_UNUSED(theNumRead);
 		fclose(fp);
 
-		PxCollection* thePxCollection =  thePhysics.createCollection();
-		PxUserReferences* theUserRefs = thePhysics.createUserReferences();
-		PxUserReferences* theExternalRefs = thePhysics.createUserReferences();
-		theExternalRefs->setObjectRef(*mSampleSubmarine->mMaterial, mMaterial_id);
+		PxCollection* theExtRef = PxCreateCollection();
+		theExtRef->add(*mSampleSubmarine->mMaterial, mMaterial_id);
+		PxSerializationRegistry* sr = PxSerialization::createSerializationRegistry(thePhysics);
+		PxCollection* thePxCollection = PxSerialization::createCollectionFromBinary(theMemory16, *sr, theExtRef);
+		PX_ASSERT(thePxCollection);
 
-		bool ok = thePxCollection->deserialize(theMemory16, theUserRefs, theExternalRefs);
-		PX_ASSERT(ok);
-		PX_UNUSED(ok);
-		thePhysics.addCollection(*thePxCollection, mSampleSubmarine->getActiveScene());
-
-		mMotorJoint[0] = reinterpret_cast<PxRevoluteJoint*>( theUserRefs->getObjectFromRef(mMotorJoint0_id));
-		mMotorJoint[1] = reinterpret_cast<PxRevoluteJoint*>( theUserRefs->getObjectFromRef(mMotorJoint1_id));
-		mCrabBody = reinterpret_cast<PxRigidDynamic*>( theUserRefs->getObjectFromRef(mCrabBody_id));
+		mSampleSubmarine->getActiveScene().addCollection(*thePxCollection);
+			
+		mMotorJoint[0] = reinterpret_cast<PxRevoluteJoint*>( thePxCollection->find(mMotorJoint0_id));
+		mMotorJoint[1] = reinterpret_cast<PxRevoluteJoint*>( thePxCollection->find(mMotorJoint1_id));
+		mCrabBody = reinterpret_cast<PxRigidDynamic*>( thePxCollection->find(mCrabBody_id));
 		PX_ASSERT(mMotorJoint[0] && mMotorJoint[1] && mCrabBody );
 
 		PxU32 nbObjs = thePxCollection->getNbObjects();
 		PX_ASSERT(nbObjs != 0);
-		for(unsigned i = 0; i < nbObjs; ++i)
+		for(PxU32 i = 0; i < nbObjs; ++i)
 		{
-			PxSerializable* object = thePxCollection->getObject( i );
+			PxBase* object = &thePxCollection->getObject(i);
 			if(object)
 			{
 				const PxType serialType = object->getConcreteType();
@@ -235,12 +246,18 @@ void Crab::load(const char* filename)
 					PxJoint* joint = reinterpret_cast<PxJoint*>(constraint->getExternalReference(typeID));
 					mJoints.push_back( joint );
 				}
+				else if(serialType == PxConcreteType::eSHAPE)
+				{
+					//giving up application shape ownership early
+					PxShape* shape = reinterpret_cast<PxShape*>(object);
+					shape->release();
+				}
 			}
 		}
 		
-		theExternalRefs->release();
-		theUserRefs->release();
+		theExtRef->release();
 		thePxCollection->release();
+		sr->release();
 	}
 
 	if( !mCrabBody ) mSampleSubmarine->fatalError( "createBox failed!" );
@@ -329,7 +346,6 @@ void Crab::create(const PxVec3& _crabPos)
 			PxReal angle0 = -PxHalfPi + PxTwoPi*recipNumLegs*i;
 			PxReal angle1 =  angle0 + PxPi;
 
-			PxVec3 offset = PxVec3(0, 0, crabDepth*recipNumLegsMinus1*scale*0.5f);
 			createLeg(mCrabBody, bodyToLegPos0, legMass, params, scale, motor[0],	motorToLegPos0 + m * PxVec3(PxCos(angle0), PxSin(angle0), 0));
 			createLeg(mCrabBody, bodyToLegPos1, legMass, params, scale, motor[1],	motorToLegPos1 + m * PxVec3(PxCos(angle1), PxSin(angle1), 0));
 			bodyToLegPos0.z -= legSpacing;
@@ -339,7 +355,7 @@ void Crab::create(const PxVec3& _crabPos)
 		}
 	}
 
-	setupFiltering(mCrabBody, FilterGroup::eCRAB, FilterGroup::eHEIGHTFIELD);	
+	setupFiltering(mCrabBody, FilterGroup::eCRAB, FilterGroup::eHEIGHTFIELD);
 }
 
 void Crab::createLeg(PxRigidDynamic* mainBody, PxVec3 localPos, PxReal mass, const LegParameters& params, PxReal scale, PxRigidDynamic* motor, PxVec3 motorAttachmentPos)
@@ -365,7 +381,7 @@ void Crab::createLeg(PxRigidDynamic* mainBody, PxVec3 localPos, PxReal mass, con
 	PxBoxGeometry boxGeomA = PxBoxGeometry(a, stickExt, stickExt);
 	PxBoxGeometry boxGeomB = PxBoxGeometry(stickExt, b, stickExt);
 	PxBoxGeometry boxGeomC = PxBoxGeometry(stickExt, c, stickExt);
-	PxBoxGeometry boxGeomD = PxBoxGeometry(stickExt, d, stickExt);
+
 	PxCapsuleGeometry capsGeomD = PxCapsuleGeometry(stickExt*2.0f, d);
 
 	for(PxU32 leg = 0; leg < 2; leg++)
@@ -472,7 +488,7 @@ void Crab::createLeg(PxRigidDynamic* mainBody, PxVec3 localPos, PxReal mass, con
 		distJoint0->setMinDistance(dist0);
 		// setup damping & spring
 		distJoint0->setDamping(0.1f);
-		distJoint0->setSpring(100.0f);
+		distJoint0->setStiffness(100.0f);
 		distJoint0->setDistanceJointFlags(PxDistanceJointFlag::eMAX_DISTANCE_ENABLED | PxDistanceJointFlag::eMIN_DISTANCE_ENABLED | PxDistanceJointFlag::eSPRING_ENABLED);
 
 		PxDistanceJoint* distJoint1 = PxDistanceJointCreate(mSampleSubmarine->getPhysics(), lowerTriangle, PxTransform(PxVec3(0, 0, 0)), motor, motorTransform);
@@ -482,7 +498,7 @@ void Crab::createLeg(PxRigidDynamic* mainBody, PxVec3 localPos, PxReal mass, con
 		distJoint1->setMinDistance(dist1);
 		// setup damping & spring
 		distJoint1->setDamping(0.1f);
-		distJoint1->setSpring(100.0f);
+		distJoint1->setStiffness(100.0f);
 		distJoint1->setDistanceJointFlags(PxDistanceJointFlag::eMAX_DISTANCE_ENABLED | PxDistanceJointFlag::eMIN_DISTANCE_ENABLED | PxDistanceJointFlag::eSPRING_ENABLED);
 
 		// one distance joint to ensure that the vertical boxes do not get stuck if they cross the diagonal.
@@ -494,7 +510,7 @@ void Crab::createLeg(PxRigidDynamic* mainBody, PxVec3 localPos, PxReal mass, con
 		noFlip->setMinDistance(halfDiagDist);
 		// setup damping & spring
 		noFlip->setDamping(1.0f);
-		noFlip->setSpring(100.0f);
+		noFlip->setStiffness(100.0f);
 		noFlip->setDistanceJointFlags(PxDistanceJointFlag::eMAX_DISTANCE_ENABLED | PxDistanceJointFlag::eMIN_DISTANCE_ENABLED | PxDistanceJointFlag::eSPRING_ENABLED);
 
 		mJoints.push_back(distJoint0);
@@ -506,6 +522,8 @@ void Crab::createLeg(PxRigidDynamic* mainBody, PxVec3 localPos, PxReal mass, con
 
 void Crab::update(PxReal dt)
 {
+	PxSceneWriteLock scopedLock(mSampleSubmarine->getActiveScene());
+
 	{
 		// check if I have to be reset
 		PxTransform pose = mCrabBody->getGlobalPose();
@@ -585,6 +603,8 @@ void Crab::flushAccelerationBuffer()
 
 void Crab::scanForObstacles()
 {
+	PxSceneReadLock scopedLock(mSampleSubmarine->getActiveScene());
+
 	PxTransform crabPose = mCrabBody->getGlobalPose();
 	PxVec3 rayStart[2] = {PxVec3(2.0f, 0.0f, 0.0f), PxVec3(-2.0f, 0.0f, 0.0f)} ;
 	rayStart[0] = crabPose.transform(rayStart[0]);
@@ -600,7 +620,7 @@ void Crab::scanForObstacles()
 		rayDir = rotY.rotateInv(rayDir);
 		for(PxU32 i = 0; i < 3; i++)
 		{
-			mSqRayBuffer->mBatchQuery->raycastSingle(rayStart[j], rayDir, rayDist, PxSceneQueryFilterFlag::eSTATIC|PxSceneQueryFilterFlag::eDYNAMIC);
+			mSqRayBuffer->mBatchQuery->raycast(rayStart[j], rayDir, rayDist);
 			rayDir = rotY.rotate(rayDir);
 		}
 	}
@@ -610,7 +630,7 @@ void Crab::scanForObstacles()
 	{
 		PxVec3 rayStart = crabPose.transform(PxVec3(0,2,0));
 		PxVec3 crabToSub = mSubmarinePos - rayStart;
-		mSqRayBuffer->mBatchQuery->raycastSingle(rayStart, crabToSub.getNormalized(), rayDist, PxSceneQueryFilterFlag::eSTATIC|PxSceneQueryFilterFlag::eDYNAMIC);
+		mSqRayBuffer->mBatchQuery->raycast(rayStart, crabToSub.getNormalized(), rayDist);
 	}
 
 	mSqRayBuffer->mBatchQuery->execute();
@@ -618,9 +638,9 @@ void Crab::scanForObstacles()
 	for(PxU32 i = 0; i < mSqRayBuffer->mQueryResultSize; i++)
 	{
 		PxRaycastQueryResult& result = mSqRayBuffer->mRayCastResults[i];
-		if(result.queryStatus == PxBatchQueryStatus::eSUCCESS && result.nbHits == 1)
+		if(result.queryStatus == PxBatchQueryStatus::eSUCCESS && result.getNbAnyHits() == 1)
 		{
-			PxRaycastHit& hit = result.hits[0];
+			const PxRaycastHit& hit = result.getAnyHit(0);
 			mDistances[i] = hit.distance;
 
 			// don't see flat terrain as wall
@@ -635,8 +655,8 @@ void Crab::scanForObstacles()
 			// debug rendering
 			PxU8 blue = PxU8(mDistances[i] * (255.0f/rayDist));
 			const SampleRenderer::RendererColor color(255, 0, blue);
-			mSampleSubmarine->getdebugRenderer()->addLine(rayStart[i<3?0:1], hit.impact, color);
-			mSampleSubmarine->getdebugRenderer()->addLine(hit.impact, hit.impact + hit.normal*3.0f, rayColor);
+			mSampleSubmarine->getDebugRenderer()->addLine(rayStart[i<3?0:1], hit.position, color);
+			mSampleSubmarine->getDebugRenderer()->addLine(hit.position, hit.position + hit.normal*3.0f, rayColor);
 #endif
 		}
 		else
@@ -661,19 +681,23 @@ void Crab::updateState()
 		initState(CrabState::eMOVE_FWD);
 	}
 
-	const PxTransform crabPose = mCrabBody->getGlobalPose();
+	PxTransform crabPose;
+	{
+		PxSceneReadLock scopedLock(mSampleSubmarine->getActiveScene());
+		crabPose = mCrabBody->getGlobalPose();
+	}
 
 	// check if we should go into panic mode
 	static const PxReal subMarinePanicDist = 50.0f;
 	if(mSampleSubmarine->mSubmarineActor && mCrabState != CrabState::ePANIC)
 	{
 		PxRaycastQueryResult& rayResult = mSqRayBuffer->mRayCastResults[6];
-		if(rayResult.queryStatus == PxBatchQueryStatus::eSUCCESS && rayResult.nbHits == 1)
+		if(rayResult.queryStatus == PxBatchQueryStatus::eSUCCESS && rayResult.getNbAnyHits() == 1)
 		{
-			PxRaycastHit& hit = rayResult.hits[0];
+			const PxRaycastHit& hit = rayResult.getAnyHit(0);
 			PxVec3 subToCrab = crabPose.p - mSubmarinePos;
 			PxReal distanceToSubMarine = subToCrab.magnitude();
-			if(&(hit.shape->getActor()) == mSampleSubmarine->mSubmarineActor && distanceToSubMarine <= subMarinePanicDist)
+			if(hit.actor == mSampleSubmarine->mSubmarineActor && distanceToSubMarine <= subMarinePanicDist)
 			{
 				initState(CrabState::ePANIC);
 			}
@@ -751,7 +775,7 @@ void Crab::updateState()
 				dir.normalize();
 #if DEBUG_RENDERING
 				PxVec3 startPos = crabPose.p + PxVec3(0,2,0);
-				mSampleSubmarine->getdebugRenderer()->addLine(startPos, startPos + crabPose.q.rotate(dir)*2.0f, SampleRenderer::RendererColor(0,255,0));
+				mSampleSubmarine->getDebugRenderer()->addLine(startPos, startPos + crabPose.q.rotate(dir)*2.0f, SampleRenderer::RendererColor(0,255,0));
 #endif
 				leftAcc =  (1.0f*dir.x + 0.2f*dir.z) * 6.0f;
 				rightAcc = (1.0f*dir.x - 0.2f*dir.z) * 6.0f;
@@ -766,30 +790,30 @@ void Crab::updateState()
 	// change acceleration
 	setAcceleration(leftAcc, rightAcc);
 
+#if DEBUG_RENDERING
 	PxVec3 startPosL = crabPose.transform(PxVec3(0,2,-1));
 	PxVec3 startPosR =  crabPose.transform(PxVec3(0,2,1));
-#if DEBUG_RENDERING
-	mSampleSubmarine->getdebugRenderer()->addLine(startPosL, startPosL + crabPose.q.rotate(PxVec3(1,0,0))*leftAcc, SampleRenderer::RendererColor(255,255,0));
-	mSampleSubmarine->getdebugRenderer()->addLine(startPosR, startPosR + crabPose.q.rotate(PxVec3(1,0,0))*rightAcc, SampleRenderer::RendererColor(0,255,0));
+	mSampleSubmarine->getDebugRenderer()->addLine(startPosL, startPosL + crabPose.q.rotate(PxVec3(1,0,0))*leftAcc, SampleRenderer::RendererColor(255,255,0));
+	mSampleSubmarine->getDebugRenderer()->addLine(startPosR, startPosR + crabPose.q.rotate(PxVec3(1,0,0))*rightAcc, SampleRenderer::RendererColor(0,255,0));
 #endif
 }
 
 
 SqRayBuffer::SqRayBuffer(SampleSubmarine& sampleSubmarine, PxU32 numRays, PxU32 numHits)
 : mSampleSubmarine(sampleSubmarine)
-,mQueryResultSize(numRays)
+, mQueryResultSize(numRays)
 , mHitSize(numHits) 
 {
 	mOrigAddresses[0] = malloc(mQueryResultSize*sizeof(PxRaycastQueryResult) + 15);
 	mOrigAddresses[1] = malloc(mHitSize*sizeof(PxRaycastHit) + 15);
 
-	mRayCastResults = reinterpret_cast<PxRaycastQueryResult*>(size_t(mOrigAddresses[0]) + 15 & ~15);
-	mRayCastHits = reinterpret_cast<PxRaycastHit*>(size_t(mOrigAddresses[1]) + 15 & ~15);
+	mRayCastResults = reinterpret_cast<PxRaycastQueryResult*>((size_t(mOrigAddresses[0]) + 15) & ~15);
+	mRayCastHits = reinterpret_cast<PxRaycastHit*>((size_t(mOrigAddresses[1]) + 15 )& ~15);
 
-	PxBatchQueryDesc batchQueryDesc;
-	batchQueryDesc.userRaycastResultBuffer = mRayCastResults;
-	batchQueryDesc.userRaycastHitBuffer = mRayCastHits;
-	batchQueryDesc.raycastHitBufferSize = mHitSize;
+	PxBatchQueryDesc batchQueryDesc(mQueryResultSize, 0, 0);
+	batchQueryDesc.queryMemory.userRaycastResultBuffer = mRayCastResults;
+	batchQueryDesc.queryMemory.userRaycastTouchBuffer = mRayCastHits;
+	batchQueryDesc.queryMemory.raycastTouchBufferSize = mHitSize;
 
 	mBatchQuery = mSampleSubmarine.getActiveScene().createBatchQuery(batchQueryDesc);
 	if(!mBatchQuery) mSampleSubmarine.fatalError("createBatchQuery failed!");

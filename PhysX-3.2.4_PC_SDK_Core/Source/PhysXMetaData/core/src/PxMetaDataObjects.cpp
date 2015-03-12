@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
 
@@ -45,22 +45,20 @@ PX_PHYSX_CORE_API bool PxShapeGeometryPropertyHelper::getGeometry(const PxShape*
 PX_PHYSX_CORE_API bool PxShapeGeometryPropertyHelper::getGeometry(const PxShape* inShape, PxTriangleMeshGeometry& geometry) const { return inShape->getTriangleMeshGeometry( geometry ); }
 PX_PHYSX_CORE_API bool PxShapeGeometryPropertyHelper::getGeometry(const PxShape* inShape, PxHeightFieldGeometry& geometry) const { return inShape->getHeightFieldGeometry( geometry ); }
 
-PX_PHYSX_CORE_API void PxShapeMaterialsPropertyHelper::setMaterials(PxShape* inShape, PxMaterial*const* materials, PxU32 materialCount) const
+PX_PHYSX_CORE_API void PxShapeMaterialsPropertyHelper::setMaterials(PxShape* inShape, PxMaterial*const* materials, PxU16 materialCount) const
 {
 	inShape->setMaterials( materials, materialCount );
 }
 
 PX_PHYSX_CORE_API PxShape* PxRigidActorShapeCollectionHelper::createShape(PxRigidActor* inActor, const PxGeometry& geometry, PxMaterial& material,
-														const PxTransform& localPose) const
+														PxShapeFlags shapeFlags ) const
 {
-	PX_CHECK_AND_RETURN_NULL(localPose.isValid(), "PxRigidActorShapeCollectionHelper::createShape localPose is not valid.");
-	return inActor->createShape( geometry, material, localPose );
+	return inActor->createShape( geometry, material, shapeFlags );
 }
 PX_PHYSX_CORE_API PxShape* PxRigidActorShapeCollectionHelper::createShape(PxRigidActor* inActor, const PxGeometry& geometry, PxMaterial *const* materials,
-														PxU32 materialCount, const PxTransform& relativePose ) const
+														PxU16 materialCount, PxShapeFlags shapeFlags ) const
 {
-	PX_CHECK_AND_RETURN_NULL(relativePose.isValid(), "PxRigidActorShapeCollectionHelper::createShape relativePose is not valid.");
-	return inActor->createShape( geometry, materials, materialCount, relativePose );
+	return inActor->createShape( geometry, materials, materialCount, shapeFlags );
 }
 
 PX_PHYSX_CORE_API PxArticulationLink*	PxArticulationLinkCollectionPropHelper::createLink(PxArticulation* inArticulation, PxArticulationLink* parent,
@@ -77,84 +75,84 @@ PX_PHYSX_CORE_API PxArticulationLink*	PxArticulationLinkCollectionPropHelper::cr
 	typedef TPropertyType (*TGetterType)( const TObjType* inObj, TIndexType );
 	*/
 
-inline void SetNumBroadPhaseAdd( PxSimulationStatistics* inStats, PxSimulationStatistics::VolumeType data, PxU32 val ) { inStats->numBroadPhaseAdds[data] = val; }
-inline PxU32 GetNumBroadPhaseAdd( const PxSimulationStatistics* inStats, PxSimulationStatistics::VolumeType data) { return inStats->numBroadPhaseAdds[data]; }
+inline void SetNbBroadPhaseAdd( PxSimulationStatistics* inStats, PxSimulationStatistics::VolumeType data, PxU32 val ) { inStats->nbBroadPhaseAdds[data] = val; }
+inline PxU32 GetNbBroadPhaseAdd( const PxSimulationStatistics* inStats, PxSimulationStatistics::VolumeType data) { return inStats->nbBroadPhaseAdds[data]; }
 
 
-PX_PHYSX_CORE_API NumBroadPhaseAddsProperty::NumBroadPhaseAddsProperty()
-	: PxIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NumBroadPhaseAdds
+PX_PHYSX_CORE_API NbBroadPhaseAddsProperty::NbBroadPhaseAddsProperty()
+	: PxIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NbBroadPhaseAdds
 			, PxSimulationStatistics
 			, PxSimulationStatistics::VolumeType
-			, PxU32> ( "NumBroadPhaseAdds", SetNumBroadPhaseAdd, GetNumBroadPhaseAdd )
+			, PxU32> ( "NbBroadPhaseAdds", SetNbBroadPhaseAdd, GetNbBroadPhaseAdd )
 {
 }
 
-inline void SetNumBroadPhaseRemove( PxSimulationStatistics* inStats, PxSimulationStatistics::VolumeType data, PxU32 val ) { inStats->numBroadPhaseRemoves[data] = val; }
-inline PxU32 GetNumBroadPhaseRemove( const PxSimulationStatistics* inStats, PxSimulationStatistics::VolumeType data) { return inStats->numBroadPhaseRemoves[data]; }
+inline void SetNbBroadPhaseRemove( PxSimulationStatistics* inStats, PxSimulationStatistics::VolumeType data, PxU32 val ) { inStats->nbBroadPhaseRemoves[data] = val; }
+inline PxU32 GetNbBroadPhaseRemove( const PxSimulationStatistics* inStats, PxSimulationStatistics::VolumeType data) { return inStats->nbBroadPhaseRemoves[data]; }
 
 
-PX_PHYSX_CORE_API NumBroadPhaseRemovesProperty::NumBroadPhaseRemovesProperty()
-	: PxIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NumBroadPhaseRemoves
+PX_PHYSX_CORE_API NbBroadPhaseRemovesProperty::NbBroadPhaseRemovesProperty()
+	: PxIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NbBroadPhaseRemoves
 			, PxSimulationStatistics
 			, PxSimulationStatistics::VolumeType
-			, PxU32> ( "NumBroadPhaseRemoves", SetNumBroadPhaseRemove, GetNumBroadPhaseRemove )
+			, PxU32> ( "NbBroadPhaseRemoves", SetNbBroadPhaseRemove, GetNbBroadPhaseRemove )
 {
 }
 
-inline void SetNumShape( PxSimulationStatistics* inStats, PxGeometryType::Enum data, PxU32 val ) { inStats->numShapes[data] = val; }
-inline PxU32 GetNumShape( const PxSimulationStatistics* inStats, PxGeometryType::Enum data) { return inStats->numShapes[data]; }
+inline void SetNbShape( PxSimulationStatistics* inStats, PxGeometryType::Enum data, PxU32 val ) { inStats->nbShapes[data] = val; }
+inline PxU32 GetNbShape( const PxSimulationStatistics* inStats, PxGeometryType::Enum data) { return inStats->nbShapes[data]; }
 
 
-PX_PHYSX_CORE_API NumShapesProperty::NumShapesProperty()
-	: PxIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NumShapes
+PX_PHYSX_CORE_API NbShapesProperty::NbShapesProperty()
+	: PxIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NbShapes
 			, PxSimulationStatistics
 			, PxGeometryType::Enum
-			, PxU32> ( "NumShapes", SetNumShape, GetNumShape )
+			, PxU32> ( "NbShapes", SetNbShape, GetNbShape )
 {
 }
 
 
-inline void SetNumDiscreteContactPairs( PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2, PxU32 val ) { inStats->numDiscreteContactPairs[idx1][idx2] = val; }
-inline PxU32 GetNumDiscreteContactPairs( const PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2 ) { return inStats->numDiscreteContactPairs[idx1][idx2]; }
-PX_PHYSX_CORE_API NumDiscreteContactPairsProperty::NumDiscreteContactPairsProperty()
-								: PxDualIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NumDiscreteContactPairs
+inline void SetNbDiscreteContactPairs( PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2, PxU32 val ) { inStats->nbDiscreteContactPairs[idx1][idx2] = val; }
+inline PxU32 GetNbDiscreteContactPairs( const PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2 ) { return inStats->nbDiscreteContactPairs[idx1][idx2]; }
+PX_PHYSX_CORE_API NbDiscreteContactPairsProperty::NbDiscreteContactPairsProperty()
+								: PxDualIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NbDiscreteContactPairs
 															, PxSimulationStatistics
 															, PxGeometryType::Enum
 															, PxGeometryType::Enum
-															, PxU32> ( "NumDiscreteContactPairs", SetNumDiscreteContactPairs, GetNumDiscreteContactPairs )
+															, PxU32> ( "NbDiscreteContactPairs", SetNbDiscreteContactPairs, GetNbDiscreteContactPairs )
 {
 }
 
-inline void SetNumModifiedContactPairs( PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2, PxU32 val ) { inStats->numModifiedContactPairs[idx1][idx2] = val; }
-inline PxU32 GetNumModifiedContactPairs( const PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2 ) { return inStats->numModifiedContactPairs[idx1][idx2]; }
-PX_PHYSX_CORE_API NumModifiedContactPairsProperty::NumModifiedContactPairsProperty()
-								: PxDualIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NumModifiedContactPairs
+inline void SetNbModifiedContactPairs( PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2, PxU32 val ) { inStats->nbModifiedContactPairs[idx1][idx2] = val; }
+inline PxU32 GetNbModifiedContactPairs( const PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2 ) { return inStats->nbModifiedContactPairs[idx1][idx2]; }
+PX_PHYSX_CORE_API NbModifiedContactPairsProperty::NbModifiedContactPairsProperty()
+								: PxDualIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NbModifiedContactPairs
 															, PxSimulationStatistics
 															, PxGeometryType::Enum
 															, PxGeometryType::Enum
-															, PxU32> ( "NumModifiedContactPairs", SetNumModifiedContactPairs, GetNumModifiedContactPairs )
+															, PxU32> ( "NbModifiedContactPairs", SetNbModifiedContactPairs, GetNbModifiedContactPairs )
 {
 }
 
-inline void SetNumSweptIntegrationPairs( PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2, PxU32 val ) { inStats->numSweptIntegrationPairs[idx1][idx2] = val; }
-inline PxU32 GetNumSweptIntegrationPairs( const PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2 ) { return inStats->numSweptIntegrationPairs[idx1][idx2]; }
-PX_PHYSX_CORE_API NumSweptIntegrationPairsProperty::NumSweptIntegrationPairsProperty()
-								: PxDualIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NumSweptIntegrationPairs
+inline void SetNbCCDPairs( PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2, PxU32 val ) { inStats->nbCCDPairs[idx1][idx2] = val; }
+inline PxU32 GetNbCCDPairs( const PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2 ) { return inStats->nbCCDPairs[idx1][idx2]; }
+PX_PHYSX_CORE_API NbCCDPairsProperty::NbCCDPairsProperty()
+								: PxDualIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NbCCDPairs
 															, PxSimulationStatistics
 															, PxGeometryType::Enum
 															, PxGeometryType::Enum
-															, PxU32> ( "NumSweptIntegrationPairs", SetNumSweptIntegrationPairs, GetNumSweptIntegrationPairs )
+															, PxU32> ( "NbCCDPairs", SetNbCCDPairs, GetNbCCDPairs )
 {
 }
 
-inline void SetNumTriggerPairs( PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2, PxU32 val ) { inStats->numTriggerPairs[idx1][idx2] = val; }
-inline PxU32 GetNumTriggerPairs( const PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2 ) { return inStats->numTriggerPairs[idx1][idx2]; }
-PX_PHYSX_CORE_API NumTriggerPairsProperty::NumTriggerPairsProperty()
-								: PxDualIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NumTriggerPairs
+inline void SetNbTriggerPairs( PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2, PxU32 val ) { inStats->nbTriggerPairs[idx1][idx2] = val; }
+inline PxU32 GetNbTriggerPairs( const PxSimulationStatistics* inStats, PxGeometryType::Enum idx1, PxGeometryType::Enum idx2 ) { return inStats->nbTriggerPairs[idx1][idx2]; }
+PX_PHYSX_CORE_API NbTriggerPairsProperty::NbTriggerPairsProperty()
+								: PxDualIndexedPropertyInfo<PxPropertyInfoName::PxSimulationStatistics_NbTriggerPairs
 															, PxSimulationStatistics
 															, PxGeometryType::Enum
 															, PxGeometryType::Enum
-															, PxU32> ( "NumTriggerPairs", SetNumTriggerPairs, GetNumTriggerPairs )
+															, PxU32> ( "NbTriggerPairs", SetNbTriggerPairs, GetNbTriggerPairs )
 {
 }
 
@@ -165,7 +163,6 @@ PX_PHYSX_CORE_API SimulationStatisticsProperty::SimulationStatisticsProperty()
 }
 
 #if PX_USE_PARTICLE_SYSTEM_API
-
 inline void SetProjectionPlane( PxParticleBase* inBase, PxMetaDataPlane inPlane ) { inBase->setProjectionPlane( inPlane.normal, inPlane.distance ); } 
 inline PxMetaDataPlane GetProjectionPlane( const PxParticleBase* inBase ) 
 { 
@@ -178,12 +175,10 @@ PX_PHYSX_CORE_API ProjectionPlaneProperty::ProjectionPlaneProperty()
 	: PxPropertyInfo< PxPropertyInfoName::PxParticleBase_ProjectionPlane, PxParticleBase, PxMetaDataPlane, PxMetaDataPlane >( "ProjectionPlane", SetProjectionPlane, GetProjectionPlane )
 {
 }
-
 #endif // PX_USE_PARTICLE_SYSTEM_API
 
 #if PX_USE_CLOTH_API
-
-inline PxU32 GetNbPxClothFabric_Restvalues( const PxClothFabric* fabric ) { return fabric->getNbParticleIndices() - (fabric->getNbFibers() - 1); }
+inline PxU32 GetNbPxClothFabric_Restvalues( const PxClothFabric* fabric ) { return fabric->getNbParticleIndices()/2; }
 inline PxU32 GetPxClothFabric_Restvalues( const PxClothFabric* fabric, PxReal* outBuffer, PxU32 outBufLen ){ return fabric->getRestvalues( outBuffer, outBufLen ); }
 
 PX_PHYSX_CORE_API RestvaluesProperty::RestvaluesProperty()
@@ -199,47 +194,4 @@ inline PxU32 GetPxClothFabric_PhaseTypes( const PxClothFabric* fabric, PxClothFa
 		outBuffer[idx] = fabric->getPhaseType( idx );
 	return numItems;
 }
-
-PX_PHYSX_CORE_API PhaseTypesProperty::PhaseTypesProperty()
-	: PxReadOnlyCollectionPropertyInfo<PxPropertyInfoName::PxClothFabric_PhaseTypes, PxClothFabric, PxClothFabricPhaseType::Enum>( "PhaseTypes", GetPxClothFabric_PhaseTypes, GetNbPxClothFabric_PhaseTypes )
-{
-}
-
-inline PxU32 GetNbPxCloth_PhaseSolverConfig( const PxCloth* cloth ) 
-{
-	return PxClothFabricPhaseType::eCOUNT - 1;  // don't count the eINVALID type
-}
-
-inline PxU32 GetPxCloth_PhaseSolverConfig( const PxCloth* cloth, PxClothPhaseSolverConfig* outBuffer, PxU32 count )
-{
-	PX_ASSERT(PxClothFabricPhaseType::eSTRETCHING == 1);
-	PxU32 phaseType = PxClothFabricPhaseType::eSTRETCHING;
-	PxU32 numItems = PxMin( GetNbPxCloth_PhaseSolverConfig( cloth ), count );
-	for ( PxU32 idx = 0; idx < numItems; ++idx )
-	{
-		outBuffer[idx] = cloth->getPhaseSolverConfig( (PxClothFabricPhaseType::Enum)phaseType );
-		phaseType++;
-	}
-	return numItems;
-}
-
-PX_PHYSX_CORE_API PhaseSolverConfigProperty::PhaseSolverConfigProperty()
-	: PxReadOnlyCollectionPropertyInfo<PxPropertyInfoName::PxCloth_PhaseSolverConfig, PxCloth, PxClothPhaseSolverConfig>( "PhaseSolverConfig", GetPxCloth_PhaseSolverConfig, GetNbPxCloth_PhaseSolverConfig )
-{
-}
-
-
-PX_PHYSX_CORE_API void PhaseSolverConfigProperty::set( PxCloth* cloth, const PxClothPhaseSolverConfig* data, PxU32 count )
-{
-	PX_ASSERT(PxClothFabricPhaseType::eSTRETCHING == 1);
-	PxU32 phaseType = PxClothFabricPhaseType::eSTRETCHING;
-
-	PxU32 numItems = PxMin( GetNbPxCloth_PhaseSolverConfig( cloth ), count );
-	for ( PxU32 idx = 0; idx < numItems; ++idx )
-	{
-		cloth->setPhaseSolverConfig( (PxClothFabricPhaseType::Enum)phaseType, data[idx] );
-		phaseType++;
-	}
-}
-
 #endif // PX_USE_CLOTH_API

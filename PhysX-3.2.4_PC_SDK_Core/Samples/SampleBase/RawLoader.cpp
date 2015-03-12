@@ -23,27 +23,26 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 
 // PT: this file is a loader for "raw" binary files. It should NOT create SDK objects directly.
 
+#include <stdio.h>
 #include "foundation/PxPreprocessor.h"
 #include "RawLoader.h"
-#include <stdio.h>
 #include "RendererColor.h"
 #include "RendererMemoryMacros.h"
 #include "SampleAllocatorSDKClasses.h"
-#include "PsShare.h"
 #include "PsFile.h"
 
 using namespace SampleRenderer;
 
 RAWObject::RAWObject() : mName(NULL)
 {
-	mTransform = PxTransform::createIdentity();
+	mTransform = PxTransform(PxIdentity);
 }
 
 RAWTexture::RAWTexture() :
@@ -102,6 +101,8 @@ RAWMaterial::RAWMaterial() :
 	static const bool gFlip = false;
 #elif defined(PX_PSP2)
 	static const bool gFlip = false;
+#elif defined(PX_WIIU)
+	static const bool gFlip = true;
 #else
 	#error Unknown platform!
 #endif
@@ -128,32 +129,35 @@ RAWMaterial::RAWMaterial() :
 		Flip((PxU32&)v);
 	}
 
-static PxU8 read8(FILE* fp)
+static PxU8 read8(File* fp)
 {
 	PxU8 data;
-	fread(&data, 1, 1, fp);
+	size_t numRead = fread(&data, 1, 1, fp);
+	if(numRead != 1) { return 0; }
 	return data;
 }
 
-static PxU32 read32(FILE* fp)
+static PxU32 read32(File* fp)
 {
 	PxU32 data;
-	fread(&data, 4, 1, fp);
+	size_t numRead = fread(&data, 1, 4, fp);
+	if(numRead != 4) { return 0; }
 	if(gFlip)
 		Flip(data);
 	return data;
 }
 
-static PxF32 readFloat(FILE* fp)
+static PxF32 readFloat(File* fp)
 {
 	PxF32 data;
-	fread(&data, 4, 1, fp);
+	size_t numRead = fread(&data, 1, 4, fp);
+	if(numRead != 4) { return 0; }
 	if(gFlip)
 		Flip(data);
 	return data;
 }
 
-static PxTransform readTransform(FILE* fp, PxReal scale)
+static PxTransform readTransform(File* fp, PxReal scale)
 {
 	PxTransform tr;
 	tr.p.x = scale * readFloat(fp);
@@ -170,9 +174,11 @@ static PxTransform readTransform(FILE* fp, PxReal scale)
 	return tr;
 }
 
-static void readVertexArray(FILE* fp, PxVec3* verts, PxU32 nbVerts)
+static void readVertexArray(File* fp, PxVec3* verts, PxU32 nbVerts)
 {
-	fread(verts, 4*3*nbVerts, 1, fp);
+	const size_t size = 4*3*nbVerts;
+	size_t numRead = fread(verts, 1, size, fp);
+	if(numRead != size) { return; }
 
 	if(gFlip)
 	{
@@ -185,9 +191,11 @@ static void readVertexArray(FILE* fp, PxVec3* verts, PxU32 nbVerts)
 	}
 }
 
-static void readUVs(FILE* fp, PxReal* uvs, PxU32 nbVerts)
+static void readUVs(File* fp, PxReal* uvs, PxU32 nbVerts)
 {
-	fread(uvs, 4*2*nbVerts, 1, fp);
+	const size_t size = 4*2*nbVerts;
+	size_t numRead = fread(uvs, 1, size, fp);
+	if(numRead != size) { return; }
 
 	if(gFlip)
 	{
@@ -196,7 +204,7 @@ static void readUVs(FILE* fp, PxReal* uvs, PxU32 nbVerts)
 	}
 }
 
-static void readVertices(FILE* fp, PxVec3* verts, PxU32 nbVerts, PxReal scale)
+static void readVertices(File* fp, PxVec3* verts, PxU32 nbVerts, PxReal scale)
 {
 	readVertexArray(fp, verts, nbVerts);
 
@@ -204,23 +212,24 @@ static void readVertices(FILE* fp, PxVec3* verts, PxU32 nbVerts, PxReal scale)
 		verts[j] *= scale;
 }
 
-static void readNormals(FILE* fp, PxVec3* verts, PxU32 nbVerts)
+static void readNormals(File* fp, PxVec3* verts, PxU32 nbVerts)
 {
 	readVertexArray(fp, verts, nbVerts);
 }
 
-static void readVertexColors(FILE* fp, PxVec3* colors, PxU32 nbVerts)
+static void readVertexColors(File* fp, PxVec3* colors, PxU32 nbVerts)
 {
 	readVertexArray(fp, colors, nbVerts);
 }
 
-static void readName(FILE* fp, char* objectName)
+static void readName(File* fp, char* objectName)
 {
 	PxU32 offset=0;
 	char c;
 	do
 	{
-		fread(&c, 1, 1, fp);
+		size_t numRead = fread(&c, 1, 1, fp);
+		if(numRead != 1) { c = '\0';}
 		objectName[offset++] = c;
 	}while(c);
 	objectName[offset]=0;
@@ -228,8 +237,8 @@ static void readName(FILE* fp, char* objectName)
 
 bool loadRAWfile(const char* filename, RAWImportCallback& cb, PxReal scale)
 {
-	FILE* fp = NULL;
-	physx::fopen_s(&fp, filename, "rb");
+	File* fp = NULL;
+	Fnd::fopen_s(&fp, filename, "rb");
 	if(!fp)
 		return false;
 
@@ -242,6 +251,8 @@ bool loadRAWfile(const char* filename, RAWImportCallback& cb, PxReal scale)
 	const PxU32 nbShapes		= read32(fp);
 	const PxU32 nbHelpers		= read32(fp);
 
+	(void)tag;
+	(void)generalVersion;
 	char objectName[512];
 
 	// Textures
@@ -251,7 +262,7 @@ bool loadRAWfile(const char* filename, RAWImportCallback& cb, PxReal scale)
 
 		readName(fp, objectName);
 		data.mName				= objectName;
-		data.mTransform			= PxTransform::createIdentity();	// PT: texture transform not supported yet
+		data.mTransform			= PxTransform(PxIdentity);	// PT: texture transform not supported yet
 		data.mID				= read32(fp);
 
 		RendererColorAlloc* pixels = NULL;
@@ -354,7 +365,17 @@ bool loadRAWfile(const char* filename, RAWImportCallback& cb, PxReal scale)
 
 		PxU32* tmpIndices = (PxU32*)SAMPLE_ALLOC(sizeof(PxU32)*data.mNbFaces*3);
 		data.mIndices = tmpIndices;
-		fread(tmpIndices, 4*3*data.mNbFaces, 1, fp);
+		const size_t size = 4*3*data.mNbFaces;
+		size_t numRead = fread(tmpIndices, 1, size, fp);
+		if(numRead != size) 
+		{ 
+			SAMPLE_FREE(tmpIndices);
+			SAMPLE_FREE(tmpUVs);
+			DELETEARRAY(tmpColors);
+			DELETEARRAY(tmpNormals);
+			DELETEARRAY(tmpVerts);
+			return false; 
+		}
 		if(gFlip)
 		{
 			for(PxU32 j=0;j<data.mNbFaces*3;j++)

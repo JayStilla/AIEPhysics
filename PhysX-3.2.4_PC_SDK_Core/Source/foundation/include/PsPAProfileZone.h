@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,6 @@
 #include "foundation/PxAssert.h"
 #include "PsUserAllocated.h"
 #include "PsPAEventSrc.h"
-#include "PsNoCopy.h"
 
 namespace physx
 {
@@ -42,8 +41,9 @@ namespace shdfnd
 {
 
 // Holds name/enum to EventID mapping for a subsection of code
-class PAProfileZone : public UserAllocated, public NoCopy
+class PAProfileZone : public UserAllocated
 {
+	PX_NOCOPY(PAProfileZone)
 public:
     PAProfileZone( const char **eventNames, int numNames )
       : mNames( eventNames )
@@ -91,8 +91,9 @@ protected:
 };
 
 // Scoped profiling zone
-class PAPerfScope : public NoCopy
+class PAPerfScope
 {
+	PX_NOCOPY(PAPerfScope)
 public:
     PAPerfScope( PAProfileZone& z, int eventEnum, PxU16 stat ) : mZone( z ), mEvent( eventEnum )
     {

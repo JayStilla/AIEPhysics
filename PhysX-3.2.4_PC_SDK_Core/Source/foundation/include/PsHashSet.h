@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -100,7 +100,7 @@ namespace shdfnd
 		typedef typename internal::HashSetBase<Key, HashFn, Allocator, true> HashSetBase;
 
 		CoalescedHashSet(PxU32 initialTableSize = 64, float loadFactor = 0.75f): HashSetBase(initialTableSize,loadFactor){}
-		const Key *getEntries() { return HashSetBase::mBase.getEntries(); }
+		const Key *getEntries() const { return HashSetBase::mBase.getEntries(); }
 	};
 
 } // namespace shdfnd

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,7 @@
 #include "geometry/PxCapsuleGeometry.h"
 #include "geometry/PxConvexMeshGeometry.h"
 #include "geometry/PxConvexMesh.h"
-#include "PxSceneQueryReport.h"
+#include "PxQueryReport.h"
 #include "PxScene.h"
 #include "PxRigidDynamic.h"
 #include "extensions/PxShapeExt.h"
@@ -42,7 +42,7 @@
 
 //#define RAYCAST_CCD_PRINT_DEBUG
 
-PxVec3 getShapeCenter(PxShape* shape, const PxVec3& localOffset)
+PxVec3 getShapeCenter(PxRigidActor* actor, PxShape* shape, const PxVec3& localOffset)
 {
 	PxVec3 offset = localOffset;
 
@@ -52,6 +52,7 @@ PxVec3 getShapeCenter(PxShape* shape, const PxVec3& localOffset)
 		{
 			PxConvexMeshGeometry geometry;
 			bool status = shape->getConvexMeshGeometry(geometry);
+			PX_UNUSED(status);
 			PX_ASSERT(status);
 
 			PxReal mass;
@@ -65,17 +66,17 @@ PxVec3 getShapeCenter(PxShape* shape, const PxVec3& localOffset)
 		default:
 		break;
 	}
-	const PxTransform pose = PxShapeExt::getGlobalPose(*shape);
+	const PxTransform pose = PxShapeExt::getGlobalPose(*shape, *actor);
 	return pose.transform(offset);
 }
 
-static PxReal computeInternalRadius(PxShape* shape, const PxVec3& dir, /*PxVec3& offset,*/ const PxVec3& centerOffset)
+static PxReal computeInternalRadius(PxRigidActor* actor, PxShape* shape, const PxVec3& dir, /*PxVec3& offset,*/ const PxVec3& centerOffset)
 {
-	const PxBounds3 bounds = shape->getWorldBounds();
+	const PxBounds3 bounds = PxShapeExt::getWorldBounds(*shape, *actor);
 	const PxReal diagonal = (bounds.maximum - bounds.minimum).magnitude();
 	const PxReal offsetFromOrigin = diagonal * 2.0f;
 
-	PxTransform pose = PxShapeExt::getGlobalPose(*shape);
+	PxTransform pose = PxShapeExt::getGlobalPose(*shape, *actor);
 
 	PxReal internalRadius = 0.0f;
 	const PxReal length = offsetFromOrigin*2.0f;
@@ -91,7 +92,10 @@ static PxReal computeInternalRadius(PxShape* shape, const PxVec3& dir, /*PxVec3&
 				const PxVec3 virtualOrigin = pose.p + dir * offsetFromOrigin;
 
 				PxRaycastHit hit;
-				PxU32 nbHits = shape->raycast(virtualOrigin, -dir, length, (PxSceneQueryFlags)0xffffffff, 1, &hit, false, &pose);
+
+				const PxHitFlags sceneQueryFlags = PxHitFlag::ePOSITION|PxHitFlag::eNORMAL|PxHitFlag::eDISTANCE;
+				PxU32 nbHits = PxGeometryQuery::raycast(virtualOrigin, -dir, shape->getGeometry().any(), pose, length, sceneQueryFlags, 1, &hit, false);
+				PX_UNUSED(nbHits);
 				PX_ASSERT(nbHits);
 
 				internalRadius = offsetFromOrigin - hit.distance;
@@ -103,6 +107,7 @@ static PxReal computeInternalRadius(PxShape* shape, const PxVec3& dir, /*PxVec3&
 			{
 				PxSphereGeometry geometry;
 				bool status = shape->getSphereGeometry(geometry);
+				PX_UNUSED(status);
 				PX_ASSERT(status);
 
 				internalRadius = geometry.radius;
@@ -135,13 +140,15 @@ static PxReal computeInternalRadius(PxShape* shape, const PxVec3& dir, /*PxVec3&
 	offset = shapeCenter - saved;*/
 
 
-				PxVec3 shapeCenter = getShapeCenter(shape, centerOffset);
+				PxVec3 shapeCenter = getShapeCenter(actor, shape, centerOffset);
 				shapeCenter -= pose.p;
 				pose.p = PxVec3(0);
 
 				const PxVec3 virtualOrigin = shapeCenter + dir * offsetFromOrigin;
 				PxRaycastHit hit;
-				PxU32 nbHits = shape->raycast(virtualOrigin, -dir, length, (PxSceneQueryFlags)0xffffffff, 1, &hit, false, &pose);
+				const PxHitFlags sceneQueryFlags = PxHitFlag::ePOSITION|PxHitFlag::eNORMAL|PxHitFlag::eDISTANCE;
+				PxU32 nbHits = PxGeometryQuery::raycast(virtualOrigin, -dir, shape->getGeometry().any(), pose, length, sceneQueryFlags, 1, &hit, false);
+				PX_UNUSED(nbHits);
 				PX_ASSERT(nbHits);
 
 				internalRadius = offsetFromOrigin - hit.distance;
@@ -157,25 +164,21 @@ static PxReal computeInternalRadius(PxShape* shape, const PxVec3& dir, /*PxVec3&
 
 static bool CCDRaycast(PxScene* scene, const PxVec3& origin, const PxVec3& unitDir, const PxReal distance, PxRaycastHit& hit)
 {
-	const PxSceneQueryFlags outputFlags(0xffffffff);
+	const PxHitFlags outputFlags = PxHitFlag::ePOSITION|PxHitFlag::eNORMAL|PxHitFlag::eDISTANCE;
 
-	PxSceneQueryFilterData filterData;
-	filterData.flags = PxSceneQueryFilterFlag::eSTATIC;
+	PxQueryFilterData filterData;
+	filterData.flags = PxQueryFlag::eSTATIC;
 
-	PxSceneQueryFilterCallback* filterCall = NULL;
+	PxQueryFilterCallback* filterCall = NULL;
 
-	return scene->raycastSingle(origin, unitDir, distance,
-							   outputFlags,
-							   hit,
-							   filterData,
-							   filterCall,
-							   NULL);
+	PxRaycastBuffer buf1;
+	scene->raycast(origin, unitDir, distance, buf1, outputFlags, filterData, filterCall, NULL);
+	hit = buf1.block;
+	return buf1.hasBlock;
 }
 
-static PxRigidDynamic* canDoCCD(PxShape* shape)
+static PxRigidDynamic* canDoCCD(PxRigidActor& actor, PxShape* shape)
 {
-	PxActor& actor = shape->getActor();
-
 	PxRigidDynamic* dyna = actor.is<PxRigidDynamic>();
 	if(!dyna)
 		return NULL;	// PT: no need to do it for statics
@@ -184,24 +187,22 @@ static PxRigidDynamic* canDoCCD(PxShape* shape)
 	if(nbShapes!=1)
 		return NULL;	// PT: only works with simple actors for now
 
-	if(dyna->getRigidDynamicFlags() & PxRigidDynamicFlag::eKINEMATIC)
+	if(dyna->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
 		return NULL;	// PT: no need to do it for kinematics
 
 	return dyna;
 }
 
-bool doRaycastCCD(PxShape* shape, PxTransform& newPose, PxVec3& newShapeCenter, const PxVec3& ccdWitness, const PxVec3& ccdWitnessOffset)
+bool doRaycastCCD(PxRigidActor* actor, PxShape* shape, PxTransform& newPose, PxVec3& newShapeCenter, const PxVec3& ccdWitness, const PxVec3& ccdWitnessOffset)
 {
-	PxRigidDynamic* dyna = canDoCCD(shape);
+	PxRigidDynamic* dyna = canDoCCD(*actor, shape);
 	if(!dyna)
 		return true;
 
 	bool updateCCDWitness = true;
 
 	const PxVec3 offset = newPose.p - newShapeCenter;
-//printf("CCD0: %f | %f | %f\n", newShapeCenter.x, newShapeCenter.y, newShapeCenter.z);
 	const PxVec3& origin = ccdWitness;
-//			const PxVec3& dest = newPose.p;
 	const PxVec3& dest = newShapeCenter;
 
 	PxVec3 dir = dest - origin;
@@ -211,71 +212,39 @@ bool doRaycastCCD(PxShape* shape, PxTransform& newPose, PxVec3& newShapeCenter, 
 		dir /= length;
 
 		// Compute internal radius
-//		PxVec3 localCenter;
-		const PxReal internalRadius = computeInternalRadius(shape, dir, /*localCenter,*/ ccdWitnessOffset);
+		const PxReal internalRadius = computeInternalRadius(actor, shape, dir, ccdWitnessOffset);
 
 		// Compute distance to impact
 		PxRaycastHit hit;
-//		if(internalRadius!=0.0f && CCDRaycast(shape->getActor().getActiveScene(), origin + localCenter, dir, length, hit))
-		if(internalRadius!=0.0f && CCDRaycast(shape->getActor().getScene(), origin, dir, length, hit))
+		if(internalRadius!=0.0f && CCDRaycast(actor->getScene(), origin, dir, length, hit))
 		{
 #ifdef RAYCAST_CCD_PRINT_DEBUG
 			static int count=0;
-			printf("CCD hit %d\n", count++);
+			shdfnd::printFormatted("CCD hit %d\n", count++);
 #endif
 			updateCCDWitness = false;
 			const PxReal radiusLimit = internalRadius * 0.75f;
 			if(hit.distance>radiusLimit)
 			{
-//				newPose.p = origin + dir * (hit.distance - radiusLimit);
 				newShapeCenter = origin + dir * (hit.distance - radiusLimit);
 #ifdef RAYCAST_CCD_PRINT_DEBUG
-				printf("  Path0: %f | %f\n", hit.distance, radiusLimit);
+				shdfnd::printFormatted("  Path0: %f | %f\n", hit.distance, radiusLimit);
 #endif
 			}
 			else
 			{
-//				newPose.p = origin;
 				newShapeCenter = origin;
-//				newShapeCenter = origin + hit.normal * (radiusLimit - hit.distance);
 #ifdef RAYCAST_CCD_PRINT_DEBUG
-				printf("  Path1: %f\n", hit.distance);
+				shdfnd::printFormatted("  Path1: %f\n", hit.distance);
 #endif
 			}
 
 			{
 				newPose.p = offset + newShapeCenter;
-//newPose.p.y += 10.0f;
-//printf("%f | %f | %f\n", newPose.p.x, newPose.p.y, newPose.p.z);
-
-//				dyna->setGlobalPose(newPose);
-
-				// newPose = actorGlobalPose * shapeLocalPose
-				// newPose * inverse(shapeLocalPose) = actorGlobalPose
-
 				const PxTransform shapeLocalPose = shape->getLocalPose();
 				const PxTransform inverseShapeLocalPose = shapeLocalPose.getInverse();
 				PxTransform newGlobalPose = newPose * inverseShapeLocalPose;
 				dyna->setGlobalPose(newGlobalPose);
-//dyna->setGlobalPose(newPose);
-//printf("%f | %f | %f\n", newGlobalPose.p.x, newGlobalPose.p.y, newGlobalPose.p.z);
-//printf("%f | %f | %f\n", shapeLocalPose.p.x, shapeLocalPose.p.y, shapeLocalPose.p.z);
-
-/*PX_INLINE PxTransform PxShapeExt::getGlobalPose(const PxShape& shape)
-{
-PxRigidActor& ra = shape.getActor();
-
-return ra.getGlobalPose() * shape.getLocalPose();
-}*/
-const PxVec3 testShapeCenter = getShapeCenter(shape, ccdWitnessOffset);
-float d = (testShapeCenter - newShapeCenter).magnitude();
-//printf("%f\n", d);
-//printf("CCD1: %f | %f | %f\n", testShapeCenter.x, testShapeCenter.y, testShapeCenter.z);
-
-//dyna->clearForce(PxForceMode::eFORCE);
-//dyna->clearForce(PxForceMode::eIMPULSE);
-//dyna->setLinearVelocity(PxVec3(0));	// PT: this helps the CCT but stops small objects dead, which doesn't look great
-
 			}
 		}
 	}

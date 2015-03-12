@@ -23,23 +23,24 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #ifndef RAYCAST_CCD_H
 #define RAYCAST_CCD_H
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 
 using namespace physx;
 
 namespace physx
 {
 	class PxShape;
+	class PxRigidActor;
 };
 
-	PxVec3	getShapeCenter(PxShape* shape, const PxVec3& localOffset);
-	bool	doRaycastCCD(PxShape* shape, PxTransform& pose, PxVec3& newShapeCenter, const PxVec3& ccdWitness, const PxVec3& ccdWitnessOffset);
+	PxVec3	getShapeCenter(PxRigidActor* actor, PxShape* shape, const PxVec3& localOffset);
+	bool	doRaycastCCD(PxRigidActor* actor, PxShape* shape, PxTransform& pose, PxVec3& newShapeCenter, const PxVec3& ccdWitness, const PxVec3& ccdWitnessOffset);
 
 #endif

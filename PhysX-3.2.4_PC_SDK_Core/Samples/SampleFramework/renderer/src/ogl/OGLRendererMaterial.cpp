@@ -1,37 +1,29 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #include "RendererConfig.h"
 
@@ -64,13 +56,14 @@ static RendererMaterial::VariableType getVariableType(CGtype cgt)
 	RendererMaterial::VariableType vt = RendererMaterial::NUM_VARIABLE_TYPES;
 	switch(cgt)
 	{
+		case CG_INT:       vt = RendererMaterial::VARIABLE_INT;       break;
 		case CG_FLOAT:     vt = RendererMaterial::VARIABLE_FLOAT;     break;
 		case CG_FLOAT2:    vt = RendererMaterial::VARIABLE_FLOAT2;    break;
 		case CG_FLOAT3:    vt = RendererMaterial::VARIABLE_FLOAT3;    break;
 		case CG_FLOAT4:    vt = RendererMaterial::VARIABLE_FLOAT4;    break;
 		case CG_FLOAT4x4:  vt = RendererMaterial::VARIABLE_FLOAT4x4;  break;
-		case CG_INT:       vt = RendererMaterial::VARIABLE_INT;       break;
 		case CG_SAMPLER2D: vt = RendererMaterial::VARIABLE_SAMPLER2D; break;
+		case CG_SAMPLER3D: vt = RendererMaterial::VARIABLE_SAMPLER3D; break;
 		default: break;
 	}
 	RENDERER_ASSERT(vt < RendererMaterial::NUM_VARIABLE_TYPES, "Unable to convert shader parameter type.");
@@ -93,6 +86,7 @@ static GLuint getGLBlendFunc(RendererMaterial::BlendFunc func)
 		case RendererMaterial::BLEND_DST_COLOR:           glfunc = GL_DST_COLOR;           break;
 		case RendererMaterial::BLEND_ONE_MINUS_DST_COLOR: glfunc = GL_ONE_MINUS_DST_COLOR; break;
 		case RendererMaterial::BLEND_SRC_ALPHA_SATURATE:  glfunc = GL_SRC_ALPHA_SATURATE;  break;
+		default: break;
 	}
 	RENDERER_ASSERT(glfunc, "Unable to convert Material Blend Func.");
 	return glfunc;
@@ -157,7 +151,7 @@ void OGLRendererMaterial::CGVariable::addFragmentHandle(CGparameter handle, Pass
 #endif
 
 OGLRendererMaterial::OGLRendererMaterial(OGLRenderer &renderer, const RendererMaterialDesc &desc) :
-	RendererMaterial(desc),
+	RendererMaterial(desc, renderer.getEnableMaterialCaching()),
 	m_renderer(renderer)
 {
 	m_glAlphaTestFunc = GL_ALWAYS;
@@ -179,12 +173,19 @@ OGLRendererMaterial::OGLRendererMaterial(OGLRenderer &renderer, const RendererMa
 #if defined(RENDERER_ENABLE_CG)
 	m_vertexProgram   = 0;
 #if defined(RENDERER_PS3)
-	m_vertexProfile   = CG_PROFILE_SCE_VP_RSX; //cgGLGetLatestProfile(CG_GL_VERTEX); // CG_PROFILE_GPU_VP FAILS SO BAD!
-	m_fragmentProfile = CG_PROFILE_SCE_FP_RSX; //cgGLGetLatestProfile(CG_GL_FRAGMENT); // CG_PROFILE_GPU_VP FAILS SO BAD!
+	m_vertexProfile   = getVertexProfile(); 
+	m_fragmentProfile = getFragmentProfile(); 
 #else
-	m_vertexProfile   = CG_PROFILE_ARBVP1; //cgGLGetLatestProfile(CG_GL_VERTEX); // CG_PROFILE_GPU_VP FAILS SO BAD!
-	m_fragmentProfile = CG_PROFILE_ARBFP1; //cgGLGetLatestProfile(CG_GL_FRAGMENT); // CG_PROFILE_GPU_VP FAILS SO BAD!
 #define NO_SUPPORT_DDX_DDY
+#if 0
+	// JD: CG_PROFILE_GPU_VP FAILS SO BAD!
+	m_vertexProfile   = CG_PROFILE_ARBVP1;
+	m_fragmentProfile = CG_PROFILE_ARBVP1;
+#else
+	// PH: Seems to work fine nowadays
+	m_vertexProfile   = cgGLGetLatestProfile(CG_GL_VERTEX);
+	m_fragmentProfile = cgGLGetLatestProfile(CG_GL_FRAGMENT);
+#endif
 #endif
 	memset(m_fragmentPrograms, 0, sizeof(m_fragmentPrograms));
 	
@@ -231,12 +232,23 @@ OGLRendererMaterial::OGLRendererMaterial(OGLRenderer &renderer, const RendererMa
 		const char *fragmentEntry = "fmain";
 		for(PxU32 i=0; i<NUM_PASSES; i++)
 		{
-			char passDefine[1024] = {0};
-			physx::string::sprintf_s(passDefine, 1023, "-D%s", getPassName((Pass)i));
+			char passDefine[64] = {0};
+			physx::string::sprintf_s(passDefine, 63, "-D%s", getPassName((Pass)i));
+
+			char fvaceDefine[20] = "-DENABLE_VFACE=0";
+#ifdef PX_WINDOWS
+			// Aparently the FACE semantic is only supported with fp40
+			if (cgGLIsProfileSupported(CG_PROFILE_FP40))
+			{
+				fvaceDefine[15] = '1';
+			}
+#endif
 			const char *fragmentArgs[]  =
 			{
 				fullPath,
 				"-DRENDERER_FRAGMENT",
+				fvaceDefine,			// used for double sided rendering (as done in D3D anyways)
+				"-DVFACE=FACE",			// rename VFACE to FACE semantic, the first is only known to HLSL shaders...
 #ifdef RENDERER_PS3
 				"-DRENDERER_PS3",
 				"-melf",
@@ -378,9 +390,10 @@ void OGLRendererMaterial::unbind(void) const
 }
 
 #if defined(RENDERER_ENABLE_CG)
-static void bindSampler2DVariable(CGparameter param, RendererTexture2D &texture)
+template<class TextureType>
+static void bindSamplerVariable(CGparameter param, RendererTexture2D &texture)
 {
-	OGLRendererTexture2D &tex = *static_cast<OGLRendererTexture2D*>(&texture);
+	TextureType &tex = *static_cast<TextureType*>(&texture);
 	if(param)
 	{
 		CGresource resource = cgGetParameterResource(param);
@@ -432,13 +445,25 @@ void OGLRendererMaterial::bindVariable(Pass pass, const Variable &variable, cons
 			RENDERER_ASSERT(data, "NULL Sampler.");
 			if(data)
 			{
-				bindSampler2DVariable(var.m_vertexHandle,          *(RendererTexture2D*)data);
-				bindSampler2DVariable(var.m_fragmentHandles[pass], *(RendererTexture2D*)data);
+				bindSamplerVariable<OGLRendererTexture2D>(var.m_vertexHandle,          *(RendererTexture2D*)data);
+				bindSamplerVariable<OGLRendererTexture2D>(var.m_fragmentHandles[pass], *(RendererTexture2D*)data);
 			}
 			break;
-		default:
+		case VARIABLE_SAMPLER3D:
+			RENDERER_ASSERT(0, "3D GL Textures Not Implemented.");
+			/*
+			data = *(void**)data;
+			RENDERER_ASSERT(data, "NULL Sampler.");
+			if(data)
+			{
+				bindSamplerVariable<OGLRendererTexture3D>(var.m_vertexHandle,          *(RendererTexture2D*)data);
+				bindSamplerVariable<OGLRendererTexture3D>(var.m_fragmentHandles[pass], *(RendererTexture2D*)data);
+			}
+			*/
 			break;
-			
+		default: 
+			RENDERER_ASSERT(0, "Cannot bind variable of this type.");
+			break;
 	}
 #endif
 }

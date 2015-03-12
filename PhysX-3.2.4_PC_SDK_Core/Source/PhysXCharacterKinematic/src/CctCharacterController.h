@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -44,7 +44,7 @@ namespace physx
 {
 
 struct PxFilterData;
-class PxSceneQueryFilterCallback;
+class PxQueryFilterCallback;
 class PxObstacle;
 
 namespace Cm
@@ -56,19 +56,22 @@ namespace Cct
 {
 	struct CCTParams
 	{
-									CCTParams();
+											CCTParams();
 
-		PxCCTNonWalkableMode::Enum	mNonWalkableMode;
-		PxQuat						mQuatFromUp;
-		PxVec3						mUpDirection;
-		PxF32						mSlopeLimit;
-		PxF32						mContactOffset;
-		PxF32						mStepOffset;
-		PxF32						mInvisibleWallHeight;
-		PxF32						mMaxJumpHeight;
-		PxF32						mMaxEdgeLength2;
-		bool						mTessellation;
-		bool						mHandleSlope;		// True to handle walkable parts according to slope
+		PxControllerNonWalkableMode::Enum	mNonWalkableMode;
+		PxQuat								mQuatFromUp;
+		PxVec3								mUpDirection;
+		PxF32								mSlopeLimit;
+		PxF32								mContactOffset;
+		PxF32								mStepOffset;
+		PxF32								mInvisibleWallHeight;
+		PxF32								mMaxJumpHeight;
+		PxF32								mMaxEdgeLength2;
+		bool								mTessellation;
+		bool								mHandleSlope;		// True to handle walkable parts according to slope
+		bool								mOverlapRecovery;
+		bool								mPreciseSweeps;
+		bool								mPreventVerticalSlidingAgainstCeiling;
 	};
 
 	template<class T, class A>
@@ -105,15 +108,21 @@ namespace Cct
 	class SweptVolume;
 
 // PT: apparently .Net aligns some of them on 8-bytes boundaries for no good reason. This is bad.
+#if !defined(PX_WIIU) && !defined(PX_PSP2)	// Whenever a variable points to a field of a specially aligned struct, it has to be declared with __packed (see GHS docu, Structure Packing, page 111).
+				// Every reference to such a field needs the __packed declaration: all function parameters and assignment operators etc.
 #pragma pack(push,4)
+#endif
 
 	struct TouchedGeom
 	{
 		TouchedGeomType::Enum	mType;
-		const void*				mUserData;	// PxController or PxShape pointer
-		PxExtendedVec3			mOffset;	// Local origin, typically the center of the world bounds around the character. We translate both
-											// touched shapes & the character so that they are nearby this PxVec3, then add the offset back to
-											// computed "world" impacts.
+		const void*				mTGUserData;	// PxController or PxShape pointer
+		const PxRigidActor*		mActor;			// PxActor for PxShape pointers (mandatory with shared shapes)
+		PxExtendedVec3			mOffset;		// Local origin, typically the center of the world bounds around the character. We translate both
+												// touched shapes & the character so that they are nearby this PxVec3, then add the offset back to
+												// computed "world" impacts.
+	protected:
+		~TouchedGeom(){}
 	};
 
 	struct TouchedUserBox : public TouchedGeom
@@ -154,7 +163,9 @@ namespace Cct
 		PxF32			mRadius;	//!< Capsule's radius
 	};
 
+#if !defined(PX_WIIU) && !defined(PX_PSP2)
 #pragma pack(pop)
+#endif
 
 	struct SweptContact
 	{
@@ -200,109 +211,104 @@ namespace Cct
 		STF_TOUCH_OBSTACLE			= (1<<5),	// Are we standing on an obstacle or not? (only updated for down pass)
 		STF_NORMALIZE_RESPONSE		= (1<<6),
 		STF_FIRST_UPDATE			= (1<<7),
-		STF_IS_MOVING_UP			= (1<<8),
-		STF_RECREATE_CACHE			= (1<<9),
-	};
+		STF_IS_MOVING_UP			= (1<<8)
+	};	
 
 	enum SweepPass
 	{
 		SWEEP_PASS_UP,
 		SWEEP_PASS_SIDE,
 		SWEEP_PASS_DOWN,
+		SWEEP_PASS_SENSOR
 	};
 
-	class SweepTest: public PxObserver
+	class SweepTest
 	{
 	public:
-		SweepTest();
-		~SweepTest();
+										SweepTest();
+										~SweepTest();
 
-		PxU32				moveCharacter(
-			const InternalCBData_FindTouchedGeom* userData,
-			const InternalCBData_OnHit* user_data2,
-			SweptVolume& volume,
-			const PxVec3& direction,
-			const UserObstacles& userObstacles,
-			PxF32 min_dist,
-			const PxControllerFilters& filters,
-			bool constrainedClimbingMode,
-			bool standingOnMoving
-			);
+		PxControllerCollisionFlags		moveCharacter(	const InternalCBData_FindTouchedGeom* userData,
+														const InternalCBData_OnHit* user_data2,
+														SweptVolume& volume,
+														const PxVec3& direction,
+														const UserObstacles& userObstacles,
+														PxF32 min_dist,
+														const PxControllerFilters& filters,
+														bool constrainedClimbingMode,
+														bool standingOnMoving
+														);
 
-		bool				doSweepTest(
-			const InternalCBData_FindTouchedGeom* userDataTouchedGeom,
-			const InternalCBData_OnHit* userDataOnHit,
-			const UserObstacles& userObstacles,
-			SweptVolume& swept_volume,
-			const PxVec3& direction, PxU32 max_iter,
-			PxU32* nb_collisions, PxF32 min_dist, const PxControllerFilters& filters, SweepPass sweepPass);
+					bool				doSweepTest(const InternalCBData_FindTouchedGeom* userDataTouchedGeom,
+													const InternalCBData_OnHit* userDataOnHit,
+													const UserObstacles& userObstacles,
+													SweptVolume& swept_volume,
+													const PxVec3& direction, const PxVec3& sideVector, PxU32 max_iter,
+													PxU32* nb_collisions, PxF32 min_dist, const PxControllerFilters& filters, SweepPass sweepPass);
 
-		void				findTouchedObstacles(const UserObstacles& userObstacles, const PxExtendedBounds3& world_box);
+					void				findTouchedObstacles(const UserObstacles& userObstacles, const PxExtendedBounds3& world_box);
 
-		void				voidTestCache()
-		{
-			mCachedTBV.setEmpty();
-			if(mTouchedActor)
-				mTouchedActor->unregisterObserver(*this);
-			mTouchedActor = NULL;
-			mTouchedShape = NULL;
-			mTouchedObstacleHandle = INVALID_OBSTACLE_HANDLE;
-		}
+					void				voidTestCache();
+					void				onRelease(const PxBase& observed);
 
 		// observer notifications
-		void				onObstacleRemoved(ObstacleHandle index, ObstacleHandle movedIndex);
-		void				onObstacleUpdated(ObstacleHandle index, const PxObstacleContext* context, const PxVec3& origin, const PxVec3& unitDir, const PxReal distance );
-		void				onObstacleAdded(ObstacleHandle index, const PxObstacleContext* context, const PxVec3& origin, const PxVec3& unitDir, const PxReal distance );
-		virtual void onRelease(const PxObservable& observable);
-		virtual		PxU32						getObjectSize()										const
-		{
-			return sizeof(SweepTest);
-		}
+					void				onObstacleRemoved(ObstacleHandle index);
+					void				onObstacleUpdated(ObstacleHandle index, const PxObstacleContext* context, const PxVec3& origin, const PxVec3& unitDir, const PxReal distance);
+					void				onObstacleAdded(ObstacleHandle index, const PxObstacleContext* context, const PxVec3& origin, const PxVec3& unitDir, const PxReal distance);
 
-		// private:
-		Cm::RenderBuffer*	mRenderBuffer;
-		PxU32				mRenderFlags;
-		TriArray			mWorldTriangles;
-		IntArray			mTriangleIndices;
-		IntArray			mGeomStream;
-		PxExtendedBounds3	mCachedTBV;
-		PxU32				mCachedTriIndexIndex;
-		mutable	PxU32		mCachedTriIndex[3];
-		PxU32				mNbCachedStatic;
-		PxU32				mNbCachedT;
+					void				onOriginShift(const PxVec3& shift);
+
+					Cm::RenderBuffer*	mRenderBuffer;
+					PxU32				mRenderFlags;
+					TriArray			mWorldTriangles;
+					IntArray			mTriangleIndices;
+					IntArray			mGeomStream;
+					PxExtendedBounds3	mCacheBounds;
+					PxU32				mCachedTriIndexIndex;
+					mutable	PxU32		mCachedTriIndex[3];
+					PxU32				mNbCachedStatic;
+					PxU32				mNbCachedT;
 	public:
 #ifdef USE_CONTACT_NORMAL_FOR_SLOPE_TEST
-		PxVec3				mContactNormalDownPass;
+					PxVec3				mContactNormalDownPass;
 #else
-		PxVec3				mContactNormalDownPass;
-		PxVec3				mContactNormalSidePass;
-		float				mTouchedTriMin;
-		float				mTouchedTriMax;
-		//PxTriangle			mTouchedTriangle;
+					PxVec3				mContactNormalDownPass;
+					PxVec3				mContactNormalSidePass;
+					float				mTouchedTriMin;
+					float				mTouchedTriMax;
+					//PxTriangle		mTouchedTriangle;
 #endif
-		//		
-		ObstacleHandle		mTouchedObstacleHandle;	// Obstacle on which the CCT is standing
-		PxRigidActor*		mTouchedActor;		// Actor on which the CCT is standing (needed for observer notification)
-		PxShape*			mTouchedShape;		// Shape on which the CCT is standing
-		PxVec3				mTouchedPos;		// Last known position of mTouchedShape/mTouchedObstacle
-		// PT: TODO: union those
-		PxVec3				mTouchedPosShape_Local;
-		PxVec3				mTouchedPosShape_World;
-		PxVec3				mTouchedPosObstacle_Local;
-		PxVec3				mTouchedPosObstacle_World;
-		//
-		CCTParams			mUserParams;
-		PxF32				mVolumeGrowth;		// Must be >1.0f and not too big
-		PxF32				mContactPointHeight;	// UBI
-		PxU32				mSQTimeStamp;
-		PxU16				mNbFullUpdates;
-		PxU16				mNbPartialUpdates;
-		PxU16				mNbIterations;
-		PxU32				mFlags;
+					//
+					ObstacleHandle		mTouchedObstacleHandle;	// Obstacle on which the CCT is standing
+					PxShape*			mTouchedShape;		// Shape on which the CCT is standing
+					const PxRigidActor*	mTouchedActor;		// Actor from touched shape
+					PxVec3				mTouchedPos;		// Last known position of mTouchedShape/mTouchedObstacle
+					// PT: TODO: union those
+					PxVec3				mTouchedPosShape_Local;
+					PxVec3				mTouchedPosShape_World;
+					PxVec3				mTouchedPosObstacle_Local;
+					PxVec3				mTouchedPosObstacle_World;
+					//
+					CCTParams			mUserParams;
+					PxF32				mVolumeGrowth;		// Must be >1.0f and not too big
+					PxF32				mContactPointHeight;	// UBI
+					PxU32				mSQTimeStamp;
+					PxU16				mNbFullUpdates;
+					PxU16				mNbPartialUpdates;
+					PxU16				mNbTessellation;
+					PxU16				mNbIterations;
+					PxU32				mFlags;
 
+	PX_FORCE_INLINE	void				resetStats()
+										{
+											mNbFullUpdates		= 0;
+											mNbPartialUpdates	= 0;
+											mNbTessellation		= 0;
+											mNbIterations		= 0;
+										}
 	private:
-		void				updateTouchedGeoms(	const InternalCBData_FindTouchedGeom* userData, const UserObstacles& userObstacles,
-												const PxExtendedBounds3& worldBox, const PxControllerFilters& filters);
+				void					updateTouchedGeoms(	const InternalCBData_FindTouchedGeom* userData, const UserObstacles& userObstacles,
+															const PxExtendedBounds3& worldBox, const PxControllerFilters& filters, const PxVec3& sideVector);
 	};
 
 	class CCTFilter	// PT: internal filter data, could be replaced with PxControllerFilters eventually
@@ -318,13 +324,13 @@ namespace Cct
 			mCCTShapes		(NULL)
 		{
 		}
-		const PxFilterData*			mFilterData;
-		PxSceneQueryFilterCallback*	mFilterCallback;
-		bool						mStaticShapes;
-		bool						mDynamicShapes;
-		bool						mPreFilter;
-		bool						mPostFilter;
-		Ps::HashSet<PxShape>*		mCCTShapes;
+		const PxFilterData*		mFilterData;
+		PxQueryFilterCallback*	mFilterCallback;
+		bool					mStaticShapes;
+		bool					mDynamicShapes;
+		bool					mPreFilter;
+		bool					mPostFilter;
+		Ps::HashSet<PxShape>*	mCCTShapes;
 	};
 
 	PxU32 getSceneTimestamp(const InternalCBData_FindTouchedGeom* userData);
@@ -337,7 +343,8 @@ namespace Cct
 		IntArray& geomStream,
 
 		const CCTFilter& filter,
-		const CCTParams& params);
+		const CCTParams& params,
+		PxU16& nbTessellation);
 
 	PxU32 shapeHitCallback(const InternalCBData_OnHit* userData, const SweptContact& contact, const PxVec3& dir, PxF32 length);
 	PxU32 userHitCallback(const InternalCBData_OnHit* userData, const SweptContact& contact, const PxVec3& dir, PxF32 length);

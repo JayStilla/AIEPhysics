@@ -23,14 +23,12 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 
 #include "GLES2RendererTexture2D.h"
 
 #if defined(RENDERER_ENABLE_GLES2)
-
-#include <RendererTexture2DDesc.h>
 
 namespace SampleRenderer
 {
@@ -136,7 +134,7 @@ static GLint getGLTextureAddressing(RendererTexture2D::Addressing addressing)
 	return glwrap;
 }
 
-GLES2RendererTexture2D::GLES2RendererTexture2D(const RendererTexture2DDesc &desc) :
+GLES2RendererTexture2D::GLES2RendererTexture2D(const RendererTextureDesc &desc) :
 	RendererTexture2D(desc)
 {
 	m_textureid        = 0;
@@ -167,7 +165,7 @@ GLES2RendererTexture2D::GLES2RendererTexture2D(const RendererTexture2DDesc &desc
 			{
 				PxU32 w = getLevelDimension(m_width,  i);
 				PxU32 h = getLevelDimension(m_height, i);
-				PxU32 levelSize = computeImageByteSize(w, h, desc.format);
+				PxU32 levelSize = computeImageByteSize(w, h, 1, desc.format);
 				m_data[i]       = new PxU8[levelSize];
 				memset(m_data[i], 0, levelSize);
 				glCompressedTexImage2D(GL_TEXTURE_2D, (GLint)i, m_glinternalformat, w, h, 0, levelSize, m_data[i]);
@@ -180,7 +178,7 @@ GLES2RendererTexture2D::GLES2RendererTexture2D(const RendererTexture2DDesc &desc
 			{
 				PxU32 w = getLevelDimension(m_width,  i);
 				PxU32 h = getLevelDimension(m_height, i);
-				PxU32 levelSize = computeImageByteSize(w, h, desc.format);
+				PxU32 levelSize = computeImageByteSize(w, h, 1, desc.format);
 				m_data[i]       = new PxU8[levelSize];
 				memset(m_data[i], 0, levelSize);
 				glTexImage2D(GL_TEXTURE_2D, (GLint)i, m_glinternalformat, w, h, 0, m_glformat, m_gltype, m_data[i]);
@@ -250,7 +248,7 @@ void GLES2RendererTexture2D::unlockLevel(PxU32 level)
 		glBindTexture(GL_TEXTURE_2D, m_textureid);
 		if(isCompressedFormat(getFormat()))
 		{
-			PxU32 levelSize = computeImageByteSize(w, h, getFormat());
+			PxU32 levelSize = computeImageByteSize(w, h, 1, getFormat());
 			glCompressedTexSubImage2D(GL_TEXTURE_2D, (GLint)level, 0, 0, w, h, m_glinternalformat, levelSize, m_data[level]);
 		}
 		else

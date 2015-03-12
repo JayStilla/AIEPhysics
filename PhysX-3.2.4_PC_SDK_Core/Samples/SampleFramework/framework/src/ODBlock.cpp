@@ -1,3 +1,30 @@
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
+
 /*-------------------------------------------------------------*\
 |																|
 |	ODBlock class - object description script					|
@@ -37,6 +64,7 @@
 |
 \-------------------------------*/
 #include "ODBlock.h"
+#include "PsFile.h"
 
 const char * ODBlock::lastError = NULL;
 
@@ -73,7 +101,7 @@ static inline bool isNewLine(char c)
 	return c == '\n' || c == '\r';
 }
 
-bool ODBlock::loadScript(FILE * fp)			//loads block from script, including subbocks
+bool ODBlock::loadScript(SampleFramework::File * fp)			//loads block from script, including subbocks
 {
 	int c;
 	unsigned currindex = 0;
@@ -235,7 +263,7 @@ ODBlock::~ODBlock()
 }
 
 
-bool ODBlock::saveScript(FILE * fp,bool bQuote)
+bool ODBlock::saveScript(SampleFramework::File * fp,bool bQuote)
 {
 	static int tablevel = 1;
 	static int retVal = 0;
@@ -371,33 +399,33 @@ ODBlock * ODBlock::getBlock(const char * ident,bool bRecursiveSearch)		//returns
 }
 
 // hig level macro functs, return true on success:
-bool ODBlock::getBlockInt(const char * ident, int *p)		//reads blocks of form:		ident{ 123;}
+bool ODBlock::getBlockInt(const char * ident, int* p, unsigned count)		//reads blocks of form:		ident{ 123; 123; ... }
 {
-	ODBlock * temp = getBlock(ident);
-	if ( temp )
+	ODBlock* temp = getBlock(ident);
+	if (temp)
 	{
-		temp->reset(); 
-		if (temp->moreTerminals())	
-		{ 
-			if(p) sscanf(temp->nextTerminal(),"%d",p); 
-			return true; 
-		}
+		temp->reset();
+		for(; count && temp->moreTerminals(); --count)
+			if(p)	
+				sscanf(temp->nextTerminal(),"%d", p++);
+
+		return !count;
 	}
 	return false;
 }
 
 // hig level macro functs, return true on success:
-bool ODBlock::getBlockU32(const char * ident, physx::PxU32 *p)		//reads blocks of form:		ident{ 123;}
+bool ODBlock::getBlockU32(const char * ident, physx::PxU32* p, unsigned count)		//reads blocks of form:		ident{ 123;}
 {
-	ODBlock * temp = getBlock(ident);
-	if ( temp )
+	ODBlock* temp = getBlock(ident);
+	if (temp)
 	{
-		temp->reset(); 
-		if (temp->moreTerminals())	
-		{ 
-			if(p) sscanf(temp->nextTerminal(),"%d",p); 
-			return true; 
-		}
+		temp->reset();
+		for(; count && temp->moreTerminals(); --count)
+			if(p)	
+				sscanf(temp->nextTerminal(),"%u", p++);
+
+		return !count;
 	}
 	return false;
 }

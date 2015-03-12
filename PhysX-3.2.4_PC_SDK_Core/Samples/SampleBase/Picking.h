@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -82,6 +82,7 @@ namespace physx {
 		// returns picked actor
 						PxActor*					letGo();
 						void						tick();
+						void						project(const physx::PxVec3& v, int& xi, int& yi, float& depth)	const;
 
 #ifdef VISUALIZE_PICKING_RAYS
 		struct Ray
@@ -96,7 +97,6 @@ namespace physx {
 						void						grabActor(const PxVec3& worldImpact, const PxVec3& rayOrigin);
 						void						moveActor(int x, int y);
 						PxVec3						unProject( int x, int y, float depth)	const;
-						void						project(const physx::PxVec3& v, int& xi, int& yi, float& depth)	const;
 
 						PxActor*					mSelectedActor;
 
@@ -108,6 +108,7 @@ namespace physx {
 						PxDistanceJoint*			mMouseJoint;
 #endif
 						PxRigidDynamic*				mMouseActor;
+						PxRigidDynamic*				mMouseActorToDelete;
 						PxReal						mDistanceToPicked;
 						int							mMouseScreenX, mMouseScreenY;
 						PhysXSample&				mFrame;

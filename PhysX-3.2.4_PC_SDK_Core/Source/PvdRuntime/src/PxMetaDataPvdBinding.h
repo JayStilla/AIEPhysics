@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,7 +32,7 @@
 
 #if PX_SUPPORT_VISUAL_DEBUGGER
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 
 namespace physx
 {
@@ -158,6 +158,9 @@ namespace Pvd
 		//per frame update
 		void updateDynamicActorsAndArticulations( PvdDataStream& inStream, const PxScene* inScene, PvdVisualizer* linkJointViz );
 		
+		//Origin Shift
+		void originShift( PvdDataStream& inStream, const PxScene* inScene, PxVec3 shift );
+
 #if PX_USE_PARTICLE_SYSTEM_API
 		void createInstance( PvdDataStream& inStream, const PxParticleSystem& inObj, const PxScene& ownerScene );
 		void sendAllProperties( PvdDataStream& inStream, const PxParticleSystem& inObj );
@@ -181,15 +184,25 @@ namespace Pvd
 		void sendAllProperties( PvdDataStream& inStream, const PxCloth& cloth );
 		void sendSimpleProperties( PvdDataStream& inStream, const PxCloth& cloth );
 		void sendMotionConstraints( PvdDataStream& inStream, const PxCloth& cloth );
-		void sendCollisionSpheres( PvdDataStream& inStream, const PxCloth& cloth, bool sendPairs = false );
+		void sendCollisionSpheres( PvdDataStream& inStream, const PxCloth& cloth, bool sendPairs = true );
+		void sendCollisionTriangles( PvdDataStream& inStream, const PxCloth& cloth );
 		void sendVirtualParticles( PvdDataStream& inStream, const PxCloth& cloth );
 		void sendSeparationConstraints( PvdDataStream& inStream, const PxCloth& cloth );
+		void sendRestPositions( PvdDataStream& inStream, const PxCloth& cloth );
+		void sendSelfCollisionIndices( PvdDataStream& inStream, const PxCloth& cloth );
+		void sendParticleAccelerations( PvdDataStream& inStream, const PxCloth& cloth );
 		//per frame update
 		void updateCloths( PvdDataStream& inStream, const PxScene& inScene );
 		void destroyInstance( PvdDataStream& inStream, const PxCloth& cloth, const PxScene& ownerScene );
 #endif
+
+		void createInstance( PvdDataStream& inStream, const PxAggregate& inObj, const PxScene& ownerScene, BufferRegistrar& registrar  );
+		void sendAllProperties( PvdDataStream& inStream, const PxAggregate& inObj );
+		void destroyInstance( PvdDataStream& inStream, const PxAggregate& inObj, const PxScene& ownerScene );
+		void detachAggregateActor( PvdDataStream& inStream, const PxAggregate& inObj, const PxActor& inActor );
+		void attachAggregateActor( PvdDataStream& inStream, const PxAggregate& inObj, const PxActor& inActor );
 	};
-};
+}
 
 }
 

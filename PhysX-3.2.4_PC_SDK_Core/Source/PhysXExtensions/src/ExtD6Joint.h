@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -36,13 +36,21 @@
 
 namespace physx
 {
+struct PxD6JointGeneratedValues;
 namespace Ext
 {
 	struct D6JointData : public JointData
 	{
+	//= ATTENTION! =====================================================================================
+	// Changing the data layout of this class breaks the binary serialization format.  See comments for 
+	// PX_BINARY_SERIAL_VERSION.  If a modification is required, please adjust the getBinaryMetaData 
+	// function.  If the modification is made on a custom branch, please change PX_BINARY_SERIAL_VERSION
+	// accordingly.
+	//==================================================================================================
+
 		PxD6Motion::Enum		motion[6]; 
-		PxJointLimit			linearLimit;
-		PxJointLimitPair		twistLimit;
+		PxJointLinearLimit		linearLimit;
+		PxJointAngularLimitPair	twistLimit;
 		PxJointLimitCone		swingLimit;
 
 		PxD6JointDrive			drive[PxD6Drive::eCOUNT];
@@ -79,26 +87,26 @@ namespace Ext
 
 		// forestall compiler complaints about not being able to generate a constructor
 	private:
-		D6JointData(const PxJointLimit &linear, const PxJointLimitPair &twist, const PxJointLimitCone &swing):
+		D6JointData(const PxJointLinearLimit& linear, const PxJointAngularLimitPair& twist, const PxJointLimitCone& swing):
 			linearLimit(linear), twistLimit(twist), swingLimit(swing) {}
 	};
 
-	typedef Joint<PxD6Joint, PxJointType::eD6> D6JointT;
-
-	class D6Joint : public Joint<PxD6Joint, PxJointType::eD6>
+	typedef Joint<PxD6Joint, PxD6JointGeneratedValues> D6JointT;
+    
+    class D6Joint : public Joint<PxD6Joint, PxD6JointGeneratedValues>
 	{
 	public:
 // PX_SERIALIZATION
-									D6Joint(PxRefResolver& v)	: D6JointT(v)	{}
-									DECLARE_SERIAL_CLASS(D6Joint, D6JointT)
-		virtual		void			exportExtraData(PxSerialStream& stream);
-		virtual		char*			importExtraData(char* address, PxU32& totalPadding);
-		virtual		bool			resolvePointers(PxRefResolver&, void*);
-		static		void			getMetaData(PxSerialStream& stream);
+									D6Joint(PxBaseFlags baseFlags) : D6JointT(baseFlags) {}
+		virtual		void			exportExtraData(PxSerializationContext& context);
+					void			importExtraData(PxDeserializationContext& context);
+					void			resolveReferences(PxDeserializationContext& context);
+		static		D6Joint*		createObject(PxU8*& address, PxDeserializationContext& context);
+		static		void			getBinaryMetaData(PxOutputStream& stream);
 //~PX_SERIALIZATION
 		virtual ~D6Joint()
 		{
-			if(getSerialFlags()&PxSerialFlag::eOWNS_MEMORY)
+			if(getBaseFlags()&PxBaseFlag::eOWNS_MEMORY)
 				PX_FREE(mData);
 		}
 
@@ -106,20 +114,26 @@ namespace Ext
 				PxRigidActor* actor0, const PxTransform& localFrame0, 
 				PxRigidActor* actor1, const PxTransform& localFrame1);
 
+
+		PxReal				getTwist()							const;
+		PxReal				getSwingYAngle()					const;
+		PxReal				getSwingZAngle()					const;
+
+
 		PxD6Motion::Enum	getMotion(PxD6Axis::Enum index)		const;
 		void				setMotion(PxD6Axis::Enum index, PxD6Motion::Enum t);
 
 		PxD6JointDrive		getDrive(PxD6Drive::Enum index)		const;
-		void				setDrive(PxD6Drive::Enum index, const PxD6JointDrive &d);
+		void				setDrive(PxD6Drive::Enum index, const PxD6JointDrive& d);
 
-		PxJointLimit		getLinearLimit()					const;
-		void				setLinearLimit(const PxJointLimit &l);
+		PxJointLinearLimit	getLinearLimit()					const;
+		void				setLinearLimit(const PxJointLinearLimit& l);
 
-		PxJointLimitPair	getTwistLimit()						const;
-		void				setTwistLimit(const PxJointLimitPair &l);
+		PxJointAngularLimitPair	getTwistLimit()					const;
+		void				setTwistLimit(const PxJointAngularLimitPair& l);
 
 		PxJointLimitCone	getSwingLimit()						const;
-		void				setSwingLimit(const PxJointLimitCone &l);
+		void				setSwingLimit(const PxJointLimitCone& l);
 
 		PxTransform			getDrivePosition()					const;
 		void				setDrivePosition(const PxTransform& pose);
@@ -158,7 +172,7 @@ namespace Ext
 		bool active(const PxD6Drive::Enum index) const
 		{
 			PxD6JointDrive& d = data().drive[index];
-			return d.spring!=0 || d.damping != 0;
+			return d.stiffness!=0 || d.damping != 0;
 		}
 
 		void* prepareData();
@@ -175,6 +189,7 @@ namespace Ext
 	extern "C" PxU32 D6JointSolverPrep(Px1DConstraint* constraints,
 		PxVec3& body0WorldOffset,
 		PxU32 maxConstraints,
+		PxConstraintInvMassScale& invMassScale,
 		const void* constantBlock,
 		const PxTransform& bA2w,
 		const PxTransform& bB2w);

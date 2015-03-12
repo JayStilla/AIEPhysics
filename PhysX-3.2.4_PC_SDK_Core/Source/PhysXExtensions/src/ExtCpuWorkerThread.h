@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -39,10 +39,7 @@
 
 namespace physx
 {
-	namespace pxtask
-	{
-		class BaseTask;
-	}
+	class PxBaseTask;
 }
 
 namespace physx
@@ -64,8 +61,8 @@ namespace Ext
 		
 		void					initialize(DefaultCpuDispatcher* ownerDispatcher);
 		void					execute();
-		bool					tryAcceptJobToLocalQueue(pxtask::BaseTask& task, Ps::Thread::Id taskSubmitionThread);
-		pxtask::BaseTask*		giveUpJob();
+		bool					tryAcceptJobToLocalQueue(PxBaseTask& task, Ps::Thread::Id taskSubmitionThread);
+		PxBaseTask*				giveUpJob();
 		Ps::Thread::Id			getWorkerThreadId() const { return mThreadId; }
 
 	protected:

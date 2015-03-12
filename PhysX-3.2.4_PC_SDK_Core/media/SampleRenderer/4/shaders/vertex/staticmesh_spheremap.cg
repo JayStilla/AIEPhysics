@@ -26,6 +26,19 @@ VertexOut  vmain(__in(float4,      localSpacePosition, POSITION)
 {
 	VertexOut vout;
 
+	vout.screenSpacePosition = 0;
+	vout.params.worldSpacePosition = 0;
+	vout.params.worldSpaceNormal = 0;
+	vout.params.worldSpaceTangent = 0;
+	vout.params.worldSpaceBinormal = 0;
+	vout.params.texcoord0 = 0;
+	vout.params.texcoord1 = 0;
+	vout.params.texcoord2 = 0;
+#if !defined (RENDERER_WIN8ARM)		
+	vout.params.texcoord3 = 0;
+#endif	
+	vout.params.color = 0;
+
 //#if !defined(GLSL_COMPILER)
 	float4x4 modelMatrix;
 #if RENDERER_INSTANCED
@@ -64,7 +77,9 @@ VertexOut  vmain(__in(float4,      localSpacePosition, POSITION)
 #endif
 #if !defined(GLSL_COMPILER)
 	vout.params.texcoord2   = vertexTexcoord2;
+#if !defined (RENDERER_WIN8ARM)		
 	vout.params.texcoord3   = vertexTexcoord3;
+#endif	
 #endif
 	vout.params.color       = swizzle(vertexColor);
 

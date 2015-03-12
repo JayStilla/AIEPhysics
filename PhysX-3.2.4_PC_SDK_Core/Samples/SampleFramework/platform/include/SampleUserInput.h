@@ -23,49 +23,23 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #ifndef SAMPLE_USER_INPUT_H
 #define SAMPLE_USER_INPUT_H
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
 
 #include <foundation/PxSimpleTypes.h>
-#include <foundation/PxString.h>
 #include <vector>
+#include <foundation/PxString.h>
+
+#if defined(PX_VC)
+#pragma warning(push)
+#pragma warning(disable:4702)
 #include <map>
+#pragma warning(pop)
+#else
+#include <map>
+#endif
 
 namespace SampleRenderer
 {
@@ -85,11 +59,15 @@ namespace SampleFramework
 
 	struct InputEvent
 	{
-		InputEvent(physx::PxU16 id, const char* name, bool analog = false, float sens = 1.0f)
+		InputEvent(physx::PxU16 id, bool analog = false, float sens = 1.0f)
 			:m_Id(id), m_Analog(analog), m_Sensitivity(sens)
 		{
-			physx::PxStrcpy(m_Name, sizeof(m_Name), name);
-		};
+		}
+
+		InputEvent(const InputEvent& e)
+			:m_Id(e.m_Id), m_Analog(e.m_Analog), m_Sensitivity(e.m_Sensitivity)
+		{
+		}
 
 		InputEvent()
 			: m_Analog(false), m_Sensitivity(1.0f)
@@ -97,9 +75,13 @@ namespace SampleFramework
 		}
 
 		physx::PxU16	m_Id;
-		char			m_Name[256];
 		bool			m_Analog;		
 		float			m_Sensitivity;
+	};
+
+	struct InputEventName
+	{
+		char			m_Name[256];
 	};
 
 	struct SampleInputData
@@ -169,9 +151,15 @@ namespace SampleFramework
 
 		virtual ~SampleUserInput();
 
-		void						registerUserInput(physx::PxU16 id,const char* idName ,const char* name);
-		virtual const InputEvent*	registerInputEvent(const InputEvent& inputEvent, physx::PxU16 userInputId);
-        virtual const InputEvent*   registerTouchInputEvent(const InputEvent& inputEvent, physx::PxU16 userInputId, const char* caption) { return NULL; }
+		void						registerUserInput(physx::PxU16 id, const char* idName, const char* name);
+		virtual const InputEvent*	registerInputEvent(const InputEvent& inputEvent, physx::PxU16 userInputId, const char* name);
+        virtual const InputEvent*   registerTouchInputEvent(const InputEvent& inputEvent, physx::PxU16 userInputId, const char* caption, const char* name) 
+		{ 
+			PX_UNUSED(inputEvent);
+			PX_UNUSED(userInputId);
+			PX_UNUSED(caption);
+			return NULL; 
+		}
 		virtual void				unregisterInputEvent(physx::PxU16 inputEventId);
 		virtual void				registerInputEvent(const SampleInputMapping& mapping);
 
@@ -196,13 +184,15 @@ namespace SampleFramework
 		const std::vector<size_t>*	getInputEvents(physx::PxU16 userInputId) const;
 
 		const std::vector<InputEvent>& getInputEventList() const { return mInputEvents; }
+		const std::vector<InputEventName>& getInputEventNameList() const { return mInputEventNames; }
 		const std::vector<UserInput>& getUserInputList() const { return mUserInputs; }
 		const std::map<physx::PxU16, std::vector<size_t> >& getInputEventUserInputMap() const { return mInputEventUserInputMap; }
 
 		physx::PxU16				getUserInputKeys(physx::PxU16 inputEventId, const char* names[], physx::PxU16 maxNames, physx::PxU32 inputTypeMask) const;
 
 		physx::PxI32				translateUserInputNameToId(const char* name, size_t& index) const;
-		physx::PxI32				translateInputEventNameToId(const char* name, size_t& index) const;		
+		physx::PxI32				translateInputEventNameToId(const char* name, size_t& index) const;
+		const char*					translateInputEventIdToName(physx::PxI32 id) const;
 
 		const InputEvent*			getInputEventSlow(physx::PxU16 inputEventId) const;		
 
@@ -211,6 +201,7 @@ namespace SampleFramework
 
 		std::vector<UserInput>	mUserInputs;
 		std::vector<InputEvent>	mInputEvents;
+		std::vector<InputEventName>	mInputEventNames;
 
 	private:		
 		
@@ -231,7 +222,7 @@ namespace SampleFramework
 
 		virtual void onPointerInputEvent(const InputEvent&, physx::PxU32, physx::PxU32, physx::PxReal, physx::PxReal, bool val) {}
 		virtual void onAnalogInputEvent(const InputEvent& , float val) = 0;
-		virtual bool onDigitalInputEvent(const InputEvent& , bool val) = 0;		
+		virtual void onDigitalInputEvent(const InputEvent& , bool val) = 0;		
 	};
 }
 

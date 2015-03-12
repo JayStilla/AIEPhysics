@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,8 +35,10 @@
 #include "cloth/PxCloth.h"
 #include "cloth/PxClothTypes.h"
 #include "cloth/PxClothCollisionData.h"
-#include "cooking/PxClothMeshDesc.h"
+#include "extensions/PxClothMeshDesc.h"
 #include "cooking/PxCooking.h"
+#include "foundation/PxVec2.h"
+#include "foundation/PxVec4.h"
 #include "Test.h"
 
 
@@ -50,55 +52,31 @@ namespace Test
 	public:
 
 		// border flags
-		enum 
+		enum BorderFlags
 		{
 			NONE = 0,
-			BORDER_TOP		= (1 << 0),
-			BORDER_BOTTOM	= (1 << 1),
-			BORDER_LEFT		= (1 << 2),
-			BORDER_RIGHT	= (1 << 3)
+			BORDER_LEFT		= (1 << 0),
+			BORDER_RIGHT	= (1 << 1),
+			BORDER_BOTTOM	= (1 << 2),
+			BORDER_TOP		= (1 << 3),
+			BORDER_NEAR		= (1 << 4),
+			BORDER_FAR		= (1 << 5)
 		};
-
-		// solver types
-		enum SolverType 
-        {
-            eMIXED = 1 << 0, // eSTIFF for vertical fiber, eFAST for everything else
-            eFAST = 1 << 1,  // eFAST for everything
-            eSTIFF = 1 << 2, // eSTIFF for everything
-			eZEROSTRETCH = 1 << 3 // eZEROSTRETCH for zero stretch fiber, eFAST for everything else
-        };
-
+        typedef PxFlags<BorderFlags, PxU16> PxBorderFlags;
 		// attach cloth border 
-		static bool attachBorder(PxCloth& cloth, PxU32 borderFlag);
+		static bool attachBorder(PxClothParticle* particles, PxU32 numParticles, PxBorderFlags borderFlag);
+		static bool attachBorder(PxCloth& cloth, PxBorderFlags borderFlag);
 
 		// constrain cloth particles that overlap the given shape
-		static bool attachClothOverlapToShape(PxCloth& cloth, PxShape& shape,PxReal radius = 0.1f);
-
-		// copy mesh points to initial position of the particle and assign default mass of 1
-		static bool createDefaultParticles(const PxClothMeshDesc& meshDesc, PxClothParticle* clothParticles, PxReal massPerParticle = 1.0);
-
-		// create cloth fabric from mesh descriptor
-		static PxClothFabric* createFabric(PxPhysics &physics, PxCooking &cooking, const PxClothMeshDesc &desc, const PxVec3& gravityDir);
+		static bool attachClothOverlapToShape(PxCloth& cloth, PxShape& shape, PxReal radius = 0.1f);
 
 		// create cloth mesh descriptor for a grid mesh defined along two (u,v) axis.
-		static bool createMeshGrid(
-			PxReal sizeU, PxReal sizeV, PxU32 numU, PxU32 numV, PxVec3 dirU, PxVec3 dirV,
-			SampleArray<PxVec3>& vertexBuffer, SampleArray<PxU32>& primitiveBuffer, SampleArray<PxReal> &uvs,
-			PxClothMeshDesc &meshDesc);
+		static PxClothMeshDesc createMeshGrid(PxVec3 dirU, PxVec3 dirV, PxU32 numU, PxU32 numV,
+			SampleArray<PxVec4>& vertices, SampleArray<PxU32>& indices, SampleArray<PxVec2>& texcoords);
 
-		// create cloth mesh descriptor for a grid mesh on XZ plane
-		static bool createMeshGrid(PxReal sizeX, PxReal sizeZ, PxU32 numX, PxU32 numZ,
-			SampleArray<PxVec3>& vertexBuffer, SampleArray<PxU32>& primitveBuffer, SampleArray<PxReal> &uvs,
-			PxClothMeshDesc &meshDesc);
-
-		// create cloth mesh from obj file (user must provide vertex, primitive, and optionally texture coord buffer)
-		static bool createMeshFromObj(const char* filename, PxReal scale, const PxQuat* rot, const PxVec3* offset, 
-			SampleArray<PxVec3>& vertexBuffer, SampleArray<PxU32>& primitiveBuffer, SampleArray<PxReal>* textureBuffer, 
-			PxClothMeshDesc &meshDesc);
-
-		// fill cloth mesh descriptor from vertices and primitives
-		static void fillClothMeshDesc(SampleArray<PxVec3> &vertexBuffer, SampleArray<PxU32>& primitiveBuffer,
-			PxClothMeshDesc &meshDesc);
+		// create cloth mesh from obj file
+		static PxClothMeshDesc createMeshFromObj(const char* filename, PxReal scale, PxQuat rot, PxVec3 offset, 
+			SampleArray<PxVec4>& vertices, SampleArray<PxU32>& indices, SampleArray<PxVec2>& texcoords);
 
 		// create capsule data in local space of pose
 		static bool createCollisionCapsule(const PxTransform &pose, const PxVec3 &center0, PxReal r0, const PxVec3 &center1, PxReal r1, 
@@ -113,14 +91,20 @@ namespace Test
 		// get particle location from the cloth
 		static bool getParticlePositions(PxCloth&cloth, SampleArray<PxVec3> &positions);
 
+		// remove duplicate vertices 
+		static PxClothMeshDesc removeDuplicateVertices(PxClothMeshDesc &inMesh,  SampleArray<PxVec2> &inTexcoords,
+			SampleArray<PxVec4>& vertices, SampleArray<PxU32>& indices, SampleArray<PxVec2>& texcoords);
+
+		// merge two mesh descriptor and uvs into a single one
+		static PxClothMeshDesc mergeMeshDesc(PxClothMeshDesc &desc1, PxClothMeshDesc &desc2,  
+			SampleArray<PxVec4>& vertices, SampleArray<PxU32>& indices,
+			SampleArray<PxVec2>& texcoords1, SampleArray<PxVec2>& texcoords2, SampleArray<PxVec2>& texcoords);  
+
 		// set motion constraint radius
 		static bool setMotionConstraints(PxCloth &cloth, PxReal radius);
 
 		// set particle location from the cloth
 		static bool setParticlePositions(PxCloth&cloth, const SampleArray<PxVec3> &positions, bool useConstrainedOnly = true, bool useCurrentOnly = true);
-
-		// set solver type for all the phases
-		static bool setSolverType(PxCloth& cloth, PxU32 type);
 
 		// set stiffness for all the phases
 		static bool setStiffness(PxCloth& cloth, PxReal stiffness);

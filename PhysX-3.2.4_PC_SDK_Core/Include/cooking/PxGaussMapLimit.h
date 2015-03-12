@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -50,10 +50,10 @@ namespace physx
 				return 128;
 			case PxPlatform::ePC:
 				return 32;
-			case PxPlatform::eWII:
-				return 128;
 			case PxPlatform::eARM:
 				return 32;
+			case PxPlatform::eWIIU:
+				return 128;
 			default:
 				PX_ALWAYS_ASSERT_MESSAGE("Unexpected platform in PxGetGaussMapVertexLimitForPlatform!");
 				return 0;

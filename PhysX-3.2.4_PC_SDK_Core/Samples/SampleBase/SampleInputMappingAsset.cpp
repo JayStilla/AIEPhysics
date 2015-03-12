@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -36,7 +36,7 @@ using namespace SampleFramework;
 
 static const int MAPPING_VERSION = 4;
 
-SampleInputMappingAsset::SampleInputMappingAsset(FILE* file, const char *path, bool empty,PxU32 userInputCS, PxU32 inputEventCS)
+SampleInputMappingAsset::SampleInputMappingAsset(SampleFramework::File* file, const char *path, bool empty,PxU32 userInputCS, PxU32 inputEventCS)
 : mSettingsBlock(NULL), mMapping(NULL) , mFile(file) , mPath(path), mUserInputCS(userInputCS), mInputEventCS(inputEventCS)
 {
 	mSampleInputData.reserve(128);	
@@ -53,7 +53,7 @@ SampleInputMappingAsset::SampleInputMappingAsset(FILE* file, const char *path, b
 		mMapping = new ODBlock();
 		if (!mMapping->loadScript(file))
 		{
-			printf("ODS parse error: %s in file: %s\n", mMapping->lastError, path);		
+			shdfnd::printFormatted("ODS parse error: %s in file: %s\n", mMapping->lastError, path);		
 			mIsOk = false;
 			createNewFile(true);
 		}
@@ -62,7 +62,7 @@ SampleInputMappingAsset::SampleInputMappingAsset(FILE* file, const char *path, b
 			mSettingsBlock = mMapping->getBlock("InputMapping");
 			if (!mSettingsBlock)
 			{
-				printf("No \"InputEventSettings\" block found!\n");
+				shdfnd::printFormatted("No \"InputEventSettings\" block found!\n");
 				mIsOk = false;
 				createNewFile(true);
 			}
@@ -132,6 +132,9 @@ SampleInputMappingAsset::~SampleInputMappingAsset()
 	{
 		fclose(mFile);
 	}
+
+	if(mMapping)
+		delete mMapping;
 }
 
 void SampleInputMappingAsset::loadData(ODBlock* odsSettings)

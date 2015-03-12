@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,13 +35,12 @@
 #include "PsArray.h"
 #include "PsBitUtils.h"
 #include "PsHash.h"
-#include "PsNoCopy.h"
+#include "foundation/PxMemory.h"
 
 #ifdef PX_VC
-#pragma warning(push)
-#pragma warning(disable: 4512) // disable the 'assignment operator could not be generated' warning message
+	#pragma warning(push)
+	#pragma warning(disable:4127) // conditional expression is constant
 #endif
-
 namespace physx
 {
 namespace shdfnd
@@ -58,10 +57,16 @@ namespace shdfnd
 		{
 			void init(PxU32 initialTableSize, float loadFactor)
 			{
+				mBuffer = NULL;
+				mEntries = NULL;
+				mEntriesNext = NULL;
+				mHash = NULL;
+				mEntriesCapacity = 0;
+				mHashSize = 0;
 				mLoadFactor = loadFactor;
 				mFreeList = (PxU32)EOL;
-				mTimestamp = mSize = 0;
-				mEntries = 0;
+				mTimestamp = 0;
+				mEntriesCount = 0;
 
 				if(initialTableSize)
 					reserveInternal(initialTableSize);
@@ -71,25 +76,19 @@ namespace shdfnd
 			typedef Entry EntryType;
 
 			HashBase(PxU32 initialTableSize = 64, float loadFactor = 0.75f)
-			:	Allocator(PX_DEBUG_EXP("hashBaseEntries")),
-				mNext(Allocator(PX_DEBUG_EXP("hashBaseNext"))),
-				mHash(Allocator(PX_DEBUG_EXP("hashBaseHash")))
+			:	Allocator(PX_DEBUG_EXP("hashBase"))
 			{
 				init(initialTableSize, loadFactor);
 			}
 
-			HashBase(PxU32 initialTableSize, float loadFactor, const Allocator &alloc)
-			:	Allocator(alloc),
-				mNext(Allocator(alloc)),
-				mHash(Allocator(alloc))
+			HashBase(PxU32 initialTableSize, float loadFactor, const Allocator& alloc)
+			:	Allocator(alloc)
 			{
 				init(initialTableSize, loadFactor);
 			}
 
-			HashBase(const Allocator &alloc)
-			:	Allocator(alloc),
-				mNext(Allocator(alloc)),
-				mHash(Allocator(alloc))
+			HashBase(const Allocator& alloc)
+			:	Allocator(alloc)
 			{
 				init(64, 0.75f);
 			}
@@ -98,24 +97,24 @@ namespace shdfnd
 			{
 				destroy(); //No need to clear()
 
-				if(mEntries)
-					Allocator::deallocate(mEntries);
+				if(mBuffer)
+					Allocator::deallocate(mBuffer);
 			}
 
 			static const PxU32 EOL = 0xffffffff;
 
-			PX_INLINE Entry* create(const Key &k, bool &exists)
+			PX_INLINE Entry* create(const Key& k, bool& exists)
 			{
 				PxU32 h=0;
-				if(mHash.size())
+				if(mHashSize)
 				{
 					h = hash(k);
 					PxU32 index = mHash[h];
 					while(index!=EOL && !HashFn()(GetKey()(mEntries[index]), k))
-						index = mNext[index];
+						index = mEntriesNext[index];
 					exists = index!=EOL;
 					if(exists)
-						return &mEntries[index];
+						return mEntries + index;
 				} else
 					exists = false;
 
@@ -127,49 +126,49 @@ namespace shdfnd
 
 				PxU32 entryIndex = freeListGetNext();
 
-				mNext[entryIndex] = mHash[h];
+				mEntriesNext[entryIndex] = mHash[h];
 				mHash[h] = entryIndex;
 
-				mSize++;
+				mEntriesCount++;
 				mTimestamp++;
 
-				return &mEntries[entryIndex];
+				return mEntries + entryIndex;
 			}
 
-			PX_INLINE const Entry* find(const Key &k) const
+			PX_INLINE const Entry* find(const Key& k) const
 			{
-				if(!mHash.size())
+				if(!mHashSize)
 					return NULL;
 
 				PxU32 h = hash(k);
 				PxU32 index = mHash[h];
 				while(index!=EOL && !HashFn()(GetKey()(mEntries[index]), k))
-					index = mNext[index];
-				return index != EOL ? &mEntries[index]:0;
+					index = mEntriesNext[index];
+				return index != EOL ? mEntries + index : 0;
 			}
 
-			PX_INLINE bool erase(const Key &k)
+			PX_INLINE bool erase(const Key& k)
 			{
-				if(!mHash.size())
+				if(!mHashSize)
 					return false;
 
 				PxU32 h = hash(k);
-				PxU32 *ptr = &mHash[h];
+				PxU32* ptr = mHash + h;
 				while(*ptr!=EOL && !HashFn()(GetKey()(mEntries[*ptr]), k))
-					ptr = &mNext[*ptr];
+					ptr = mEntriesNext + *ptr;
 
 				if(*ptr == EOL)
 					return false;
 
 				PxU32 index = *ptr;
-				*ptr = mNext[index];
+				*ptr = mEntriesNext[index];
 
 				mEntries[index].~Entry();
 
-				mSize--;
+				mEntriesCount--;
 				mTimestamp++;
 
-				if(compacting && index!=mSize)
+				if(compacting && index!=mEntriesCount)
 					replaceWithLast(index);
 
 				freeListAdd(index);
@@ -179,41 +178,68 @@ namespace shdfnd
 
 			PX_INLINE PxU32 size() const
 			{ 
-				return mSize; 
+				return mEntriesCount; 
 			}
 
+			PX_INLINE PxU32 capacity() const
+			{ 
+				return mHashSize; 
+			}		
+			
 			void clear()
 			{
-				if(!mHash.size())
+				if(!mHashSize || mEntriesCount == 0)
 					return;
 
-				for(PxU32 i = 0;i<mHash.size();i++)
-					mHash[i] = (PxU32)EOL;
-				for(PxU32 i = 0;i<mNext.size()-1;i++)
-					mNext[i] = i+1;
-				mNext.back() = (PxU32)EOL;
+				destroy();
+
+				PxMemSet(mHash, EOL, mHashSize * sizeof(PxU32));
+
+				const PxU32 sizeMinus1 = mEntriesCapacity - 1;
+				for(PxU32 i = 0;i<sizeMinus1;i++)
+				{
+					prefetchLine(mEntriesNext + i, 128);
+					mEntriesNext[i] = i+1;
+				}
+				mEntriesNext[mEntriesCapacity-1] = (PxU32)EOL;
 				mFreeList = 0;
-				mSize = 0;
+				mEntriesCount = 0;
 			}
 
 			void reserve(PxU32 size)
 			{
-				if(size>mHash.size())
+				if(size>mHashSize)
 					reserveInternal(size);
 			}
 
-			PX_INLINE const Entry *getEntries() const
+			PX_INLINE const Entry* getEntries() const
 			{
-				return &mEntries[0];
+				return mEntries;
+			}
+
+			PX_INLINE Entry* insertUnique(const Key& k)
+			{
+				PX_ASSERT(find(k) == NULL);
+				PxU32 h = hash(k);
+				
+				PxU32 entryIndex = freeListGetNext();
+
+				mEntriesNext[entryIndex] = mHash[h];
+				mHash[h] = entryIndex;
+
+				mEntriesCount++;
+				mTimestamp++;
+
+				return mEntries + entryIndex;
 			}
 
 		private:
 
 			void destroy()
 			{
-				for(PxU32 i = 0;i<mHash.size();i++)
+				for(PxU32 i = 0;i<mHashSize;i++)
 				{				
-					for(PxU32 j = mHash[i]; j != EOL; j = mNext[j])
+					for(PxU32 j = mHash[i]; j != EOL; j = mEntriesNext[j])
 						mEntries[j].~Entry();
 				}
 			}
@@ -230,11 +256,11 @@ namespace shdfnd
 				if(compacting)
 				{
 					mFreeList--;
-					PX_ASSERT(mFreeList == mSize);
+					PX_ASSERT(mFreeList == mEntriesCount);
 				}
 				else
 				{
-					mNext[index] = mFreeList;
+					mEntriesNext[index] = mFreeList;
 					mFreeList = index;
 				}
 			}
@@ -244,10 +270,15 @@ namespace shdfnd
 				if(!compacting)
 				{
 					for(PxU32 i = start; i<end-1; i++)	// add the new entries to the free list
-						mNext[i] = i+1;
-					mNext[end-1] = (PxU32)EOL;
+						mEntriesNext[i] = i+1;
+
+					//link in old free list
+					mEntriesNext[end-1] = mFreeList;
+					PX_ASSERT(mFreeList != end-1);
+					mFreeList = start;
 				}
-				mFreeList = start;
+				else if(mFreeList==EOL)					// don't reset the free ptr for the compacting hash unless it's empty
+					mFreeList = start;
 			}
 
 			PX_INLINE PxU32 freeListGetNext()
@@ -255,13 +286,13 @@ namespace shdfnd
 				PX_ASSERT(!freeListEmpty());
 				if(compacting)
 				{
-					PX_ASSERT(mFreeList == mSize);
+					PX_ASSERT(mFreeList == mEntriesCount);
 					return mFreeList++;
 				}
 				else
 				{
 					PxU32 entryIndex = mFreeList;
-					mFreeList = mNext[mFreeList];
+					mFreeList = mEntriesNext[mFreeList];
 					return entryIndex;
 				}
 			}
@@ -269,81 +300,142 @@ namespace shdfnd
 			PX_INLINE bool freeListEmpty()	const
 			{
 				if(compacting)
-					return mSize == mNext.size();
+					return mEntriesCount == mEntriesCapacity;
 				else
 					return mFreeList == EOL;
 			}
 
 			PX_INLINE void replaceWithLast(PxU32 index)
 			{
-				PX_PLACEMENT_NEW(&mEntries[index], Entry)(mEntries[mSize]);
-				mEntries[mSize].~Entry();
-				mNext[index] = mNext[mSize];
+				PX_PLACEMENT_NEW(mEntries + index, Entry)(mEntries[mEntriesCount]);
+				mEntries[mEntriesCount].~Entry();
+				mEntriesNext[index] = mEntriesNext[mEntriesCount];
 
 				PxU32 h = hash(GetKey()(mEntries[index]));
-				PxU32 *ptr;
-				for(ptr = &mHash[h]; *ptr!=mSize; ptr = &mNext[*ptr])
+				PxU32* ptr;
+				for(ptr = mHash + h; *ptr!=mEntriesCount; ptr = mEntriesNext + *ptr)
 					PX_ASSERT(*ptr!=EOL);
 				*ptr = index;
 			}
 
-
-			PX_INLINE PxU32 hash(const Key &k) const
+			PX_INLINE PxU32 hash(const Key& k, PxU32 hashSize) const
 			{
-				return HashFn()(k)&(mHash.size()-1);
+				return HashFn()(k)&(hashSize-1);
+			}
+
+			PX_INLINE PxU32 hash(const Key& k) const
+			{
+				return hash(k, mHashSize);
 			}
 
 			void reserveInternal(PxU32 size)
 			{
-				size = nextPowerOfTwo(size);
-				// resize the hash and reset
-				mHash.resize(size);
-				for(PxU32 i=0;i<mHash.size();i++)
-					mHash[i] = (PxU32)EOL;
+				if(!isPowerOfTwo(size))
+					size = nextPowerOfTwo(size);
 
-				PX_ASSERT(!(mHash.size()&(mHash.size()-1)));
+				PX_ASSERT(!(size&(size-1)));
+				
+				// decide whether iteration can be done on the entries directly
+				bool resizeCompact = compacting || freeListEmpty();
 
-				PxU32 oldSize = mNext.size();
-				PxU32 newSize = PxU32(float(mHash.size())*mLoadFactor);
-
-				// resize entry array
-				Entry* newEntries = (Entry*)Allocator::allocate(newSize * sizeof(Entry), __FILE__, __LINE__);
-				for(PxU32 i=0; i<mNext.size(); ++i)
+				// define new table sizes
+				PxU32 oldEntriesCapacity = mEntriesCapacity;
+				PxU32 newEntriesCapacity = PxU32(float(size)*mLoadFactor);
+				PxU32 newHashSize = size;
+				
+				// allocate new common buffer and setup pointers to new tables
+				PxU8* newBuffer;
+				PxU32* newHash;
+				PxU32* newEntriesNext;
+				Entry* newEntries;
 				{
-					PX_PLACEMENT_NEW(newEntries+i, Entry)(mEntries[i]);
-					mEntries[i].~Entry();
+					PxU32 newHashByteOffset = 0;
+					PxU32 newEntriesNextBytesOffset = newHashByteOffset + newHashSize*sizeof(PxU32);
+					PxU32 newEntriesByteOffset = newEntriesNextBytesOffset + newEntriesCapacity*sizeof(PxU32);
+					newEntriesByteOffset += (16 - (newEntriesByteOffset & 15)) & 15;
+					PxU32 newBufferByteSize = newEntriesByteOffset + newEntriesCapacity*sizeof(Entry);
+					
+					newBuffer = (PxU8*)Allocator::allocate(newBufferByteSize, __FILE__, __LINE__);
+					PX_ASSERT(newBuffer);
+
+					newHash = (PxU32*)(newBuffer + newHashByteOffset);
+					newEntriesNext = (PxU32*)(newBuffer + newEntriesNextBytesOffset);
+					newEntries = (Entry*)(newBuffer + newEntriesByteOffset);
 				}
-				Allocator::deallocate(mEntries);
+
+				// initialize new hash table
+				PxMemSet(newHash, PxU32(EOL), newHashSize * sizeof(PxU32));
+				
+				// iterate over old entries, re-hash and create new entries
+				if (resizeCompact)
+				{
+					// check that old free list is empty - we don't need to copy the next entries
+					PX_ASSERT(compacting || mFreeList == EOL);
+
+					for(PxU32 index=0; index<mEntriesCount; ++index)
+					{
+						PxU32 h = hash(GetKey()(mEntries[index]), newHashSize);
+						newEntriesNext[index] = newHash[h];
+						newHash[h] = index;
+
+						PX_PLACEMENT_NEW(newEntries+index, Entry)(mEntries[index]);
+						mEntries[index].~Entry();
+					}
+				}
+				else
+				{
+					// copy old free list, only required for non compact resizing
+					PxMemCopy(newEntriesNext, mEntriesNext, mEntriesCapacity*sizeof(PxU32));
+					
+					for (PxU32 bucket = 0; bucket < mHashSize; bucket++)
+					{
+						PxU32 index = mHash[bucket];
+						while (index != EOL)
+						{
+							PxU32 h = hash(GetKey()(mEntries[index]), newHashSize);
+							newEntriesNext[index] = newHash[h];
+							PX_ASSERT(index != newHash[h]);
+
+							newHash[h] = index;
+
+							PX_PLACEMENT_NEW(newEntries+index, Entry)(mEntries[index]);
+							mEntries[index].~Entry();
+
+							index = mEntriesNext[index];
+						}
+					}
+				}
+
+				//swap buffer and pointers
+				Allocator::deallocate(mBuffer);
+				mBuffer = newBuffer;
+				mHash = newHash;
+				mHashSize = newHashSize;
+				mEntriesNext = newEntriesNext;
 				mEntries = newEntries;
+				mEntriesCapacity = newEntriesCapacity;
 
-				mNext.resize(newSize);
-
-				freeListAdd(oldSize,newSize);
-
-				// rehash all the existing entries
-				for(PxU32 i=0;i<oldSize;i++)
-				{
-					PxU32 h = hash(GetKey()(mEntries[i]));
-					mNext[i] = mHash[h];
-					mHash[h] = i;
-				}
+				freeListAdd(oldEntriesCapacity, newEntriesCapacity);
 			}
 
 			void grow()
 			{
-				PX_ASSERT(mFreeList == EOL || compacting && mSize == mNext.size());
+				PX_ASSERT((mFreeList == EOL) || (compacting && (mEntriesCount == mEntriesCapacity)));
 
-				PxU32 size = mHash.size()==0 ? 16 : mHash.size()*2;
+				PxU32 size = mHashSize==0 ? 16 : mHashSize*2;
 				reserve(size);
 			}
 
-			Entry*					mEntries; // same size/capacity as mNext
-			Array<PxU32, Allocator>	mNext;
-			Array<PxU32, Allocator>	mHash;
+			PxU8*					mBuffer;
+			Entry*					mEntries; 
+			PxU32*					mEntriesNext;	// same size as mEntries
+			PxU32*					mHash;
+			PxU32					mEntriesCapacity;
+			PxU32					mHashSize;
 			float					mLoadFactor;
 			PxU32					mFreeList;
 			PxU32					mTimestamp;
-			PxU32					mSize;
+			PxU32					mEntriesCount;			// number of entries
 
 		public:
 
@@ -352,7 +444,7 @@ namespace shdfnd
 			public:
 				PX_INLINE Iter(HashBase& b): mBucket(0), mEntry((PxU32)b.EOL), mTimestamp(b.mTimestamp), mBase(b)
 				{
-					if(mBase.mNext.size()>0)
+					if(mBase.mEntriesCapacity>0)
 					{
 						mEntry = mBase.mHash[0];
 						skip();
@@ -361,22 +453,25 @@ namespace shdfnd
 
 				PX_INLINE void check() const		{ PX_ASSERT(mTimestamp == mBase.mTimestamp);	}
 				PX_INLINE Entry operator*()	const	{ check(); return mBase.mEntries[mEntry];		}
-				PX_INLINE Entry* operator->() const	{ check(); return &mBase.mEntries[mEntry];		}
+				PX_INLINE Entry* operator->() const	{ check(); return mBase.mEntries + mEntry;		}
 				PX_INLINE Iter operator++()			{ check(); advance(); return *this;				}
 				PX_INLINE Iter operator++(int)		{ check(); Iter i = *this; advance(); return i;	}
 				PX_INLINE bool done() const			{ check(); return mEntry == mBase.EOL;			}
 
 			private:
-				PX_INLINE void advance()			{ mEntry = mBase.mNext[mEntry]; skip();		    }
+				PX_INLINE void advance()			{ mEntry = mBase.mEntriesNext[mEntry]; skip();		    }
 				PX_INLINE void skip()
 				{
 					while(mEntry==mBase.EOL) 
 					{ 
-						if(++mBucket == mBase.mHash.size())
+						if(++mBucket == mBase.mHashSize)
 							break;
 						mEntry = mBase.mHash[mBucket];
 					}
 				}
+
+				Iter& operator=(const Iter&);
+
 
 				PxU32 mBucket;
 				PxU32 mEntry;
@@ -394,11 +489,11 @@ namespace shdfnd
 		template <typename HK, typename GK, class A, bool comp> 
 		PX_NOINLINE void HashBase<Entry,Key,HashFn,GetKey,Allocator,compacting>::copy(const HashBase<Entry,Key,HK,GK,A,comp>& other)
 		{
-			reserve(other.mSize);
+			reserve(other.mEntriesCount);
 
-			for(PxU32 i = 0;i < other.size();i++)
+			for(PxU32 i = 0;i < other.mEntriesCount;i++)
 			{
-				for(PxU32 j = other.mHash[i]; j != EOL; j = other.mNext[j])
+				for(PxU32 j = other.mHash[i]; j != EOL; j = other.mEntriesNext[j])
 				{
 					const Entry &otherEntry = other.mEntries[j];
 
@@ -415,35 +510,37 @@ namespace shdfnd
 				  class HashFn, 
 				  class Allocator = Allocator,
 				  bool Coalesced = false>
-		class HashSetBase : private NoCopy
-		{ 
+		class HashSetBase
+		{
+			PX_NOCOPY(HashSetBase)
 		public:
-			struct GetKey { PX_INLINE const Key &operator()(const Key &e) {	return e; }	};
+			struct GetKey { PX_INLINE const Key& operator()(const Key& e) {	return e; }	};
 
 			typedef HashBase<Key, Key, HashFn, GetKey, Allocator, Coalesced> BaseMap;
 			typedef typename BaseMap::Iter Iterator;
 
 			HashSetBase(PxU32 initialTableSize, 
 						float loadFactor,
-						const Allocator &alloc):	mBase(initialTableSize,loadFactor,alloc)	{}
+						const Allocator& alloc):	mBase(initialTableSize,loadFactor,alloc)	{}
 
-			HashSetBase(const Allocator &alloc):	mBase(64,0.75f,alloc)	{}
+			HashSetBase(const Allocator& alloc):	mBase(64,0.75f,alloc)	{}
 
 			HashSetBase(PxU32 initialTableSize = 64,
 						float loadFactor = 0.75f):	mBase(initialTableSize,loadFactor)	{}
 
-			bool insert(const Key &k)
+			bool insert(const Key& k)
 			{
 				bool exists;
-				Key *e = mBase.create(k,exists);
+				Key* e = mBase.create(k,exists);
 				if(!exists)
 					PX_PLACEMENT_NEW(e, Key)(k);
 				return !exists;
 			}
 
-			PX_INLINE bool		contains(const Key &k)	const	{	return mBase.find(k)!=0;		}
-			PX_INLINE bool		erase(const Key &k)				{	return mBase.erase(k);			}
+			PX_INLINE bool		contains(const Key& k)	const	{	return mBase.find(k)!=0;		}
+			PX_INLINE bool		erase(const Key& k)				{	return mBase.erase(k);			}
 			PX_INLINE PxU32		size()					const	{	return mBase.size();			}
+			PX_INLINE PxU32		capacity()				const	{	return mBase.capacity();		}
 			PX_INLINE void		reserve(PxU32 size)				{	mBase.reserve(size);			}
 			PX_INLINE void		clear()							{	mBase.clear();					}
 		protected:
@@ -456,8 +553,9 @@ namespace shdfnd
 			  class HashFn, 
 			  class Allocator = Allocator >
 
-		class HashMapBase : private NoCopy
-		{ 
+		class HashMapBase
+		{
+			PX_NOCOPY(HashMapBase)
 		public:
 			typedef Pair<const Key,Value> Entry;
 
@@ -472,34 +570,35 @@ namespace shdfnd
 			typedef HashBase<Entry, Key, HashFn, GetKey, Allocator, true> BaseMap;
 			typedef typename BaseMap::Iter Iterator;
 
-			HashMapBase(PxU32 initialTableSize, float loadFactor, const Allocator &alloc):	mBase(initialTableSize,loadFactor,alloc)	{}
+			HashMapBase(PxU32 initialTableSize, float loadFactor, const Allocator& alloc):	mBase(initialTableSize,loadFactor,alloc)	{}
 
 			HashMapBase(const Allocator &alloc):	mBase(64,0.75f,alloc)	{}
 
 			HashMapBase(PxU32 initialTableSize = 64, float loadFactor = 0.75f):	mBase(initialTableSize,loadFactor)	{}
 
-			bool insert(const Key /*&*/k, const Value /*&*/v)
+			bool insert(const Key/*&*/ k, const Value/*&*/ v)
 			{
 				bool exists;
-				Entry *e = mBase.create(k,exists);
+				Entry* e = mBase.create(k,exists);
 				if(!exists)
 					PX_PLACEMENT_NEW(e, Entry)(k,v);
 				return !exists;
 			}
 
-			Value &operator [](const Key &k)
+			Value& operator [](const Key& k)
 			{
 				bool exists;
-				Entry *e = mBase.create(k, exists);
+				Entry* e = mBase.create(k, exists);
 				if(!exists)
 					PX_PLACEMENT_NEW(e, Entry)(k,Value());
 		
 				return e->second;
 			}
 
-			PX_INLINE const Entry *	find(const Key &k)		const	{	return mBase.find(k);			}
-			PX_INLINE bool			erase(const Key &k)				{	return mBase.erase(k);			}
+			PX_INLINE const Entry*	find(const Key& k)		const	{	return mBase.find(k);			}
+			PX_INLINE bool			erase(const Key& k)				{	return mBase.erase(k);			}
 			PX_INLINE PxU32			size()					const	{	return mBase.size();			}
+			PX_INLINE PxU32			capacity()				const	{	return mBase.capacity();		}
 			PX_INLINE Iterator		getIterator()					{	return Iterator(mBase);			}
 			PX_INLINE void			reserve(PxU32 size)				{	mBase.reserve(size);			}
 			PX_INLINE void			clear()							{	mBase.clear();					}
@@ -514,7 +613,6 @@ namespace shdfnd
 } // namespace physx
 
 #ifdef PX_VC
-#pragma warning(pop)
+	#pragma warning(pop)
 #endif
-
 #endif

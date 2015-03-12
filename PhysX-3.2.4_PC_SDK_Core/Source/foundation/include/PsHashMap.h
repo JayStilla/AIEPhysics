@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -95,10 +95,11 @@ namespace shdfnd
 			  class Allocator = Allocator >
 	class CoalescedHashMap: public internal::HashMapBase<Key, Value, HashFn, Allocator>
 	{
+	public:
 		typedef internal::HashMapBase<Key, Value, HashFn, Allocator> HashMapBase;
 
 		CoalescedHashMap(PxU32 initialTableSize = 64, float loadFactor = 0.75f): HashMapBase(initialTableSize,loadFactor){}
-		const Key* getEntries() const { return HashMapBase::mBase.getEntries(); }
+		const Pair<const Key,Value>* getEntries() const { return HashMapBase::mBase.getEntries(); }
 	};
 
 } // namespace shdfnd

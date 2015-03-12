@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -73,6 +73,11 @@ void SampleHelloWorld::onTickPostRender(float dtime)
 	PhysXSample::onTickPostRender(dtime);
 }
 
+void SampleHelloWorld::customizeSceneDesc(PxSceneDesc& sceneDesc)
+{
+	sceneDesc.flags |= PxSceneFlag::eREQUIRE_RW_LOCK;
+}
+
 void SampleHelloWorld::newMesh(const RAWMesh& data)
 {
 }
@@ -86,7 +91,7 @@ static void gValue(Console* console, const char* text, void* userData)
 	}
 
 	const float val = (float)::atof(text);
-	printf("value: %f\n", val);
+	shdfnd::printFormatted("value: %f\n", val);
 }
 
 static void gExport(Console* console, const char* text, void* userData)
@@ -131,7 +136,7 @@ void SampleHelloWorld::collectInputEvents(std::vector<const SampleFramework::Inp
 	getApplication().getPlatform()->getSampleUserInput()->unregisterInputEvent(CAMERA_SPEED_DECREASE);
     
 	//touch events
-	TOUCH_INPUT_EVENT_DEF(SPAWN_DEBUG_OBJECT,	"Throw Object",		ABUTTON_5,	IBUTTON_5);
+	TOUCH_INPUT_EVENT_DEF(SPAWN_DEBUG_OBJECT,	"Throw Object",		ABUTTON_5,	IBUTTON_5, TOUCH_BUTTON_5);
 }
 
 void SampleHelloWorld::helpRender(PxU32 x, PxU32 y, PxU8 textAlpha)

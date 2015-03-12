@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -31,9 +31,10 @@
 #include "PxPreprocessor.h"
 PX_DUMMY_SYMBOL
 
+#include "PxVisualDebugger.h"
 #if PX_SUPPORT_VISUAL_DEBUGGER
 
-#include "PxPhysXCommon.h"
+#include "PxPhysXCommonConfig.h"
 #include "PxProfileBase.h"
 
 #include "PvdVisualDebugger.h"
@@ -57,10 +58,10 @@ namespace Pvd
 {
 
 VisualDebugger::VisualDebugger()
-: mPvdConnection(NULL)
-, mPvdConnectionFactory(NULL)
-, mConstraintVisualize(true)
+: mPvdDataStream(NULL)
+, mPvdConnection(NULL)
 , mFlags(0)
+, mIsConnected(0)
 {
 }
 
@@ -79,15 +80,15 @@ void VisualDebugger::disconnect()
 }
 
 
-physx::debugger::comm::PvdConnection* VisualDebugger::getPvdConnectionFactory()
+physx::debugger::comm::PvdConnection* VisualDebugger::getPvdConnection()
 {
-	return mPvdConnectionFactory;
+	return mPvdConnection;
 }
 
-physx::debugger::comm::PvdDataStream* VisualDebugger::getPvdConnection(const PxScene& scene)
+physx::debugger::comm::PvdDataStream* VisualDebugger::getPvdDataStream(const PxScene& scene)
 {
 	const NpScene& npScene = static_cast<const NpScene&>(scene);
-	return npScene.getScene().getSceneVisualDebugger().getPvdConnection();
+	return npScene.getScene().getSceneVisualDebugger().getPvdDataStream();
 }
 
 
@@ -97,18 +98,31 @@ void VisualDebugger::updateCamera(const char* name, const PxVec3& origin, const 
 	npPhysics.getPvdConnectionManager()->setCamera( name, origin, up, target );
 }
 
-
-
-void VisualDebugger::setVisualizeConstraints( bool inVisualizeJoints )
+void VisualDebugger::sendErrorMessage(PxErrorCode::Enum code, const char* message, const char* file, PxU32 line)
 {
-	mConstraintVisualize = inVisualizeJoints;
-}
-bool VisualDebugger::isVisualizingConstraints()
-{
-	return mConstraintVisualize;
+	if( mPvdConnection == NULL )
+		return;
+
+	NpPhysics& npPhysics = NpPhysics::getInstance();
+	npPhysics.getPvdConnectionManager()->sendErrorMessage( code, message, file, line );
 }
 
-void VisualDebugger::setVisualDebuggerFlag(PxVisualDebuggerFlags::Enum flag, bool value)
+void VisualDebugger::setCreateContactReports(bool value)
+{
+	if ( isConnected() )
+	{
+		NpPhysics& npPhysics = NpPhysics::getInstance();
+		PxU32 numScenes = npPhysics.getNbScenes();
+		for(PxU32 i = 0; i < numScenes; i++)
+		{
+			NpScene* npScene = npPhysics.getScene(i);
+			Scb::Scene& scbScene = npScene->getScene();
+			scbScene.getSceneVisualDebugger().setCreateContactReports(value);
+		}
+	}
+}
+
+void VisualDebugger::setVisualDebuggerFlag(PxVisualDebuggerFlag::Enum flag, bool value)
 {
 	if(value)
 		mFlags |= PxU32(flag);
@@ -116,19 +130,25 @@ void VisualDebugger::setVisualDebuggerFlag(PxVisualDebuggerFlags::Enum flag, boo
 		mFlags &= ~PxU32(flag);
 	//This has been a bug against the debugger for some time,
 	//changing this flag doesn't always change the sending-contact-reports behavior.
-	if ( flag == PxVisualDebuggerFlags::eTRANSMIT_CONTACTS )
+	if ( flag == PxVisualDebuggerFlag::eTRANSMIT_CONTACTS )
 	{
-		if ( isConnected() )
-		{
-			NpPhysics& npPhysics = NpPhysics::getInstance();
-			PxU32 numScenes = npPhysics.getNbScenes();
-			for(PxU32 i = 0; i < numScenes; i++)
-			{
-				NpScene* npScene = npPhysics.getScene(i);
-				Scb::Scene& scbScene = npScene->getScene();
-				scbScene.getSceneVisualDebugger().setCreateContactReports(value);
-			}
-		}
+		setCreateContactReports( value );
+	}
+}
+
+void VisualDebugger::setVisualDebuggerFlags(PxVisualDebuggerFlags flags)
+{
+	bool oldContactFlag = mFlags & PxVisualDebuggerFlag::eTRANSMIT_CONTACTS;
+	bool newContactFlag = flags & PxVisualDebuggerFlag::eTRANSMIT_CONTACTS;
+
+	mFlags = PxU32(flags);
+	
+
+	//This has been a bug against the debugger for some time,
+	//changing this flag doesn't always change the sending-contact-reports behavior.
+	if ( oldContactFlag != newContactFlag )
+	{
+		setCreateContactReports( newContactFlag );
 	}
 }
 
@@ -137,16 +157,15 @@ PxU32 VisualDebugger::getVisualDebuggerFlags()
 	return mFlags;
 }
 
-
-bool VisualDebugger::isConnected()
-{ 
-	return mPvdConnectionFactory && mPvdConnectionFactory->isConnected(); 
+bool VisualDebugger::isConnected(bool useCachedStatus)
+{
+	return useCachedStatus ? (Ps::atomicCompareExchange(&mIsConnected, 1, 1) == 1)
+		: (mPvdConnection && mPvdConnection->isConnected());
 }
-
 
 void VisualDebugger::checkConnection()
 {
-	if ( mPvdConnectionFactory != NULL ) mPvdConnectionFactory->checkConnection();
+	if ( mPvdConnection != NULL ) mPvdConnection->checkConnection();
 }
 
 
@@ -159,14 +178,16 @@ void VisualDebugger::updateScenesPvdConnection()
 		NpScene* npScene = npPhysics.getScene(i);
 		Scb::Scene& scbScene = npScene->getScene();
 		setupSceneConnection(scbScene);
+		npScene->getSingleSqCollector().clearGeometryArrays();
+		npScene->getBatchedSqCollector().clearGeometryArrays();
 	}
 }
 
 void VisualDebugger::setupSceneConnection(Scb::Scene& s)
 {
-	physx::debugger::comm::PvdDataStream* conn = mPvdConnectionFactory ? &mPvdConnectionFactory->createDataStream() : NULL;
+	physx::debugger::comm::PvdDataStream* conn = mPvdConnection ? &mPvdConnection->createDataStream() : NULL;
 	if(conn)
-	s.getSceneVisualDebugger().setPvdConnection(conn, mPvdConnectionFactory ? mPvdConnectionFactory->getConnectionType() : physx::debugger::TConnectionFlagsType(0));
+	s.getSceneVisualDebugger().setPvdConnection(conn, mPvdConnection ? mPvdConnection->getConnectionType() : physx::debugger::TConnectionFlagsType(0));
 	s.getSceneVisualDebugger().setCreateContactReports(conn ? getTransmitContactsFlag() : false);
 }
 
@@ -175,8 +196,8 @@ void VisualDebugger::sendClassDescriptions()
 {
 	if(!isConnected())
 		return;
-	mMetaDataBinding.registerSDKProperties(*mPvdConnection);
-	mPvdConnection->flush();
+	mMetaDataBinding.registerSDKProperties(*mPvdDataStream);
+	mPvdDataStream->flush();
 }
 
 void VisualDebugger::onPvdSendClassDescriptions( physx::debugger::comm::PvdConnection& inFactory )
@@ -185,37 +206,39 @@ void VisualDebugger::onPvdSendClassDescriptions( physx::debugger::comm::PvdConne
 	if(!cf)
 		return;
 
-	if(mPvdConnection && mPvdConnectionFactory)
+	if(mPvdDataStream && mPvdConnection)
 		disconnect();
 
-	mPvdConnectionFactory = cf;
-	mPvdConnection = &mPvdConnectionFactory->createDataStream();
-	if(!mPvdConnection)
+	mPvdConnection = cf;
+	mPvdDataStream = &mPvdConnection->createDataStream();
+	if(!mPvdDataStream)
 		return;
-	mPvdConnection->addRef();
+	mPvdDataStream->addRef();
 	sendClassDescriptions();
 }
 
-void VisualDebugger::onPvdConnected( physx::debugger::comm::PvdConnection& inFactory )
+void VisualDebugger::onPvdConnected( physx::debugger::comm::PvdConnection& /*inFactory */)
 {
-	if(!mPvdConnection)
+	if(!mPvdDataStream)
 		return;
 	updateScenesPvdConnection();
 	sendEntireSDK();
+	Ps::atomicExchange(&mIsConnected, 1);
 }
-void VisualDebugger::onPvdDisconnected( physx::debugger::comm::PvdConnection& inFactory )
+void VisualDebugger::onPvdDisconnected( physx::debugger::comm::PvdConnection& /*inFactory */)
 {
-	if(mPvdConnection)
+	Ps::atomicExchange(&mIsConnected, 0);
+	if(mPvdDataStream)
 	{
 //		NpPhysics& npPhysics = NpPhysics::getInstance();
-		if(mPvdConnection->isConnected())
+		if(mPvdDataStream->isConnected())
 		{
-			mPvdConnection->destroyInstance(&NpPhysics::getInstance());
-			mPvdConnection->flush();
+			mPvdDataStream->destroyInstance(&NpPhysics::getInstance());
+			mPvdDataStream->flush();
 		}
-		mPvdConnection->release();
+		mPvdDataStream->release();
+		mPvdDataStream = NULL;
 		mPvdConnection = NULL;
-		mPvdConnectionFactory = NULL;
 		updateScenesPvdConnection();
 		mRefCountMapLock.lock();
 		mRefCountMap.clear();
@@ -223,47 +246,57 @@ void VisualDebugger::onPvdDisconnected( physx::debugger::comm::PvdConnection& in
 	}
 }
 
-template<typename TDataType> void VisualDebugger::doMeshFactoryBufferRelease( TDataType& type )
+template<typename TDataType> void VisualDebugger::doMeshFactoryBufferRelease( const TDataType* type )
 {
-	if ( mPvdConnectionFactory != NULL 
-		&& mPvdConnection != NULL
-		&& mPvdConnectionFactory->getConnectionType() & physx::debugger::PvdConnectionType::Debug )
+	if ( mPvdConnection != NULL 
+		&& mPvdDataStream != NULL
+		&& mPvdConnection->getConnectionType() & physx::debugger::PvdConnectionType::eDEBUG )
 	{
 		Ps::Mutex::ScopedLock locker(mRefCountMapLock);
-		if ( mRefCountMap.find( &type ) )
+		if ( mRefCountMap.find( type ) )
 		{
-			mRefCountMap.erase( &type );
-			destroyPvdInstance( &type );
-			mPvdConnection->flush();
+			mRefCountMap.erase( type );
+			destroyPvdInstance( type );
+			mPvdDataStream->flush();
 		}
 	}
 }
 
-void VisualDebugger::onGuMeshFactoryBufferRelease(PxConvexMesh& data)
+void VisualDebugger::onGuMeshFactoryBufferRelease(const PxBase* object, PxType typeID, bool memRelease)
 {
-	doMeshFactoryBufferRelease( data );
-}
-void VisualDebugger::onGuMeshFactoryBufferRelease(PxHeightField& data)
-{
-	doMeshFactoryBufferRelease( data );
-}
-void VisualDebugger::onGuMeshFactoryBufferRelease(PxTriangleMesh& data)
-{
-	doMeshFactoryBufferRelease( data );
+	PX_UNUSED(memRelease);
+
+	switch(typeID)
+	{
+		case PxConcreteType::eHEIGHTFIELD:
+			doMeshFactoryBufferRelease( static_cast<const PxHeightField*>(object) );
+		break;
+
+		case PxConcreteType::eCONVEX_MESH:
+			doMeshFactoryBufferRelease( static_cast<const PxConvexMesh*>(object) );
+		break;
+
+		case PxConcreteType::eTRIANGLE_MESH:
+			doMeshFactoryBufferRelease( static_cast<const PxTriangleMesh*>(object) );
+		break;
+
+		default:
+		break;
+	}	
 }
 #if PX_USE_CLOTH_API
 void VisualDebugger::onNpFactoryBufferRelease(PxClothFabric& data)
 {
-	doMeshFactoryBufferRelease( data );
+	doMeshFactoryBufferRelease( &data );
 }
 #endif
 
 void VisualDebugger::sendEntireSDK()
 {
 	NpPhysics& npPhysics = NpPhysics::getInstance();
-	mPvdConnection->createInstance( (PxPhysics*)&npPhysics );
+	mPvdDataStream->createInstance( (PxPhysics*)&npPhysics );
 	npPhysics.getPvdConnectionManager()->setIsTopLevelUIElement( &npPhysics, true );
-	mMetaDataBinding.sendAllProperties( *mPvdConnection, npPhysics );
+	mMetaDataBinding.sendAllProperties( *mPvdDataStream, npPhysics );
 
 #define SEND_BUFFER_GROUP( type, name ) {					\
 		Ps::Array<type*> buffers;							\
@@ -283,7 +316,7 @@ void VisualDebugger::sendEntireSDK()
 	SEND_BUFFER_GROUP( PxClothFabric, ClothFabrics );
 #endif
 
-	mPvdConnection->flush();
+	mPvdDataStream->flush();
 	PxU32 numScenes = npPhysics.getNbScenes();
 	for(PxU32 i = 0; i < numScenes; i++)
 	{
@@ -297,55 +330,55 @@ void VisualDebugger::sendEntireSDK()
 
 void VisualDebugger::createPvdInstance(const PxTriangleMesh* triMesh)
 {
-	mMetaDataBinding.createInstance( *mPvdConnection, *triMesh, NpPhysics::getInstance() );
+	mMetaDataBinding.createInstance( *mPvdDataStream, *triMesh, NpPhysics::getInstance() );
 }
 
 void VisualDebugger::destroyPvdInstance(const PxTriangleMesh* triMesh)
 {
-	mMetaDataBinding.destroyInstance( *mPvdConnection, *triMesh, NpPhysics::getInstance() );
+	mMetaDataBinding.destroyInstance( *mPvdDataStream, *triMesh, NpPhysics::getInstance() );
 }
 
 
 void VisualDebugger::createPvdInstance(const PxConvexMesh* convexMesh)
 {
-	mMetaDataBinding.createInstance( *mPvdConnection, *convexMesh, NpPhysics::getInstance() );
+	mMetaDataBinding.createInstance( *mPvdDataStream, *convexMesh, NpPhysics::getInstance() );
 }
 
 void VisualDebugger::destroyPvdInstance(const PxConvexMesh* convexMesh)
 {
-	mMetaDataBinding.destroyInstance( *mPvdConnection, *convexMesh, NpPhysics::getInstance() );
+	mMetaDataBinding.destroyInstance( *mPvdDataStream, *convexMesh, NpPhysics::getInstance() );
 }
 
 void VisualDebugger::createPvdInstance(const PxHeightField* heightField)
 {
-	mMetaDataBinding.createInstance( *mPvdConnection, *heightField, NpPhysics::getInstance() );
+	mMetaDataBinding.createInstance( *mPvdDataStream, *heightField, NpPhysics::getInstance() );
 }
 
 void VisualDebugger::destroyPvdInstance(const PxHeightField* heightField)
 {
-	mMetaDataBinding.destroyInstance( *mPvdConnection, *heightField, NpPhysics::getInstance() );
+	mMetaDataBinding.destroyInstance( *mPvdDataStream, *heightField, NpPhysics::getInstance() );
 }
 
 void VisualDebugger::createPvdInstance(const PxMaterial* mat)
 {
-	mMetaDataBinding.createInstance( *mPvdConnection, *mat, NpPhysics::getInstance() );
+	mMetaDataBinding.createInstance( *mPvdDataStream, *mat, NpPhysics::getInstance() );
 }
 
 void VisualDebugger::updatePvdProperties(const PxMaterial* mat)
 {
-	mMetaDataBinding.sendAllProperties( *mPvdConnection, *mat );
+	mMetaDataBinding.sendAllProperties( *mPvdDataStream, *mat );
 }
 
 void VisualDebugger::destroyPvdInstance(const PxMaterial* mat)
 {
-	mMetaDataBinding.destroyInstance( *mPvdConnection, *mat, NpPhysics::getInstance() );
+	mMetaDataBinding.destroyInstance( *mPvdDataStream, *mat, NpPhysics::getInstance() );
 }
 
 #if PX_USE_CLOTH_API
 void VisualDebugger::createPvdInstance(const PxClothFabric* fabric)
 {
 	NpPhysics* npPhysics = &NpPhysics::getInstance();
-	mMetaDataBinding.createInstance( *mPvdConnection, *fabric, *npPhysics );
+	mMetaDataBinding.createInstance( *mPvdDataStream, *fabric, *npPhysics );
 	//Physics level buffer object update, must be flushed immediatedly. 
 	flush();
 }
@@ -353,7 +386,7 @@ void VisualDebugger::createPvdInstance(const PxClothFabric* fabric)
 void VisualDebugger::destroyPvdInstance(const PxClothFabric* fabric)
 {
 	NpPhysics* npPhysics = &NpPhysics::getInstance();
-	mMetaDataBinding.destroyInstance( *mPvdConnection, *fabric, *npPhysics );
+	mMetaDataBinding.destroyInstance( *mPvdDataStream, *fabric, *npPhysics );
 	//Physics level buffer object update, must be flushed immediatedly. 
 	flush();
 }
@@ -361,7 +394,7 @@ void VisualDebugger::destroyPvdInstance(const PxClothFabric* fabric)
 
 void VisualDebugger::flush() 
 {
-	mPvdConnection->flush();
+	mPvdDataStream->flush();
 }
 
 

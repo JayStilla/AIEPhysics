@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 
 #ifndef GLES2_RENDERER_TEXTURE_2D_H
@@ -34,16 +34,17 @@
 #if defined(RENDERER_ENABLE_GLES2)
 
 #include <RendererTexture2D.h>
+#include <RendererTexture2DDesc.h>
 #include "GLES2Renderer.h"
 
 namespace SampleRenderer
 {
-class RendererTexture2DDesc;
+class RendererTextureDesc;
 
 class GLES2RendererTexture2D : public RendererTexture2D
 {
 	public:
-		GLES2RendererTexture2D(const RendererTexture2DDesc &desc);
+		GLES2RendererTexture2D(const RendererTextureDesc &desc);
 		virtual ~GLES2RendererTexture2D(void);
 	
 	public:

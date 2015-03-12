@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -88,26 +88,26 @@ PxVehicleGraph::PxVehicleGraph()
 	mBackgroundMinY=0;
 	mBackgroundMaxY=0;
 	mSampleTide=0;
-	mBackgroundColor=PxVec3(255,255,255),
+	mBackgroundColor=PxVec3(255.f,255.f,255.f),
 		mBackgroundAlpha=1.0f;
-	for(PxU32 i=0;i<eMAX_NUM_CHANNELS;i++)
+	for(PxU32 i=0;i<eMAX_NB_CHANNELS;i++)
 	{
 		mChannelMinY[i]=0;
 		mChannelMaxY[i]=0;
 		mChannelMidY[i]=0;
-		mChannelColorLow[i]=PxVec3(0,0,255);
-		mChannelColorHigh[i]=PxVec3(255,0,0);
-		memset(mChannelSamples[i], 0, sizeof(PxReal)*eMAX_NUM_SAMPLES);
+		mChannelColorLow[i]=PxVec3(0,0,255.f);
+		mChannelColorHigh[i]=PxVec3(255.f,0,0);
+		memset(mChannelSamples[i], 0, sizeof(PxReal)*eMAX_NB_SAMPLES);
 	}
-	mNumChannels = 0;
-	PX_COMPILE_TIME_ASSERT((size_t)eMAX_NUM_CHANNELS >= (size_t)eMAX_NUM_ENGINE_CHANNELS && (size_t)eMAX_NUM_CHANNELS >= (size_t)eMAX_NUM_WHEEL_CHANNELS);
+	mNbChannels = 0;
+	PX_COMPILE_TIME_ASSERT((size_t)PxVehicleGraph::eMAX_NB_CHANNELS >= (size_t)PxVehicleDriveGraphChannel::eMAX_NB_DRIVE_CHANNELS && (size_t)PxVehicleGraph::eMAX_NB_CHANNELS >= (size_t)PxVehicleWheelGraphChannel::eMAX_NB_WHEEL_CHANNELS);
 }
 
 PxVehicleGraph::~PxVehicleGraph()
 {
 }
 
-void PxVehicleGraph::setup(const PxVehicleGraphDesc& desc, const eGraphType graphType)
+void PxVehicleGraph::setup(const PxVehicleGraphDesc& desc, const PxVehicleGraphType::Enum graphType)
 {
 	mBackgroundMinX = (desc.mPosX - 0.5f*desc.mSizeX);
 	mBackgroundMaxX = (desc.mPosX + 0.5f*desc.mSizeX);
@@ -117,12 +117,12 @@ void PxVehicleGraph::setup(const PxVehicleGraphDesc& desc, const eGraphType grap
 	mBackgroundColor=desc.mBackgroundColor;
 	mBackgroundAlpha=desc.mAlpha;
 
-	mNumChannels = (eGRAPH_TYPE_WHEEL==graphType) ? (PxU32)eMAX_NUM_WHEEL_CHANNELS : (PxU32)eMAX_NUM_ENGINE_CHANNELS;
+	mNbChannels = (PxVehicleGraphType::eWHEEL==graphType) ? (PxU32)PxVehicleWheelGraphChannel::eMAX_NB_WHEEL_CHANNELS : (PxU32)PxVehicleDriveGraphChannel::eMAX_NB_DRIVE_CHANNELS;
 }
 
 void PxVehicleGraph::setChannel(PxVehicleGraphChannelDesc& desc, const PxU32 channel)
 {
-	PX_ASSERT(channel<eMAX_NUM_CHANNELS);
+	PX_ASSERT(channel<eMAX_NB_CHANNELS);
 
 	mChannelMinY[channel]=desc.mMinY;
 	mChannelMaxY[channel]=desc.mMaxY;
@@ -139,39 +139,50 @@ void PxVehicleGraph::setChannel(PxVehicleGraphChannelDesc& desc, const PxU32 cha
 void PxVehicleGraph::clearRecordedChannelData()
 {
 	mSampleTide=0;
-	for(PxU32 i=0;i<eMAX_NUM_CHANNELS;i++)
+	for(PxU32 i=0;i<eMAX_NB_CHANNELS;i++)
 	{
-		memset(mChannelSamples[i], 0, sizeof(PxReal)*eMAX_NUM_SAMPLES);
+		memset(mChannelSamples[i], 0, sizeof(PxReal)*eMAX_NB_SAMPLES);
 	}
 }
 
 void PxVehicleGraph::updateTimeSlice(const PxReal* const samples)
 {
 	mSampleTide++;
-	mSampleTide=mSampleTide%eMAX_NUM_SAMPLES;
+	mSampleTide=mSampleTide%eMAX_NB_SAMPLES;
 
-	for(PxU32 i=0;i<mNumChannels;i++)
+	for(PxU32 i=0;i<mNbChannels;i++)
 	{
-		mChannelSamples[i][mSampleTide]=PxClamp(samples[i],mChannelMinY[i],mChannelMaxY[i]);
+		mChannelSamples[i][mSampleTide]=samples[i];
 	}
 }
 
 void PxVehicleGraph::computeGraphChannel(const PxU32 channel, PxReal* xy, PxVec3* colors, char* title) const
 {
-	PX_ASSERT(channel<mNumChannels);
+	PX_ASSERT(channel<mNbChannels);
 	const PxReal sizeX=mBackgroundMaxX-mBackgroundMinX;
 	const PxReal sizeY=mBackgroundMaxY-mBackgroundMinY;
-
-	for(PxU32 i=0;i<PxVehicleGraph::eMAX_NUM_SAMPLES;i++)
+	const PxF32 minVal=mChannelMinY[channel];
+	const PxF32 maxVal=mChannelMaxY[channel];
+	const PxF32 midVal=mChannelMidY[channel];
+	const PxVec3 colorLow=mChannelColorLow[channel];
+	const PxVec3 colorHigh=mChannelColorHigh[channel];
+	for(PxU32 i=0;i<PxVehicleGraph::eMAX_NB_SAMPLES;i++)
 	{
-		const PxU32 index=(mSampleTide+1+i)%PxVehicleGraph::eMAX_NUM_SAMPLES;
-		xy[2*i+0]=mBackgroundMinX+sizeX*i/((PxReal)(PxVehicleGraph::eMAX_NUM_SAMPLES));
-		const PxReal y=(mChannelSamples[channel][index]-mChannelMinY[channel])/(mChannelMaxY[channel]-mChannelMinY[channel]);		
-		xy[2*i+1]=mBackgroundMinY+sizeY*y;
-		colors[i]=mChannelSamples[channel][index]<mChannelMidY[channel] ? mChannelColorLow[channel] : mChannelColorHigh[channel];
+		const PxU32 index = (mSampleTide+1+i)%PxVehicleGraph::eMAX_NB_SAMPLES;
+		xy[2*i+0] = mBackgroundMinX+sizeX*i/((PxReal)(PxVehicleGraph::eMAX_NB_SAMPLES));
+		const PxF32 sampleVal = PxClamp(mChannelSamples[channel][index],minVal,maxVal);
+		const PxReal y = (sampleVal-minVal)/(maxVal-minVal);		
+		xy[2*i+1] = mBackgroundMinY+sizeY*y;
+		colors[i] = sampleVal < midVal ? colorLow : colorHigh;
 	}
 
 	strcpy(title,mChannelTitle[channel]);
+}
+
+PxF32 PxVehicleGraph::getLatestValue(const PxU32 channel) const
+{
+	PX_CHECK_AND_RETURN_VAL(channel < mNbChannels, "PxVehicleGraph::getLatestValue: Illegal channel", 0.0f);
+	return mChannelSamples[channel][mSampleTide];
 }
 
 void PxVehicleGraph::setupEngineGraph
@@ -185,7 +196,7 @@ void PxVehicleGraph::setupEngineGraph
 	desc.mPosY=posY;
 	desc.mBackgroundColor=backgoundColor;
 	desc.mAlpha=0.5f;
-	setup(desc,PxVehicleGraph::eGRAPH_TYPE_ENGINE);
+	setup(desc,PxVehicleGraphType::eDRIVE);
 
 	//Engine revs
 	{
@@ -198,7 +209,7 @@ void PxVehicleGraph::setupEngineGraph
 		char title[64];
 		sprintf(title, "engineRevs");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_ENGINE_REVS);
+		setChannel(desc2,PxVehicleDriveGraphChannel::eENGINE_REVS);
 	}
 
 	//Engine torque
@@ -212,7 +223,7 @@ void PxVehicleGraph::setupEngineGraph
 		char title[64];
 		sprintf(title, "engineDriveTorque");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_ENGINE_DRIVE_TORQUE);
+		setChannel(desc2,PxVehicleDriveGraphChannel::eENGINE_DRIVE_TORQUE);
 	}
 
 	//Clutch slip
@@ -226,7 +237,7 @@ void PxVehicleGraph::setupEngineGraph
 		char title[64];
 		sprintf(title, "clutchSlip");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_CLUTCH_SLIP);
+		setChannel(desc2,PxVehicleDriveGraphChannel::eCLUTCH_SLIP);
 	}
 
 	//Accel control
@@ -240,7 +251,7 @@ void PxVehicleGraph::setupEngineGraph
 		char title[64];
 		sprintf(title, "accel");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_ACCEL_CONTROL);
+		setChannel(desc2,PxVehicleDriveGraphChannel::eACCEL_CONTROL);
 	}
 
 	//Brake control
@@ -254,7 +265,7 @@ void PxVehicleGraph::setupEngineGraph
 		char title[64];
 		sprintf(title, "brake/tank brake left");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_BRAKE_CONTROL);
+		setChannel(desc2,PxVehicleDriveGraphChannel::eBRAKE_CONTROL);
 	}
 
 	//HandBrake control
@@ -268,7 +279,7 @@ void PxVehicleGraph::setupEngineGraph
 		char title[64];
 		sprintf(title, "handbrake/tank brake right");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_HANDBRAKE_CONTROL);
+		setChannel(desc2,PxVehicleDriveGraphChannel::eHANDBRAKE_CONTROL);
 	}
 
 	//Steer control
@@ -282,7 +293,7 @@ void PxVehicleGraph::setupEngineGraph
 		char title[64];
 		sprintf(title, "steerLeft/tank thrust left");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_STEER_LEFT_CONTROL);
+		setChannel(desc2,PxVehicleDriveGraphChannel::eSTEER_LEFT_CONTROL);
 	}
 
 	//Steer control
@@ -296,7 +307,7 @@ void PxVehicleGraph::setupEngineGraph
 		char title[64];
 		sprintf(title, "steerRight/tank thrust right");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_STEER_RIGHT_CONTROL);
+		setChannel(desc2,PxVehicleDriveGraphChannel::eSTEER_RIGHT_CONTROL);
 	}
 
 	//Gear
@@ -310,7 +321,7 @@ void PxVehicleGraph::setupEngineGraph
 		char title[64];
 		sprintf(title, "gearRatio");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_GEAR_RATIO);
+		setChannel(desc2,PxVehicleDriveGraphChannel::eGEAR_RATIO);
 	}
 }
 
@@ -325,7 +336,7 @@ void PxVehicleGraph::setupWheelGraph
 	desc.mPosY=posY;
 	desc.mBackgroundColor=backgoundColor;
 	desc.mAlpha=0.5f;
-	setup(desc,PxVehicleGraph::eGRAPH_TYPE_WHEEL);
+	setup(desc,PxVehicleGraphType::eWHEEL);
 
 	//Jounce data channel
 	{
@@ -338,7 +349,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "suspJounce");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_JOUNCE);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eJOUNCE);
 	}
 
 	//Jounce susp force channel
@@ -352,7 +363,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "suspForce");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_SUSPFORCE);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eSUSPFORCE);
 	}
 
 	//Tire load channel.
@@ -366,7 +377,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "tireLoad");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_TIRELOAD);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eTIRELOAD);
 	}
 
 	//Normalised tire load channel.
@@ -380,7 +391,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "normTireLoad");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_NORMALIZED_TIRELOAD);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eNORMALIZED_TIRELOAD);
 	}
 
 	//Wheel omega channel
@@ -394,7 +405,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "wheelOmega");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_WHEEL_OMEGA);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eWHEEL_OMEGA);
 	}
 
 	//Tire friction
@@ -408,7 +419,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "friction");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_TIRE_FRICTION);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eTIRE_FRICTION);
 	}
 
 
@@ -423,7 +434,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "tireLongSlip");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_TIRE_LONG_SLIP);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eTIRE_LONG_SLIP);
 	}
 
 	//Normalised tire long force
@@ -437,7 +448,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "normTireLongForce");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_NORM_TIRE_LONG_FORCE);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eNORM_TIRE_LONG_FORCE);
 	}
 
 	//Tire lat slip
@@ -451,7 +462,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "tireLatSlip");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_TIRE_LAT_SLIP);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eTIRE_LAT_SLIP);
 	}
 
 	//Normalised tire lat force
@@ -465,7 +476,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "normTireLatForce");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_NORM_TIRE_LAT_FORCE);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eNORM_TIRE_LAT_FORCE);
 	}
 
 	//Normalized aligning moment
@@ -479,7 +490,7 @@ void PxVehicleGraph::setupWheelGraph
 		char title[64];
 		sprintf(title, "normTireAlignMoment");
 		desc2.mTitle=title;
-		setChannel(desc2,PxVehicleGraph::eCHANNEL_NORM_TIRE_ALIGNING_MOMENT);
+		setChannel(desc2,PxVehicleWheelGraphChannel::eNORM_TIRE_ALIGNING_MOMENT);
 	}
 }
 
@@ -498,8 +509,13 @@ PxVehicleTelemetryData* physx::PxVehicleTelemetryData::allocate(const PxU32 numW
 	//Patch up the pointers.
 	PxU8* ptr = (PxU8*)vehTelData + sizeof(PxVehicleTelemetryData);
 	vehTelData->mEngineGraph = (PxVehicleGraph*)ptr;
+	new(vehTelData->mEngineGraph) PxVehicleGraph();
 	ptr += sizeof(PxVehicleGraph);			
 	vehTelData->mWheelGraphs = (PxVehicleGraph*)ptr;
+	for(PxU32 i=0;i<numWheels;i++)
+	{
+		new(&vehTelData->mWheelGraphs[i]) PxVehicleGraph();
+	}
 	ptr += sizeof(PxVehicleGraph)*numWheels;	
 	vehTelData->mSuspforceAppPoints = (PxVec3*)ptr;
 	ptr += sizeof(PxVec3)*numWheels;	
@@ -507,7 +523,7 @@ PxVehicleTelemetryData* physx::PxVehicleTelemetryData::allocate(const PxU32 numW
 	ptr += sizeof(PxVec3)*numWheels;	
 
 	//Set the number of wheels in each structure that needs it.
-	vehTelData->mNumActiveWheels=numWheels;
+	vehTelData->mNbActiveWheels=numWheels;
 
 	//Finished.
 	return vehTelData;
@@ -528,7 +544,7 @@ const PxVec3& backgroundColor, const PxVec3& lineColorHigh, const PxVec3& lineCo
 		(graphSizeX, graphSizeY, engineGraphPosX, engineGraphPosY, 
 		backgroundColor, lineColorHigh, lineColorLow);
 
-	const PxU32 numActiveWheels=mNumActiveWheels;
+	const PxU32 numActiveWheels=mNbActiveWheels;
 	for(PxU32 k=0;k<numActiveWheels;k++)
 	{
 		mWheelGraphs[k].setupWheelGraph
@@ -544,7 +560,7 @@ void physx::PxVehicleTelemetryData::clear()
 {
 	mEngineGraph->clearRecordedChannelData();
 
-	const PxU32 numActiveWheels=mNumActiveWheels;
+	const PxU32 numActiveWheels=mNbActiveWheels;
 	for(PxU32 k=0;k<numActiveWheels;k++)
 	{
 		mWheelGraphs[k].clearRecordedChannelData();

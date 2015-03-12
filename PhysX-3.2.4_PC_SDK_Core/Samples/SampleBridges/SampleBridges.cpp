@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -55,8 +55,7 @@
 //	#define STEP_OFFSET				0.1f
 //	#define STEP_OFFSET				0.2f
 
-//	#define SLOPE_LIMIT				0.5f
-//	#define SLOPE_LIMIT				0.2f
+//	#define SLOPE_LIMIT				0.8f
 	#define SLOPE_LIMIT				0.0f
 //	#define INVISIBLE_WALLS_HEIGHT	6.0f
 	#define INVISIBLE_WALLS_HEIGHT	0.0f
@@ -187,7 +186,7 @@ static void buildBridge(PxScene& scene, PxPhysics& physics, PxMaterial& material
 	// create ground under character
 	if(1)
 	{
-		PxTransform	boxPose = tr * PxTransform(PxVec3(0.0f, -groundHeight, -10.0f-groundLength)*scale, PxQuat::createIdentity());
+		PxTransform	boxPose = tr * PxTransform(PxVec3(0.0f, -groundHeight, -10.0f-groundLength)*scale, PxQuat(PxIdentity));
 		boxPose.p += offset;
 
 		const PxVec3 boxSize = PxVec3(1.0f, groundHeight, groundLength) * scale;
@@ -230,7 +229,7 @@ static void buildBridge(PxScene& scene, PxPhysics& physics, PxMaterial& material
 				if(!lastPlank)
 				{
 					// plank = first plank...
-					plank->setRigidDynamicFlag(PxRigidDynamicFlag::eKINEMATIC, true);
+					plank->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
 				}
 				else
 				{
@@ -292,7 +291,7 @@ static void buildBridge(PxScene& scene, PxPhysics& physics, PxMaterial& material
 		}
 		if(lastPlank)
 		{
-			lastPlank->setRigidDynamicFlag(PxRigidDynamicFlag::eKINEMATIC, true);
+			lastPlank->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
 		}
 	}
 
@@ -337,12 +336,10 @@ SampleBridges::SampleBridges(PhysXSampleApplication& app) :
 	mControllerInitialPosition = PxExtendedVec3(18.0f, 2.0f, -64.0f);
 #endif
 	mCreateGroundPlane	= false;
-	mUseFixedStepper	= true;
+	//mStepperType = FIXED_STEPPER;
 	mDefaultDensity		= 0.1f;
 //	mDefaultDensity		= 1.0f;
 
-//	mUseDebugStepper	= true;
-	mUseDebugStepper	= false;
 }
 
 SampleBridges::~SampleBridges()
@@ -391,7 +388,7 @@ void SampleBridges::newShape(const RAWShape& data)
 			const PxVec3 center = (p0 + p1)*0.5f;
 
 			PxVec3 dir, right, up;
-			computeBasis(p0, p1, dir, right, up);
+			Ps::computeBasis(p0, p1, dir, right, up);
 
 			PxMat33 m(right, up, dir);
 			PxTransform tr;
@@ -433,28 +430,31 @@ void SampleBridges::newShape(const RAWShape& data)
 				PxU32 nb = bridgeActors[i]->getShapes(&boxShape, 1);
 				PX_ASSERT(nb==1);
 				PX_UNUSED(nb);
-				createRenderBoxFromShape(boxShape, m, gBoxUVs);
+				createRenderBoxFromShape(bridgeActors[i], boxShape, m, gBoxUVs);
 			}
 		}
 		else if(strcmp(data.mName, "Platform")==0)
 		{
-			const PxTransform idt = PxTransform::createIdentity();
+			const PxTransform idt = PxTransform(PxIdentity);
 
 			PxRigidDynamic* platformActor = (PxRigidDynamic*)::createBox(getActiveScene(), getPhysics(), idt, gGlobalScale * PxVec3(1.0f, 5.0f, 5.0f), 1.0f, getDefaultMaterial(), NULL, 0);
 #ifdef CCT_ON_BRIDGES
 			platformActor->setName(gPlatformName);
 #endif
-			platformActor->setRigidDynamicFlag(PxRigidDynamicFlag::eKINEMATIC, true);
+			platformActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
 
 //			createRenderObjectsFromActor(platformActor, mPlatformMaterial);
 			PxShape* platformShape = NULL;
 			platformActor->getShapes(&platformShape, 1);
 			PX_ASSERT(platformShape);
-			RenderBaseActor* renderActor = createRenderObjectFromShape(platformShape, mPlatformMaterial);
+			RenderBaseActor* renderActor = createRenderObjectFromShape(platformActor, platformShape, mPlatformMaterial);
 
 #ifdef PLATFORMS_AS_OBSTACLES
 //			platformShape->userData = NULL;
-			renderActor->setPhysicsShape(NULL);
+			renderActor->setPhysicsShape(NULL, NULL);
+			PxBounds3 maxBounds;
+			maxBounds.setMaximal();
+			renderActor->setWorldBounds(maxBounds);
 #else
 			PX_UNUSED(renderActor);
 #endif
@@ -477,6 +477,7 @@ void SampleBridges::newShape(const RAWShape& data)
 void SampleBridges::onInit()
 {
 	PhysXSample::onInit();
+	PxSceneWriteLock scopedLock(*mScene);
 
 	mApplication.setMouseCursorHiding(true);
 	mApplication.setMouseCursorRecentering(true);
@@ -518,7 +519,7 @@ void SampleBridges::onInit()
 	}
 
 #ifdef CCT_ON_BRIDGES
-	mControllerManager = PxCreateControllerManager(getPhysics().getFoundation());
+	mControllerManager = PxCreateControllerManager(getActiveScene());
 
 	ControlledActorDesc desc;
 	desc.mType					= PxControllerShapeType::eCAPSULE;
@@ -531,10 +532,12 @@ void SampleBridges::onInit()
 	desc.mRadius				= gControllerRadius;
 	desc.mHeight				= gStandingSize;
 	desc.mCrouchHeight			= gCrouchingSize;
+	desc.mReportCallback		= this;
+	desc.mBehaviorCallback		= this;
 
 	{
 		mActor = SAMPLE_NEW(ControlledActor)(*this);
-		mActor->init(desc, mControllerManager, this, this);
+		mActor->init(desc, mControllerManager);
 
 		RenderBaseActor* actor0 = mActor->getRenderActorStanding();
 		RenderBaseActor* actor1 = mActor->getRenderActorCrouching();
@@ -588,20 +591,23 @@ void SampleBridges::onInit()
 
 void SampleBridges::onShutdown()
 {
+	{
+		PxSceneWriteLock scopedLock(*mScene);
 #ifdef CCT_ON_BRIDGES
-	DELETESINGLE(mCCTCamera);
-	#ifdef PLATFORMS_AS_OBSTACLES
-	SAFE_RELEASE(mObstacleContext);
-	DELETEARRAY(mBoxObstacles);
-	#endif
-	mControllerManager->release();
+		DELETESINGLE(mCCTCamera);
+		#ifdef PLATFORMS_AS_OBSTACLES
+		SAFE_RELEASE(mObstacleContext);
+		DELETEARRAY(mBoxObstacles);
+		#endif
+		mControllerManager->release();
 #endif
-
-	const size_t nbJoints = mJoints.size();
-	for(PxU32 i=0;i<nbJoints;i++)
-		if(mJoints[i])
-			mJoints[i]->release();
-	mJoints.clear();
+		const size_t nbJoints = mJoints.size();
+		for(PxU32 i=0;i<nbJoints;i++)
+			if(mJoints[i])
+				mJoints[i]->release();
+		mJoints.clear();
+	}
+	
 
 	mPlatformManager.release();
 
@@ -684,7 +690,7 @@ bool findAndReplaceWithLast(std::vector<T*>& array, T* ptr)
 
 void SampleBridges::onTickPreRender(float dtime)
 {
-//	printf("SampleBridges::onTickPreRender\n");
+//	shdfnd::printFormatted("SampleBridges::onTickPreRender\n");
 
 	const bool paused = isPaused();
 
@@ -699,7 +705,7 @@ void SampleBridges::onTickPreRender(float dtime)
 
 	if(!postUpdate && !mPause)
 	{
-//		printf("CCT sync\n");
+//		shdfnd::printFormatted("CCT sync\n");
 		mActor->sync();
 	}
 #endif
@@ -713,6 +719,7 @@ void SampleBridges::onTickPreRender(float dtime)
 			mBombTimer -= dtime;
 			if(mBombTimer<0.0f)
 			{
+				PxSceneWriteLock scopedLock(*mScene);
 				mBombTimer = 0.0f;
 
 				{
@@ -755,7 +762,8 @@ void SampleBridges::onTickPreRender(float dtime)
 					{
 						PxShape* currentShape = shapes[i];
 
-						RenderBaseActor* renderActor = (RenderBaseActor*)currentShape->userData;
+						RenderBaseActor* renderActor = getRenderActor(mBomb, currentShape);
+						unlink(renderActor, currentShape, mBomb);
 
 						findAndReplaceWithLast(mRenderActors, renderActor);
 
@@ -781,7 +789,7 @@ void SampleBridges::onTickPreRender(float dtime)
 #ifdef CCT_ON_BRIDGES
 	if(postUpdate && !mPause)
 	{
-//		printf("CCT sync\n");
+//		shdfnd::printFormatted("CCT sync\n");
 		mActor->sync();
 	}
 #endif
@@ -796,7 +804,7 @@ void SampleBridges::onTickPostRender(float dtime)
 	// PT: add CCT's internal debug rendering
 	if(mEnableCCTDebugRender)
 	{
-		mControllerManager->setDebugRenderingFlags(PxU32(PxControllerDebugRenderFlags::eALL));
+		mControllerManager->setDebugRenderingFlags(PxControllerDebugRenderFlag::eALL);
 		PxRenderBuffer& renderBuffer = mControllerManager->getRenderBuffer();
 		RenderPhysX3Debug* renderer = getDebugRenderer();
 		renderer->update(renderBuffer);
@@ -804,11 +812,11 @@ void SampleBridges::onTickPostRender(float dtime)
 	}
 	else
 	{
-		mControllerManager->setDebugRenderingFlags(0);
+		mControllerManager->setDebugRenderingFlags(PxControllerDebugRenderFlag::eNONE);
 	}
 
 #ifdef CCT_ON_BRIDGES
-//	mControllerManager->setDebugRenderingFlags(PxControllerDebugRenderFlags::eCACHED_BV|PxControllerDebugRenderFlags::eTEMPORAL_BV);
+//	mControllerManager->setDebugRenderingFlags(PxControllerDebugRenderFlag::eCACHED_BV|PxControllerDebugRenderFlag::eTEMPORAL_BV);
 	PxRenderBuffer& renderBuffer = mControllerManager->getRenderBuffer();
 	getDebugRenderer()->update(renderBuffer);
 	renderBuffer.clear();
@@ -819,9 +827,9 @@ void SampleBridges::onTickPostRender(float dtime)
 
 	if(0)
 	{
-		printf("Render time:   %f\n", mElapsedRenderTime);
-		printf("Platform time: %f\n", mPlatformManager.getElapsedTime());
-		printf("Delta:         %f\n", lag);
+		shdfnd::printFormatted("Render time:   %f\n", mElapsedRenderTime);
+		shdfnd::printFormatted("Platform time: %f\n", mPlatformManager.getElapsedTime());
+		shdfnd::printFormatted("Delta:         %f\n", lag);
 	}
 }
 
@@ -833,26 +841,33 @@ void SampleBridges::updateRenderPlatforms(float dtime)
 	// PT: compute new positions for (render) platforms, then move their corresponding obstacles to these positions.
 	const PxU32 nbPlatforms = mPlatformManager.getNbPlatforms();
 	KinematicPlatform** platforms = mPlatformManager.getPlatforms();
-	for(PxU32 i=0;i<nbPlatforms;i++)
-	{
-		if(1)
-		{
-			PxRigidDynamic* actor = platforms[i]->getPhysicsActor();
-			PxShape* shape = NULL;
-			actor->getShapes(&shape, 1);
-			RenderBaseActor* renderActor = (RenderBaseActor*)shape->userData;
-			renderActor->setTransform(platforms[i]->getRenderPose());
-		}
 
-		platforms[i]->updateRender(dtime, mObstacleContext);
+	{
+		PxSceneReadLock scopedLock(*mScene);
+
+		for(PxU32 i=0;i<nbPlatforms;i++)
+		{
+			if(1)
+			{
+				PxRigidDynamic* actor = platforms[i]->getPhysicsActor();
+				PxShape* shape = NULL;
+				actor->getShapes(&shape, 1);
+				RenderBaseActor* renderActor = getRenderActor(actor, shape);
+				renderActor->setTransform(platforms[i]->getRenderPose());
+			}
+
+			platforms[i]->updateRender(dtime, mObstacleContext);
+		}
 	}
 
 	// PT: if render time & physics time varies too much, we must resync the physics to avoid large visual mismatchs
 	if(mMustResync)
 	{
+		PxSceneWriteLock scopedLock(*mScene);
+
 //		mElapsedPlatformTime = mElapsedRenderTime;
 		mPlatformManager.syncElapsedTime(mElapsedRenderTime);
-//		static int count=0;		printf("Resync %d\n", count++);
+//		static int count=0;		shdfnd::printFormatted("Resync %d\n", count++);
 		for(PxU32 i=0;i<nbPlatforms;i++)
 		{
 			PxRigidDynamic* actor = platforms[i]->getPhysicsActor();
@@ -867,7 +882,7 @@ void SampleBridges::updateRenderPlatforms(float dtime)
 
 void SampleBridges::onSubstep(float dtime)
 {
-//	printf("onSubstep\n");
+//	shdfnd::printFormatted("onSubstep\n");
 	mPlatformManager.updatePhysicsPlatforms(dtime);
 }
 

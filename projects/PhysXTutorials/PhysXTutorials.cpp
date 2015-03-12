@@ -256,7 +256,7 @@ void PhysXTutorial::addBox(PxShape * pShape, PxRigidDynamic * actor)
 	}
 
 	// get the transofrm
-	PxMat44 m(PxShapeExt::getGlobalPose(*pShape));	// @AIE missing second func arg
+	PxMat44 m(PxShapeExt::getGlobalPose(*pShape, *actor));	// @AIE missing second func arg
 
 
 	glm::mat4 M(m.column0.x, m.column0.y, m.column0.z, m.column0.w,

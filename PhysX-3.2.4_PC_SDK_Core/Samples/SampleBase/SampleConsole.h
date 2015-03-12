@@ -23,14 +23,14 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #ifndef SAMPLE_CONSOLE_H
 #define SAMPLE_CONSOLE_H
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "RendererColor.h"
 #include "RendererWindow.h"
 #include "SampleAllocator.h"
@@ -54,7 +54,7 @@ namespace SampleRenderer
 		char							mText[CONSOLE_MAX_COL];
 	};
 
-	#define CONSOLE_MAX_COMMAND_LENGTH		32
+	#define CONSOLE_MAX_COMMAND_LENGTH		48
 	#define	CONSOLE_MAX_COMMAND_NB			256
 	class Console;
 	struct ConsoleCommand : public SampleAllocateable
@@ -81,7 +81,7 @@ namespace SampleRenderer
 
 				bool			render(SampleRenderer::Renderer* rnd);
 				void			onKeyDown(SampleFramework::SampleUserInput::KeyCode keyCode, PxU32 param);
-				bool			onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val);
+				void			onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val);
 				void			collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents);
 				void			out(const char* string);
 				void			addCmd(const char* full_cmd, void (*function)(Console*, const char*, void*));
@@ -93,7 +93,15 @@ namespace SampleRenderer
 				void			setActive(bool b)				{ mIsActive = b;		}
 				void			setUserData(void* userData)		{ mUserData = userData;	}
 
-//		private:
+
+		static void				BasicCmdexit(Console* console, const char* text, void* user_data);
+		static void				BasicCmdcls(Console* console, const char* text, void* user_data);
+		static void				BasicCmdSetPrompt(Console* console, const char* text, void* user_data);
+		static void				BasicCmdcmdlist(Console* console, const char* text, void* user_data);
+		static void				BasicCmdcmdhist(Console* console, const char* text, void* user_data);
+
+
+		private:
 				char			mCmdhist[CONSOLE_MAX_HIST][CONSOLE_MAX_COL];
 				long			mNewcmd;
 				long			mNumcmdhist;
@@ -109,19 +117,18 @@ namespace SampleRenderer
 				PxI32			mNewline;
 				PxI32			mCol;
 				bool			mIsActive;
-				SampleFramework::SamplePlatform* m_Platform;
 
 		// Internal methods
 				void			cmdClear();
 				void			advance();
 				void			resetCol();
 				void			process();
-				void			scroll(const SampleFramework::InputEvent& ie);
 				void			in(PxU32 wparam);
-				void			cmdHistory(const SampleFramework::InputEvent& ie);
+				void			cmdHistory();
 				bool			execCmd(const char* cmd, const char* param);
 				void			destroy();
 				bool			findBestCommand(char* best_command, const char* text, PxU32& tabIndex)	const;
+
 	};
 
 #endif

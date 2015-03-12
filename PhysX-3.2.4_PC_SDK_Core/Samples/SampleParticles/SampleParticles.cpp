@@ -23,12 +23,11 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-#include "PxPhysX.h"
-
+#include "PxPhysXConfig.h"
 #if PX_USE_PARTICLE_SYSTEM_API
 
 #include "extensions/PxExtensionsAPI.h"
@@ -49,6 +48,7 @@
 
 #include "PxTkStream.h"
 #include <PsString.h>
+#include <PsThread.h>
 
 #include "ParticleEmitterRate.h"
 #include "ParticleEmitterPressure.h"
@@ -199,15 +199,17 @@ void SampleParticles::onTickPreRender(float dtime)
 
 	mRaygun.update(dtime);
 
-	// start the simulation	
+	// start the simulation
 	PhysXSample::onTickPreRender(dtime);
-
+	
 	for(size_t i = 0; i < mRenderMaterials.size(); ++i)
 		mRenderMaterials[i]->update(*getRenderer());
 }
 
-void SampleParticles::onSubstep(float dtime)
+void SampleParticles::onSubstepSetup(float dtime, PxBaseTask* cont)
 {
+	PxSceneWriteLock scopedLock(*mScene);
+
 	for (PxU32 i = 0; i < mEmitters.size(); ++i)
 		mEmitters[i].update(dtime);
 		
@@ -328,7 +330,7 @@ void SampleParticles::customizeRender()
 	renderer->getWindowSize(width, height);
 
 	PxU32 y = height-2*yInc;
-	PxU32 x = width - 240;
+	PxU32 x = width - 360;
 
 	if (mLoadTextAlpha > 0)
 	{
@@ -341,7 +343,12 @@ void SampleParticles::customizeRender()
 #if PX_SUPPORT_GPU_PHYSX
 	{
 		const RendererColor textColor(255, 0, 0, 255);
-		renderer->print(x, y, mRunOnGpu ? "Running on GPU" : "Running on CPU", scale, shadowOffset, textColor);
+
+		const char* deviceName = (mRunOnGpu)?getActiveScene().getTaskManager()->getGpuDispatcher()->getCudaContextManager()->getDeviceName():"";
+		char buf[2048];
+		sprintf(buf, (mRunOnGpu)?"Running on GPU (%s)":"Running on CPU %s", deviceName);
+
+		renderer->print(x, y, buf, scale, shadowOffset, textColor);
 	}
 #endif
 }
@@ -403,7 +410,7 @@ void SampleParticles::loadAssets()
 	}
 	// load debris texture
 	{
-		SampleFramework::SampleAsset* ps_asset = getAsset(getSampleMediaFilename(debris_texture), SampleFramework::SampleAsset::ASSET_TEXTURE);
+		SampleFramework::SampleAsset* ps_asset = getAsset(debris_texture, SampleFramework::SampleAsset::ASSET_TEXTURE);
 		mManagedAssets.push_back(ps_asset);
 		PX_ASSERT(ps_asset->getType() == SampleFramework::SampleAsset::ASSET_TEXTURE);	
 		SampleFramework::SampleTextureAsset*tex_ps_asset = static_cast<SampleFramework::SampleTextureAsset*>(ps_asset);
@@ -430,17 +437,11 @@ void SampleParticles::onInit()
 	// we don't need ground plane
 	mCreateGroundPlane = false;
 
-#if defined(PX_PS3)
-	mNbThreads = 1;
-#elif defined(PX_X360)
-	mNbThreads = 3;
-#elif defined(PX_APPLE_IOS)
-	mNbThreads = 2;
-#else
-	mNbThreads = 4;
-#endif
+	mNbThreads = PxMax(PxI32(shdfnd::Thread::getNbPhysicalCores())-1, 0);
 
 	PhysXSample::onInit();
+
+	PxSceneWriteLock scopedLock(*mScene);
 
 	mApplication.setMouseCursorHiding(true);
 	mApplication.setMouseCursorRecentering(true);
@@ -477,8 +478,8 @@ void SampleParticles::onInit()
 	createDrain();
 
 	//debug visualization parameter
-	toggleVisualizationParam(getActiveScene(), PxVisualizationParameter::ePARTICLE_SYSTEM_BROADPHASE_BOUNDS);
-	toggleVisualizationParam(getActiveScene(), PxVisualizationParameter::eCOLLISION_SHAPES);
+	mScene->setVisualizationParameter(PxVisualizationParameter::ePARTICLE_SYSTEM_BROADPHASE_BOUNDS, 1.0f);
+	mScene->setVisualizationParameter(PxVisualizationParameter::eCOLLISION_SHAPES, 0.0f);
 
 	// all particle related setup
 	createParticleContent();
@@ -492,6 +493,8 @@ void SampleParticles::onShutdown()
 
 void SampleParticles::createParticleContent()
 {
+	PxSceneWriteLock scopedLock(*mScene);
+
 	switch (mParticleLoadIndex)
 	{
 	case 0:
@@ -628,7 +631,7 @@ void SampleParticles::loadTerrain(const char* path, PxReal xScale, PxReal yScale
 		PxTransform pose(PxVec3(-((PxReal)nbRows*yScale) / 2.0f, 
 								0.0f, 
 								-((PxReal)nbColumns*xScale) / 2.0f), 
-						PxQuat::createIdentity());
+						PxQuat(PxIdentity));
 		PxRigidActor* hf = getPhysics().createRigidStatic(pose);
 		runtimeAssert(hf, "PxPhysics::createRigidStatic returned NULL\n");
 		PxShape* shape = hf->createShape(PxHeightFieldGeometry(heightField, PxMeshGeometryFlags(), zScale, xScale, yScale), getDefaultMaterial());
@@ -657,7 +660,7 @@ void SampleParticles::loadTerrain(const char* path, PxReal xScale, PxReal yScale
 		// add mesh to renderer
 		RAWMesh data;
 		data.mName = "terrain";
-		data.mTransform = PxTransform::createIdentity();
+		data.mTransform = PxTransform(PxIdentity);
 		data.mNbVerts = nbColumns * nbRows;
 		data.mVerts = (PxVec3*)vertices;
 		data.mVertexNormals = NULL;
@@ -666,7 +669,7 @@ void SampleParticles::loadTerrain(const char* path, PxReal xScale, PxReal yScale
 		data.mNbFaces = (nbColumns - 1) * (nbRows - 1) * 2;
 		data.mIndices = indices;
 		RenderMeshActor* hf_mesh = createRenderMeshFromRawMesh(data);
-		hf_mesh->setPhysicsShape(shape);
+		hf_mesh->setPhysicsShape(shape, hf);
 		SAMPLE_FREE(indices);
 		SAMPLE_FREE(UVs);
 		DELETEARRAY(verticesA);
@@ -682,6 +685,7 @@ void SampleParticles::loadTerrain(const char* path, PxReal xScale, PxReal yScale
 void SampleParticles::customizeSceneDesc(PxSceneDesc& setup) 
 {
 	setup.filterShader = SampleParticlesFilterShader;
+	setup.flags |= PxSceneFlag::eREQUIRE_RW_LOCK;
 }
 
 void SampleParticles::collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents)
@@ -695,20 +699,20 @@ void SampleParticles::collectInputEvents(std::vector<const SampleFramework::Inpu
 	getApplication().getPlatform()->getSampleUserInput()->unregisterInputEvent(MOUSE_LOOK_BUTTON);
 
 	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(RAYGUN_SHOT,				SCAN_CODE_SPACE,	XKEY_SPACE,		PS3KEY_SPACE,	AKEY_UNKNOWN,	OSXKEY_SPACE,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN, 	LINUXKEY_SPACE);
-	DIGITAL_INPUT_EVENT_DEF(CHANGE_PARTICLE_CONTENT,	WKEY_M,				XKEY_M,			PS3KEY_M,		AKEY_UNKNOWN,	OSXKEY_M,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_M);
+	DIGITAL_INPUT_EVENT_DEF(RAYGUN_SHOT,				SCAN_CODE_SPACE,	XKEY_SPACE,		X1KEY_SPACE,	PS3KEY_SPACE,	PS4KEY_SPACE,	AKEY_UNKNOWN,	OSXKEY_SPACE,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN, 	LINUXKEY_SPACE,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CHANGE_PARTICLE_CONTENT,	WKEY_M,				XKEY_M,			X1KEY_M,		PS3KEY_M,		PS4KEY_M,		AKEY_UNKNOWN,	OSXKEY_M,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_M,		WIIUKEY_UNKNOWN);
 	
 	//digital mouse events
-	DIGITAL_INPUT_EVENT_DEF(RAYGUN_SHOT,				MOUSE_BUTTON_LEFT,	XKEY_UNKNOWN, PS3KEY_UNKNOWN,	AKEY_UNKNOWN,	MOUSE_BUTTON_LEFT,	PSP2KEY_UNKNOWN, IKEY_UNKNOWN, MOUSE_BUTTON_LEFT);
+	DIGITAL_INPUT_EVENT_DEF(RAYGUN_SHOT,				MOUSE_BUTTON_LEFT,	XKEY_UNKNOWN,	X1KEY_UNKNOWN,	PS3KEY_UNKNOWN,	PS4KEY_UNKNOWN,	AKEY_UNKNOWN,	MOUSE_BUTTON_LEFT,PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	MOUSE_BUTTON_LEFT,WIIUKEY_UNKNOWN);
 
 	//digital gamepad events
-	DIGITAL_INPUT_EVENT_DEF(RAYGUN_SHOT,				GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, AKEY_UNKNOWN, GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, IKEY_UNKNOWN, LINUXKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(RAYGUN_SHOT,				GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, GAMEPAD_RIGHT_SHOULDER_BOT, AKEY_UNKNOWN, GAMEPAD_RIGHT_SHOULDER_BOT, PSP2KEY_UNKNOWN, IKEY_UNKNOWN, LINUXKEY_UNKNOWN, GAMEPAD_RIGHT_SHOULDER_BOT);
 
     //touch events
-    TOUCH_INPUT_EVENT_DEF(RAYGUN_SHOT,			"Ray Gun",      AQUICK_BUTTON_1,    IQUICK_BUTTON_1);
+    TOUCH_INPUT_EVENT_DEF(RAYGUN_SHOT,			"Ray Gun",      AQUICK_BUTTON_1,    IQUICK_BUTTON_1, TOUCH_QUICK_BUTTON_1);
 }
 
-bool SampleParticles::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
+void SampleParticles::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
 {
 	switch(ie.m_Id) 
 	{
@@ -733,8 +737,6 @@ bool SampleParticles::onDigitalInputEvent(const SampleFramework::InputEvent& ie,
 		PhysXSample::onDigitalInputEvent(ie,val);
 		break;
 	}	
-
-	return true;
 }
 
 void SampleParticles::onPointerInputEvent(const SampleFramework::InputEvent& ie, physx::PxU32 x, physx::PxU32 y, physx::PxReal dx, physx::PxReal dy, bool val)
@@ -819,7 +821,7 @@ void SampleParticles::createDrain()
 	{
 		PxBoxGeometry bg;
 		bg.halfExtents = PxVec3(130.0f, lakeHeight + 1.0f, 130.0f);
-		PxRigidStatic* actor = getPhysics().createRigidStatic(PxTransform(PxVec3(0.0f, 0.0f, 0.0f), PxQuat::createIdentity()));
+		PxRigidStatic* actor = getPhysics().createRigidStatic(PxTransform(PxVec3(0.0f, 0.0f, 0.0f), PxQuat(PxIdentity)));
 		runtimeAssert(actor, "PxPhysics::createRigidStatic returned NULL\n");
 		PxShape* shape = actor->createShape(bg, getDefaultMaterial());
 		runtimeAssert(shape, "PxRigidStatic::createShape returned NULL\n");
@@ -862,7 +864,7 @@ void SampleParticles::createParticleSystems()
 	}
 
 	// create debris particle system
-#if !defined(RENDERER_ENABLE_GLES2)
+#if !defined(RENDERER_ENABLE_GLES2) && !defined(RENDERER_ENABLE_LIBGXM) && !defined(RENDERER_WINMODERN)
 	{
 		PxParticleBase* px_ps = createParticleSystem(mDebrisParticleCount);
 		px_ps->setStaticFriction(10.0f);
@@ -880,6 +882,8 @@ void SampleParticles::createParticleSystems()
 
 void SampleParticles::releaseParticleSystems()
 {	
+	PxSceneWriteLock scopedLock(*mScene);
+
 	if (mWaterfallParticleSystem)
 	{
 		removeRenderParticleSystemActor(*mWaterfallParticleSystem);
@@ -941,7 +945,7 @@ void SampleParticles::createHotpotEmitter(const PxVec3& position)
 	}
 	
 	// setup debris emitter
-#if !defined(RENDERER_ENABLE_GLES2)
+#if !defined(RENDERER_ENABLE_GLES2) && !defined(RENDERER_ENABLE_LIBGXM)
 	{
 		ParticleEmitterRate* rateEmitter = SAMPLE_NEW(ParticleEmitterRate)(
 			ParticleEmitter::Shape::eRECTANGLE, 1.0f, 1.0f, 0.1f);				// shape and size of emitter and spacing between particles being emitted
@@ -1034,7 +1038,7 @@ void SampleParticles::Raygun::init(SampleParticles* sample)
 		rateEmitter->setRate(sample->mSmokeEmitterRate/2);
 		rateEmitter->setVelocity(2.0f);
 		rateEmitter->setRandomAngle(PxHalfPi / 3);
-		rateEmitter->setLocalPose(PxTransform::createIdentity());
+		rateEmitter->setLocalPose(PxTransform(PxIdentity));
 
 		mSmokeEmitter.emitter = rateEmitter;
 		mSmokeEmitter.isEnabled = true;
@@ -1042,7 +1046,7 @@ void SampleParticles::Raygun::init(SampleParticles* sample)
 	}
 
 	// create debris emitter
-#if !defined(RENDERER_ENABLE_GLES2)
+#if !defined(RENDERER_ENABLE_GLES2) && !defined(RENDERER_ENABLE_LIBGXM)
 	{
 		ParticleEmitterRate* rateEmitter = SAMPLE_NEW(ParticleEmitterRate)(
 			ParticleEmitter::Shape::eRECTANGLE, 1.0f, 1.0f, 0.1f);				// shape and size of emitter and spacing between particles being emitted
@@ -1050,7 +1054,7 @@ void SampleParticles::Raygun::init(SampleParticles* sample)
 		rateEmitter->setRate(50.0f);
 		rateEmitter->setVelocity(3.0f);
 		rateEmitter->setRandomAngle(PxHalfPi / 6);
-		rateEmitter->setLocalPose(PxTransform::createIdentity());
+		rateEmitter->setLocalPose(PxTransform(PxIdentity));
 
 		mDebrisEmitter.emitter = rateEmitter;
 		mDebrisEmitter.isEnabled = true;
@@ -1155,11 +1159,13 @@ void SampleParticles::Raygun::update(float dtime)
 	PxMat33 cameraBase(cameraPose.q);
 	PxVec3 cameraForward = -cameraBase[2];
 	PxVec3 cameraUp = -cameraBase[1];
+
+	PxSceneWriteLock scopedLock(scene);
 	
 	// perform raycast here and update impact point
-	PxRaycastHit hit;
-	mIsImpacting = scene.raycastSingle(cameraPose.p, cameraForward, 500.0f, PxSceneQueryFlags(0xffffffff), hit);
-	float impactParam = mIsImpacting ? (hit.impact - position).magnitude() : FLT_MAX;	
+	PxRaycastBuffer hit;
+	mIsImpacting = scene.raycast(cameraPose.p, cameraForward, 500.0f, hit, PxSceneQueryFlags(0xffff));
+	float impactParam = mIsImpacting ? (hit.block.position - position).magnitude() : FLT_MAX;	
 
 	PxTransform rayPose(position + cameraUp * 0.5f, cameraPose.q*PxQuat(PxHalfPi, PxVec3(0,1,0)));
 
@@ -1237,9 +1243,9 @@ void SampleParticles::Raygun::update(float dtime)
 			geometry.convexMesh->release();
 			
 			// remove render and physics actor
-			PxRigidActor& actorToRemove = debrisShape->getActor();
-			mSample->removeActor(&actorToRemove);			
-			actorToRemove.release();
+			PxRigidActor* actorToRemove = debrisShape->getActor();
+			mSample->removeActor(actorToRemove);			
+			actorToRemove->release();
 			
 			// remove actor from lifetime map
 			mDebrisLifetime.erase(it);
@@ -1277,14 +1283,15 @@ PxConvexMesh* SampleParticles::Raygun::generateConvex(PxPhysics& sdk, PxCooking&
 
 PxRigidDynamic* SampleParticles::Raygun::createRayCapsule(bool enableCollision, PxFilterData filterData)
 {
-	PxRigidDynamic* actor = mSample->getPhysics().createRigidDynamic(PxTransform::createIdentity());
+	PxSceneWriteLock scopedLock(mSample->getActiveScene());
+	PxRigidDynamic* actor = mSample->getPhysics().createRigidDynamic(PxTransform(PxIdentity));
 	mSample->runtimeAssert(actor, "PxPhysics::createRigidDynamic returned NULL\n");
 	PxShape* shape = actor->createShape(PxCapsuleGeometry(0.1f, 150.0f), mSample->getDefaultMaterial());
 	mSample->runtimeAssert(shape, "PxRigidDynamic::createShape returned NULL\n");
 	shape->setFlag(PxShapeFlag::eSCENE_QUERY_SHAPE, false);
 	shape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, enableCollision);
 	shape->setSimulationFilterData(filterData);
-	actor->setRigidDynamicFlag(PxRigidDynamicFlag::eKINEMATIC, true);
+	actor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
 	actor->setMass(1.0f);
 	actor->setMassSpaceInertiaTensor(PxVec3(1.0f));
 	mSample->getActiveScene().addActor(*actor);	
@@ -1295,6 +1302,7 @@ void SampleParticles::Raygun::releaseRayCapsule(PxRigidDynamic*& actor)
 {
 	if (actor)
 	{
+		PxSceneWriteLock scopedLock(mSample->getActiveScene());
 		mSample->removeActor(actor);
 		actor->release();
 		actor = NULL;
@@ -1303,6 +1311,7 @@ void SampleParticles::Raygun::releaseRayCapsule(PxRigidDynamic*& actor)
 
 void SampleParticles::Raygun::updateRayCapsule(PxRigidDynamic* actor, const PxTransform& pose, float radiusMaxMultiplier)
 {
+	PxSceneWriteLock scopedLock(mSample->getActiveScene());
 	// move and resize capsule
 	actor->setGlobalPose(pose);
 
@@ -1332,6 +1341,8 @@ void SampleParticles::toggleGpu()
 	// reset all the particles to switch between GPU and CPU
 	static const PxU32 sActorBufferSize = 100;
 	PxActor* actors[sActorBufferSize];
+
+	PxSceneWriteLock scopedLock(*mScene);
 
 	PxU32 numParticleFluidActors = getActiveScene().getActors(PxActorTypeSelectionFlag::ePARTICLE_FLUID, actors, sActorBufferSize);
 	PX_ASSERT(numParticleFluidActors < sActorBufferSize);

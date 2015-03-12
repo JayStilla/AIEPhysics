@@ -23,22 +23,35 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
+
+#ifndef RENDERER_FOUNDATION_H
+#define RENDERER_FOUNDATION_H
+
+#include <stdio.h>
+#include "foundation/PxPreprocessor.h"
 
 namespace physx
 {
+#ifdef PX_WIIU
+	struct FILE;
+#endif
+
 	namespace shdfnd{}
 
-	namespace pxtask
-	{
-		class CudaContextManager;
-	}
+	class PxCudaContextManager;
 }
 
 namespace SampleRenderer
 {
 	using namespace physx;
 	namespace Fnd = physx::shdfnd;
+
+#ifdef PX_WIIU
+	typedef physx::FILE File;
+#else
+	typedef ::FILE File;
+#endif
 
 } // namespace Renderer
 
@@ -48,3 +61,5 @@ namespace SampleRenderer
 #include <foundation/PxMat44.h>
 #include <foundation/PxTransform.h>
 #include <foundation/PxErrorCallback.h>
+
+#endif

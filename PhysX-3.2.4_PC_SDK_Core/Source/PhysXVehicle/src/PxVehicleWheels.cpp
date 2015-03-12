@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -54,7 +54,7 @@ extern PxVec3 gForward;
 PxF32 gThresholdLongSpeed=5.0f;
 PxU32 gLowLongSpeedSubstepCount=3;
 PxU32 gHighLongSpeedSubstepCount=1;
-
+PxF32 gMinLongSlipDenominator=4.0f;
 
 PxVehicleWheelsSimData* PxVehicleWheelsSimData::allocate(const PxU32 numWheels)
 {
@@ -69,8 +69,8 @@ PxVehicleWheelsSimData* PxVehicleWheelsSimData::allocate(const PxU32 numWheels)
 	//Patchup pointers.
 	ptr += sizeof(PxVehicleWheelsSimData);
 	simData->mWheels4SimData = (PxVehicleWheels4SimData*)ptr;
-	simData->mNumWheels4 = numWheels4;
-	simData->mNumActiveWheels = numWheels;
+	simData->mNbWheels4 = numWheels4;
+	simData->mNbActiveWheels = numWheels;
 
 	//Placement new.
 	for(PxU32 i=0;i<numWheels4;i++)
@@ -80,22 +80,27 @@ PxVehicleWheelsSimData* PxVehicleWheelsSimData::allocate(const PxU32 numWheels)
 	new(&simData->mNormalisedLoadFilter) PxVehicleTireLoadFilterData();
 
 	//Enable used wheels, disabled unused wheels.
-	Ps::memZero(simData->mActiveWheelsBitmapBuffer, sizeof(PxU32) * (((PX_MAX_NUM_WHEELS + 31) & ~31) >> 5));
+	PxMemZero(simData->mActiveWheelsBitmapBuffer, sizeof(PxU32) * (((PX_MAX_NB_WHEELS + 31) & ~31) >> 5));
 	for(PxU32 i=0;i<numWheels;i++)
 	{
 		//Enabled used wheel.
 		simData->enableWheel(i);
+		simData->setWheelShapeMapping(i,(PxI32)i);
+		simData->setSceneQueryFilterData(i, PxFilterData());
 	}
 	for(PxU32 i=numWheels;i<numWheels4*4;i++)
 	{
 		//Disable unused wheel.
 		simData->disableWheel(i);
+		simData->setWheelShapeMapping(i,-1);
+		simData->setSceneQueryFilterData(i, PxFilterData());
 	}
 
 	//Default values for substep count computation.
 	simData->mThresholdLongitudinalSpeed = gThresholdLongSpeed;
 	simData->mLowForwardSpeedSubStepCount = gLowLongSpeedSubstepCount;
 	simData->mHighForwardSpeedSubStepCount = gHighLongSpeedSubstepCount;
+	simData->mMinLongSlipDenominator = gMinLongSlipDenominator;
 
 	return simData;
 }
@@ -105,11 +110,11 @@ void PxVehicleWheelsSimData::setChassisMass(const PxF32 chassisMass)
 
 	//Target spring natural frequency = 9.66
 	//Target spring damping ratio = 0.62
-	const PxF32 mult=1.0f/(1.0f*mNumActiveWheels);
+	const PxF32 mult=1.0f/(1.0f*mNbActiveWheels);
 	const PxF32 sprungMass=chassisMass*mult;
 	const PxF32 w0=9.66f;
 	const PxF32 r=0.62f;
-	for(PxU32 i=0;i<mNumActiveWheels;i++)
+	for(PxU32 i=0;i<mNbActiveWheels;i++)
 	{
 		PxVehicleSuspensionData susp=getSuspensionData(i);
 		susp.mSprungMass=sprungMass;
@@ -121,7 +126,7 @@ void PxVehicleWheelsSimData::setChassisMass(const PxF32 chassisMass)
 
 void PxVehicleWheelsSimData::free()
 {
-	for(PxU32 i=0;i<mNumWheels4;i++)
+	for(PxU32 i=0;i<mNbWheels4;i++)
 	{
 		mWheels4SimData[i].~PxVehicleWheels4SimData();
 	}
@@ -131,9 +136,9 @@ void PxVehicleWheelsSimData::free()
 
 PxVehicleWheelsSimData& PxVehicleWheelsSimData::operator=(const PxVehicleWheelsSimData& src)
 {
-	PX_CHECK_MSG(mNumActiveWheels == src.mNumActiveWheels, "target PxVehicleSuspWheelTireNSimData must match the number of wheels in src");
+	PX_CHECK_MSG(mNbActiveWheels == src.mNbActiveWheels, "target PxVehicleSuspWheelTireNSimData must match the number of wheels in src");
 
-	for(PxU32 i=0;i<src.mNumWheels4;i++)
+	for(PxU32 i=0;i<src.mNbWheels4;i++)
 	{
 		mWheels4SimData[i] = src.mWheels4SimData[i];
 	}
@@ -143,16 +148,17 @@ PxVehicleWheelsSimData& PxVehicleWheelsSimData::operator=(const PxVehicleWheelsS
 	mThresholdLongitudinalSpeed = src.mThresholdLongitudinalSpeed;
 	mLowForwardSpeedSubStepCount = src.mLowForwardSpeedSubStepCount;
 	mHighForwardSpeedSubStepCount = src.mHighForwardSpeedSubStepCount;
+	mMinLongSlipDenominator = src.mMinLongSlipDenominator;
 
-	Ps::memCopy(mActiveWheelsBitmapBuffer, src.mActiveWheelsBitmapBuffer, sizeof(PxU32)* (((PX_MAX_NUM_WHEELS + 31) & ~31) >> 5));
+	PxMemCopy(mActiveWheelsBitmapBuffer, src.mActiveWheelsBitmapBuffer, sizeof(PxU32)* (((PX_MAX_NB_WHEELS + 31) & ~31) >> 5));
 
 	return *this;
 }
 
 void PxVehicleWheelsSimData::copy(const PxVehicleWheelsSimData& src, const PxU32 srcWheel, const PxU32 wheel)
 {
-	PX_CHECK_AND_RETURN(srcWheel < src.mNumActiveWheels, "Illegal src wheel");
-	PX_CHECK_AND_RETURN(wheel < mNumActiveWheels, "Illegal target wheel");
+	PX_CHECK_AND_RETURN(srcWheel < src.mNbActiveWheels, "Illegal src wheel");
+	PX_CHECK_AND_RETURN(wheel < mNbActiveWheels, "Illegal target wheel");
 
 	setSuspensionData(wheel,src.getSuspensionData(srcWheel));
 	setWheelData(wheel,src.getWheelData(srcWheel));
@@ -161,21 +167,27 @@ void PxVehicleWheelsSimData::copy(const PxVehicleWheelsSimData& src, const PxU32
 	setSuspForceAppPointOffset(wheel,src.getSuspForceAppPointOffset(srcWheel));
 	setTireForceAppPointOffset(wheel,src.getTireForceAppPointOffset(srcWheel));
 	setWheelCentreOffset(wheel,src.getWheelCentreOffset(srcWheel));
+	setWheelShapeMapping(wheel, src.getWheelShapeMapping(srcWheel));
+	setSceneQueryFilterData(wheel, src.getSceneQueryFilterData(srcWheel));
+	if(src.getIsWheelDisabled(srcWheel))
+		disableWheel(wheel);
+	else
+		enableWheel(wheel);
 }
 
 bool PxVehicleWheelsSimData::isValid() const
 {
-	for(PxU32 i=0;i<mNumWheels4-1;i++)
+	for(PxU32 i=0;i<mNbWheels4-1;i++)
 	{
 		mWheels4SimData[i].isValid(0);
 		mWheels4SimData[i].isValid(1);
 		mWheels4SimData[i].isValid(2);
 		mWheels4SimData[i].isValid(3);
 	}
-	const PxU32 numInLastBlock = 4 - (4*mNumWheels4 - mNumActiveWheels);
+	const PxU32 numInLastBlock = 4 - (4*mNbWheels4 - mNbActiveWheels);
 	for(PxU32 i=0;i<numInLastBlock;i++)
 	{
-		mWheels4SimData[mNumWheels4-1].isValid(i);
+		mWheels4SimData[mNbWheels4-1].isValid(i);
 	}
 
 	PX_CHECK_AND_RETURN_VAL(mNormalisedLoadFilter.isValid(), "Invalid PxVehicleWheelsSimData.mNormalisedLoadFilter", false);
@@ -184,112 +196,136 @@ bool PxVehicleWheelsSimData::isValid() const
 
 void PxVehicleWheelsSimData::disableWheel(const PxU32 wheel)
 {
-	PX_CHECK_AND_RETURN(wheel < 4*mNumWheels4, "PxVehicleWheelsSimData::disableWheel - Illegal wheel");
+	PX_CHECK_AND_RETURN(wheel < 4*mNbWheels4, "PxVehicleWheelsSimData::disableWheel - Illegal wheel");
 
 	Cm::BitMap bm;
-	bm.setWords(mActiveWheelsBitmapBuffer, ((PX_MAX_NUM_WHEELS + 31) & ~31) >> 5);
+	bm.setWords(mActiveWheelsBitmapBuffer, ((PX_MAX_NB_WHEELS + 31) & ~31) >> 5);
 	bm.reset(wheel);
 }
 
 void PxVehicleWheelsSimData::enableWheel(const PxU32 wheel)
 {
-	PX_CHECK_AND_RETURN(wheel < 4*mNumWheels4, "PxVehicleWheelsSimData::disableWheel - Illegal wheel");
+	PX_CHECK_AND_RETURN(wheel < 4*mNbWheels4, "PxVehicleWheelsSimData::disableWheel - Illegal wheel");
 
 	Cm::BitMap bm;
-	bm.setWords(mActiveWheelsBitmapBuffer, ((PX_MAX_NUM_WHEELS + 31) & ~31) >> 5);
+	bm.setWords(mActiveWheelsBitmapBuffer, ((PX_MAX_NB_WHEELS + 31) & ~31) >> 5);
 	bm.set(wheel);
 }
 
 bool PxVehicleWheelsSimData::getIsWheelDisabled(const PxU32 wheel) const
 {
-	PX_CHECK_AND_RETURN_VAL(wheel < 4*mNumWheels4, "PxVehicleWheelsSimData::getIsWheelDisabled - Illegal wheel", false);
+	PX_CHECK_AND_RETURN_VAL(wheel < 4*mNbWheels4, "PxVehicleWheelsSimData::getIsWheelDisabled - Illegal wheel", false);
 	Cm::BitMap bm;
-	bm.setWords((PxU32*)mActiveWheelsBitmapBuffer, ((PX_MAX_NUM_WHEELS + 31) & ~31) >> 5);
+	bm.setWords((PxU32*)mActiveWheelsBitmapBuffer, ((PX_MAX_NB_WHEELS + 31) & ~31) >> 5);
 	return (bm.test(wheel) ? false : true);
 }
 
 const PxVehicleSuspensionData& PxVehicleWheelsSimData::getSuspensionData(const PxU32 id) const	
 {
-	PX_CHECK_MSG(id < 4*mNumWheels4, "PxVehicleWheelsSimData::getSuspensionData - Illegal wheel");
+	PX_CHECK_MSG(id < 4*mNbWheels4, "PxVehicleWheelsSimData::getSuspensionData - Illegal wheel");
 	return mWheels4SimData[id>>2].getSuspensionData(id & 3);
 }
 
 const PxVehicleWheelData& PxVehicleWheelsSimData::getWheelData(const PxU32 id) const	
 {
-	PX_CHECK_MSG(id < 4*mNumWheels4, "PxVehicleWheelsSimData::getWheelData - Illegal wheel");
+	PX_CHECK_MSG(id < 4*mNbWheels4, "PxVehicleWheelsSimData::getWheelData - Illegal wheel");
 	return mWheels4SimData[id>>2].getWheelData(id & 3);
 }
 
 const PxVehicleTireData& PxVehicleWheelsSimData::getTireData(const PxU32 id) const	
 {
-	PX_CHECK_MSG(id < 4*mNumWheels4, "PxVehicleWheelsSimData::getTireData - Illegal wheel");
+	PX_CHECK_MSG(id < 4*mNbWheels4, "PxVehicleWheelsSimData::getTireData - Illegal wheel");
 	return mWheels4SimData[id>>2].getTireData(id & 3);
 }
 
 const PxVec3& PxVehicleWheelsSimData::getSuspTravelDirection(const PxU32 id) const	
 {
-	PX_CHECK_MSG(id < 4*mNumWheels4, "PxVehicleWheelsSimData::getSuspTravelDirection - Illegal wheel");
+	PX_CHECK_MSG(id < 4*mNbWheels4, "PxVehicleWheelsSimData::getSuspTravelDirection - Illegal wheel");
 	return mWheels4SimData[id>>2].getSuspTravelDirection(id & 3);
 }
 
 const PxVec3& PxVehicleWheelsSimData::getSuspForceAppPointOffset(const PxU32 id) const	
 {
-	PX_CHECK_MSG(id < 4*mNumWheels4, "PxVehicleWheelsSimData::getSuspForceAppPointOffset - Illegal wheel");
+	PX_CHECK_MSG(id < 4*mNbWheels4, "PxVehicleWheelsSimData::getSuspForceAppPointOffset - Illegal wheel");
 	return mWheels4SimData[id>>2].getSuspForceAppPointOffset(id & 3);
 }
 
 const PxVec3& PxVehicleWheelsSimData::getTireForceAppPointOffset(const PxU32 id) const	
 {
-	PX_CHECK_MSG(id < 4*mNumWheels4, "PxVehicleWheelsSimData::getTireForceAppPointOffset - Illegal wheel");
+	PX_CHECK_MSG(id < 4*mNbWheels4, "PxVehicleWheelsSimData::getTireForceAppPointOffset - Illegal wheel");
 	return mWheels4SimData[id>>2].getTireForceAppPointOffset(id & 3);
 }
 
 const PxVec3& PxVehicleWheelsSimData::getWheelCentreOffset(const PxU32 id) const	
 {
-	PX_CHECK_MSG(id < 4*mNumWheels4, "PxVehicleWheelsSimData::getWheelCentreOffset - Illegal wheel");
+	PX_CHECK_MSG(id < 4*mNbWheels4, "PxVehicleWheelsSimData::getWheelCentreOffset - Illegal wheel");
 	return mWheels4SimData[id>>2].getWheelCentreOffset(id & 3);
+}
+
+PxI32 PxVehicleWheelsSimData::getWheelShapeMapping(const PxU32 id) const
+{
+	PX_CHECK_MSG(id < 4*mNbWheels4, "PxVehicleWheelsSimData::getWheelShapeMapping - Illegal wheel");
+	return mWheels4SimData[id>>2].getWheelShapeMapping(id & 3);
+}
+
+const PxFilterData& PxVehicleWheelsSimData::getSceneQueryFilterData(const PxU32 id) const
+{
+	PX_CHECK_MSG(id < 4*mNbWheels4, "PxVehicleWheelsSimData::getSceneQueryFilterData - Illegal wheel");
+	return mWheels4SimData[id>>2].getSceneQueryFilterData(id & 3);
 }
 
 void PxVehicleWheelsSimData::setSuspensionData(const PxU32 id, const PxVehicleSuspensionData& susp)
 {
-	PX_CHECK_AND_RETURN(id < 4*mNumWheels4, "PxVehicleWheelsSimData::setSuspensionData - Illegal wheel");
-	mWheels4SimData[id>>2].setSuspensionData(susp,id & 3);
+	PX_CHECK_AND_RETURN(id < 4*mNbWheels4, "PxVehicleWheelsSimData::setSuspensionData - Illegal wheel");
+	mWheels4SimData[id>>2].setSuspensionData(id & 3, susp);
 }
 
 void PxVehicleWheelsSimData::setWheelData(const PxU32 id, const PxVehicleWheelData& wheel)
 {
-	PX_CHECK_AND_RETURN(id < 4*mNumWheels4, "PxVehicleWheelsSimData::setWheelData - Illegal wheel");
-	mWheels4SimData[id>>2].setWheelData(wheel,id & 3);
+	PX_CHECK_AND_RETURN(id < 4*mNbWheels4, "PxVehicleWheelsSimData::setWheelData - Illegal wheel");
+	mWheels4SimData[id>>2].setWheelData(id & 3, wheel);
 }
 
 void PxVehicleWheelsSimData::setTireData(const PxU32 id, const PxVehicleTireData& tire)
 {
-	PX_CHECK_AND_RETURN(id < 4*mNumWheels4, "PxVehicleWheelsSimData::setTireData - Illegal wheel");
-	mWheels4SimData[id>>2].setTireData(tire,id & 3);
+	PX_CHECK_AND_RETURN(id < 4*mNbWheels4, "PxVehicleWheelsSimData::setTireData - Illegal wheel");
+	mWheels4SimData[id>>2].setTireData(id & 3, tire);
 }
 
 void PxVehicleWheelsSimData::setSuspTravelDirection(const PxU32 id, const PxVec3& dir)										
 {
-	PX_CHECK_AND_RETURN(id < 4*mNumWheels4, "PxVehicleWheelsSimData::setSuspTravelDirection - Illegal wheel");
-	mWheels4SimData[id>>2].setSuspTravelDirection(dir,id & 3);
+	PX_CHECK_AND_RETURN(id < 4*mNbWheels4, "PxVehicleWheelsSimData::setSuspTravelDirection - Illegal wheel");
+	mWheels4SimData[id>>2].setSuspTravelDirection(id & 3, dir);
 }
 
 void PxVehicleWheelsSimData::setSuspForceAppPointOffset(const PxU32 id, const PxVec3& offset)									
 {
-	PX_CHECK_AND_RETURN(id < 4*mNumWheels4, "PxVehicleWheelsSimData::setSuspForceAppPointOffset - Illegal wheel");
-	mWheels4SimData[id>>2].setSuspForceAppPointOffset(offset,id & 3);
+	PX_CHECK_AND_RETURN(id < 4*mNbWheels4, "PxVehicleWheelsSimData::setSuspForceAppPointOffset - Illegal wheel");
+	mWheels4SimData[id>>2].setSuspForceAppPointOffset(id & 3, offset);
 }
 
 void PxVehicleWheelsSimData::setTireForceAppPointOffset(const PxU32 id, const PxVec3& offset)									
 {
-	PX_CHECK_AND_RETURN(id < 4*mNumWheels4, "PxVehicleWheelsSimData::setTireForceAppPointOffset - Illegal wheel");
-	mWheels4SimData[id>>2].setTireForceAppPointOffset(offset,id & 3);
+	PX_CHECK_AND_RETURN(id < 4*mNbWheels4, "PxVehicleWheelsSimData::setTireForceAppPointOffset - Illegal wheel");
+	mWheels4SimData[id>>2].setTireForceAppPointOffset(id & 3, offset);
 }
 
 void PxVehicleWheelsSimData::setWheelCentreOffset(const PxU32 id, const PxVec3& offset)									
 {
-	PX_CHECK_AND_RETURN(id < 4*mNumWheels4, "PxVehicleWheelsSimData::setWheelCentreOffset - Illegal wheel");
-	mWheels4SimData[id>>2].setWheelCentreOffset(offset,id & 3);
+	PX_CHECK_AND_RETURN(id < 4*mNbWheels4, "PxVehicleWheelsSimData::setWheelCentreOffset - Illegal wheel");
+	mWheels4SimData[id>>2].setWheelCentreOffset(id & 3, offset);
+}
+
+void PxVehicleWheelsSimData::setWheelShapeMapping(const PxU32 id, const PxI32 shapeId)
+{
+	PX_CHECK_AND_RETURN(id < 4*mNbWheels4, "PxVehicleWheelsSimData::setWheelShapeMapping - Illegal wheel");
+	mWheels4SimData[id>>2].setWheelShapeMapping(id & 3, shapeId);
+}
+
+void PxVehicleWheelsSimData::setSceneQueryFilterData(const PxU32 id, const PxFilterData& sqFilterData)
+{
+	PX_CHECK_AND_RETURN(id < 4*mNbWheels4, "PxVehicleWheelsSimData::setSceneQueryFilterData - Illegal wheel");
+	mWheels4SimData[id>>2].setSceneQueryFilterData(id & 3, sqFilterData);
 }
 
 void PxVehicleWheelsSimData::setTireLoadFilterData(const PxVehicleTireLoadFilterData& tireLoadFilter)
@@ -311,11 +347,19 @@ void PxVehicleWheelsSimData::setSubStepCount(const PxReal thresholdLongitudinalS
 	mHighForwardSpeedSubStepCount=highForwardSpeedSubStepCount;
 }
 
+void PxVehicleWheelsSimData::setMinLongSlipDenominator(const PxReal minLongSlipDenominator)
+{
+	PX_CHECK_AND_RETURN(minLongSlipDenominator>0, "minLongSlipDenominator must be greater than or equal to zero.");
+	mMinLongSlipDenominator=minLongSlipDenominator;
+}
+
+
+
 /////////////////////////////
 
 bool PxVehicleWheelsDynData::isValid() const
 {
-	for(PxU32 i=0;i<mNumWheels4;i++)
+	for(PxU32 i=0;i<mNbWheels4;i++)
 	{
 		PX_CHECK_AND_RETURN_VAL(mWheels4DynData[i].isValid(), "Invalid PxVehicleSuspWheelTireNDynData.mSuspWheelTire4DynData[i]", false);
 	}
@@ -325,7 +369,7 @@ bool PxVehicleWheelsDynData::isValid() const
 void PxVehicleWheelsDynData::setToRestState()
 {
 	//Set susp/wheel/tires to rest state.
-	const PxU32 numSuspWheelTire4=mNumWheels4;
+	const PxU32 numSuspWheelTire4=mNbWheels4;
 	for(PxU32 i=0;i<numSuspWheelTire4;i++)
 	{
 		mWheels4DynData[i].setToRestState();
@@ -339,19 +383,19 @@ void PxVehicleWheelsDynData::setTireForceShaderFunction(PxVehicleComputeTireForc
 
 void PxVehicleWheelsDynData::setTireForceShaderData(const PxU32 tireId, const void* tireForceShaderData)
 {
-	PX_CHECK_AND_RETURN(tireId < mNumActiveWheels, "PxVehicleWheelsDynData::setTireForceShaderData - Illegal tire");
+	PX_CHECK_AND_RETURN(tireId < mNbActiveWheels, "PxVehicleWheelsDynData::setTireForceShaderData - Illegal tire");
 	mTireForceCalculators->mShaderData[tireId]=tireForceShaderData;
 }
 
 const void* PxVehicleWheelsDynData::getTireForceShaderData(const PxU32 tireId) const
 {
-	PX_CHECK_AND_RETURN_VAL(tireId < mNumActiveWheels, "PxVehicleWheelsDynData::getTireForceShaderData - Illegal tire", NULL);
+	PX_CHECK_AND_RETURN_VAL(tireId < mNbActiveWheels, "PxVehicleWheelsDynData::getTireForceShaderData - Illegal tire", NULL);
 	return mTireForceCalculators->mShaderData[tireId];
 }
 
 void PxVehicleWheelsDynData::setWheelRotationSpeed(const PxU32 wheelIdx, const PxReal speed)
 {
-	PX_CHECK_AND_RETURN(wheelIdx < mNumActiveWheels, "PxVehicleWheelsDynData::setWheelRotationSpeed - Illegal wheel");
+	PX_CHECK_AND_RETURN(wheelIdx < mNbActiveWheels, "PxVehicleWheelsDynData::setWheelRotationSpeed - Illegal wheel");
 	PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(wheelIdx>>2)];
 	suspWheelTire4.mWheelSpeeds[wheelIdx & 3] = speed;
 	suspWheelTire4.mCorrectedWheelSpeeds[wheelIdx & 3] = speed;
@@ -359,132 +403,29 @@ void PxVehicleWheelsDynData::setWheelRotationSpeed(const PxU32 wheelIdx, const P
 
 PxReal PxVehicleWheelsDynData::getWheelRotationSpeed(const PxU32 wheelIdx) const
 {
-	PX_CHECK_AND_RETURN_VAL(wheelIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getWheelRotationSpeed - Illegal wheel", 0.0f);
+	PX_CHECK_AND_RETURN_VAL(wheelIdx < mNbActiveWheels, "PxVehicleWheelsDynData::getWheelRotationSpeed - Illegal wheel", 0.0f);
 	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(wheelIdx>>2)];
 	return suspWheelTire4.mCorrectedWheelSpeeds[wheelIdx & 3];
 }
 
 void PxVehicleWheelsDynData::setWheelRotationAngle(const PxU32 wheelIdx, const PxReal angle)
 {
-	PX_CHECK_AND_RETURN(wheelIdx < mNumActiveWheels, "PxVehicleWheelsDynData::setWheelRotationAngle - Illegal wheel");
+	PX_CHECK_AND_RETURN(wheelIdx < mNbActiveWheels, "PxVehicleWheelsDynData::setWheelRotationAngle - Illegal wheel");
 	PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(wheelIdx>>2)];
 	suspWheelTire4.mWheelRotationAngles[wheelIdx & 3] = angle;
 }
 
 PxReal PxVehicleWheelsDynData::getWheelRotationAngle(const PxU32 wheelIdx) const
 {
-	PX_CHECK_AND_RETURN_VAL(wheelIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getWheelRotationAngle - Illegal wheel", 0.0f);
+	PX_CHECK_AND_RETURN_VAL(wheelIdx < mNbActiveWheels, "PxVehicleWheelsDynData::getWheelRotationAngle - Illegal wheel", 0.0f);
 	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(wheelIdx>>2)];
 	return suspWheelTire4.mWheelRotationAngles[wheelIdx & 3];
 }
 
-PxReal PxVehicleWheelsDynData::getSteer(const PxU32 wheelIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(wheelIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getSteer - Illegal wheel", 0.0f);
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(wheelIdx>>2)];
-	return suspWheelTire4.mSteerAngles[wheelIdx & 3];
-}
-
-PxReal PxVehicleWheelsDynData::getSuspJounce(const PxU32 suspIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(suspIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getSuspJounce - Illegal wheel", 0.0f);
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(suspIdx>>2)];
-	return suspWheelTire4.mSuspJounces[suspIdx & 3];
-}
-
-PxReal PxVehicleWheelsDynData::getTireLongSlip(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getTireLongSlip - Illegal wheel", 0.0f);
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mLongSlips[tireIdx & 3];
-}
-
-PxReal PxVehicleWheelsDynData::getTireLatSlip(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getTireLatSlip - Illegal wheel", 0.0f);
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mLatSlips[tireIdx & 3];
-}
-
-PxReal PxVehicleWheelsDynData::getTireFriction(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getTireFriction - Illegal wheel", 0.0f);
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mTireFrictions[tireIdx & 3];
-}
-
-PxU32 PxVehicleWheelsDynData::getTireDrivableSurfaceType(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getTireDrivableSurfaceType - Illegal wheel", 0);
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mTireSurfaceTypes[tireIdx & 3];
-}
-
-const PxMaterial* PxVehicleWheelsDynData::getTireDrivableSurfaceMaterial(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getTireDrivableSurfaceType - Illegal wheel", 0);
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mTireSurfaceMaterials[tireIdx & 3];
-}
-
-PxVec3 PxVehicleWheelsDynData::getTireDrivableSurfaceContactPoint(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getTireDrivableSurfaceContactPoint - Illegal wheel", PxVec3(0,0,0));
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mTireContactPoints[tireIdx & 3];
-}
-
-PxVec3 PxVehicleWheelsDynData::getTireDrivableSurfaceContactNormal(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getTireDrivableSurfaceContactNormal - Illegal wheel", PxVec3(0,0,0));
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mTireContactNormals[tireIdx & 3];
-}
-
-PxVec3 PxVehicleWheelsDynData::getTireLongitudinalDir(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getTireLongitudinalDir - Illegal wheel", PxVec3(0,0,0));
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mTireLongitudinalDirs[tireIdx & 3];
-}
-
-PxVec3 PxVehicleWheelsDynData::getTireLateralDir(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getTireLateralDir - Illegal wheel", PxVec3(0,0,0));
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mTireLateralDirs[tireIdx & 3];
-}
-
-PxReal PxVehicleWheelsDynData::getSuspensionForce(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getSuspensionForce - Illegal wheel", 0.0f);
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mSuspensionSpringForces[tireIdx & 3];
-}
-
-const PxShape* PxVehicleWheelsDynData::getTireDrivableSurfaceShape(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getTireDrivableSurfaceShape - Illegal wheel", 0);
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mTireContactShapes[tireIdx & 3];
-}
-
-void PxVehicleWheelsDynData::getSuspRaycast(const PxU32 suspIdx, PxVec3& start, PxVec3& dir, PxReal& length) const
-{
-	PX_CHECK_AND_RETURN(suspIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getSuspRaycast - Illegal wheel");
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(suspIdx>>2)];
-	const PxU32 idx=(suspIdx & 3);
-	start=suspWheelTire4.mSuspLineStarts[idx];
-	dir=suspWheelTire4.mSuspLineDirs[idx];
-	length=suspWheelTire4.mSuspLineLengths[idx];
-}
-
-///////////////////////////////////
-
 void PxVehicleWheels::setToRestState()
 {
 	//Set the rigid body to rest and clear all the accumulated forces and impulses.
-	if(!(mActor->getRigidDynamicFlags() & PxRigidDynamicFlag::eKINEMATIC))
+	if(!(mActor->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC))
 	{
 		mActor->setLinearVelocity(PxVec3(0,0,0));
 		mActor->setAngularVelocity(PxVec3(0,0,0));
@@ -507,18 +448,30 @@ bool PxVehicleWheels::isValid() const
 
 PxU32 PxVehicleWheels::computeByteSize(const PxU32 numWheels4)
 {
-	return 
+	const PxU32 byteSize = 
 		(sizeof(PxVehicleWheels4SimData)*numWheels4 +
 		 sizeof(PxVehicleWheels4DynData)*numWheels4 +
 		 sizeof(PxVehicleTireForceCalculator) + sizeof(void*)*4*numWheels4 +
 		 sizeof(void*)*4*numWheels4 +
- 		 sizeof(PxVehicleConstraintShader)*numWheels4) +numWheels4 +
-		 sizeof(PxFilterData)*4*numWheels4;
+ 		 sizeof(PxVehicleConstraintShader)*numWheels4);
+	const PxU32 byteSize16 = ((byteSize + 15) & ~15);
+	return byteSize16;
 }
 
-PxU8* PxVehicleWheels::patchupPointers(PxVehicleWheels* veh, PxU8* ptr, const PxU32 numWheels4, const PxU32 numWheels)
+PxU8* PxVehicleWheels::patchupPointers(PxVehicleWheels* veh, PxU8* ptrIn, const PxU32 numWheels4, const PxU32 numWheels, bool renew)
 {
+	//Set some data (could be done in placement new with an appropriate constructor but this is less hassle).
+	veh->mWheelsSimData.mNbWheels4=numWheels4;
+	veh->mWheelsDynData.mNbWheels4=numWheels4;
+	veh->mWheelsSimData.mNbActiveWheels=numWheels;
+	veh->mWheelsSimData.mHighForwardSpeedSubStepCount=gHighLongSpeedSubstepCount;
+	veh->mWheelsSimData.mLowForwardSpeedSubStepCount=gLowLongSpeedSubstepCount;
+	veh->mWheelsSimData.mThresholdLongitudinalSpeed=gThresholdLongSpeed;
+	veh->mWheelsDynData.mNbActiveWheels=numWheels;
+	veh->mOnConstraintReleaseCounter=Ps::to8(numWheels4);
+
 	//Patchup pointers.
+	PxU8* ptr = ptrIn;
 	veh->mWheelsSimData.mWheels4SimData = (PxVehicleWheels4SimData*)ptr;
 	ptr += sizeof(PxVehicleWheels4SimData)*numWheels4;
 	veh->mWheelsDynData.mWheels4DynData = (PxVehicleWheels4DynData*)ptr;
@@ -534,74 +487,97 @@ PxU8* PxVehicleWheels::patchupPointers(PxVehicleWheels* veh, PxU8* ptr, const Px
 		veh->mWheelsDynData.mWheels4DynData[i].setVehicleConstraintShader((PxVehicleConstraintShader*)ptr);
 		ptr += sizeof(PxVehicleConstraintShader);
 	}
-	veh->mSqFilterData=(PxFilterData*)ptr;
-	ptr+=sizeof(PxFilterData)*4*numWheels4;
 
 	//Placement new.
+	if(renew)
+	{
+		for(PxU32 i=0;i<numWheels4;i++)
+		{
+			new(&veh->mWheelsSimData.mWheels4SimData[i]) PxVehicleWheels4SimData();
+		}
+		for(PxU32 i=0;i<numWheels4;i++)
+		{
+			new(&veh->mWheelsDynData.mWheels4DynData[i]) PxVehicleWheels4DynData();
+		}
+		for(PxU32 i=0;i<4*numWheels4;i++)
+		{
+			veh->mWheelsDynData.mTireForceCalculators->mShaderData[i]=NULL;
+			veh->mWheelsDynData.mUserDatas[i]=NULL;
+		}
+
+		//Set some more data.
+		for(PxU32 i=0;i<numWheels;i++)
+		{
+			veh->mWheelsSimData.setSceneQueryFilterData(i, PxFilterData());
+			veh->mWheelsSimData.setWheelShapeMapping(i,(PxI32)i);
+		}
+		for(PxU32 i=numWheels;i<4*numWheels4;i++)
+		{
+			veh->mWheelsSimData.setSceneQueryFilterData(i, PxFilterData());
+			veh->mWheelsSimData.setWheelShapeMapping(i,-1);
+		}
+
+		new(&veh->mWheelsSimData.mNormalisedLoadFilter) PxVehicleTireLoadFilterData();	
+	}
+	
 	for(PxU32 i=0;i<numWheels4;i++)
 	{
-		new(&veh->mWheelsSimData.mWheels4SimData[i]) PxVehicleWheels4SimData();
+		PxConstraint* c = renew ? NULL : veh->mWheelsDynData.mWheels4DynData[i].getVehicletConstraintShader().mConstraint;
+		new(&veh->mWheelsDynData.mWheels4DynData[i].getVehicletConstraintShader()) PxVehicleConstraintShader(veh, c);
 	}
-	for(PxU32 i=0;i<numWheels4;i++)
-	{
-		new(&veh->mWheelsDynData.mWheels4DynData[i]) PxVehicleWheels4DynData();
-	}
+
 	new(veh->mWheelsDynData.mTireForceCalculators) PxVehicleTireForceCalculator;
-	for(PxU32 i=0;i<4*numWheels4;i++)
-	{
-		veh->mWheelsDynData.mTireForceCalculators->mShaderData[i]=NULL;
-		veh->mWheelsDynData.mUserDatas[i]=NULL;
-	}
-	for(PxU32 i=0;i<numWheels4;i++)
-	{
-		new(&veh->mWheelsDynData.mWheels4DynData[i].getVehicletConstraintShader()) PxVehicleConstraintShader(veh);		
-	}
-	for(PxU32 i=0;i<4*numWheels4;i++)
-	{
-		new(&veh->mSqFilterData[i]) PxFilterData();
-	}
-	new(&veh->mWheelsSimData.mNormalisedLoadFilter) PxVehicleTireLoadFilterData();
 
-	//Set some data (could be done in placement new with an appropriate constructor but this is less hassle).
-	veh->mWheelsSimData.mNumWheels4=numWheels4;
-	veh->mWheelsDynData.mNumWheels4=numWheels4;
-	veh->mWheelsSimData.mNumActiveWheels=numWheels;
-	veh->mWheelsSimData.mHighForwardSpeedSubStepCount=gHighLongSpeedSubstepCount;
-	veh->mWheelsSimData.mLowForwardSpeedSubStepCount=gLowLongSpeedSubstepCount;
-	veh->mWheelsSimData.mThresholdLongitudinalSpeed=gThresholdLongSpeed;
-	veh->mWheelsDynData.mNumActiveWheels=numWheels;
-	veh->mOnConstraintReleaseCounter=numWheels4;
 
-	//Set some more data.
-	for(PxU32 i=0;i<PX_MAX_NUM_WHEELS;i++)
-	{
-		veh->mWheelShapeMap[i]=PX_MAX_U8;
-	}
-
-	return ptr;
+	PX_ASSERT(ptr <= (ptrIn + computeByteSize(numWheels4)));
+	return (ptrIn + computeByteSize(numWheels4));
 }
-
 
 void PxVehicleWheels::free()
 {
-	PX_CHECK_AND_RETURN(mWheelsSimData.mNumWheels4>0, "Cars with zero wheels are illegal");
+	PX_CHECK_AND_RETURN(mWheelsSimData.mNbWheels4>0, "Cars with zero wheels are illegal");
 
-	const PxU32 numSuspWheelTire4 = mWheelsSimData.mNumWheels4;
+	const PxU32 numSuspWheelTire4 = mWheelsSimData.mNbWheels4;
+
 	for(PxU32 i=0;i<numSuspWheelTire4;i++)
 	{
 		mWheelsDynData.mWheels4DynData[i].getVehicletConstraintShader().release();
 	}
 }
 
+#ifdef PX_PS3
+static PxConstraintShaderTable t = 
+		{ 
+			PxVehicleConstraintShader::vehicleSuspLimitConstraintSolverPrep,
+			PxVehicle4WSuspLimitConstraintShaderSpu,
+			PXVEHICLE4WSUSPLIMITCONSTRAINTSHADERSPU_SIZE,
+			0,
+			PxVehicleConstraintShader::visualiseConstraint
+		};
+#else
+static PxConstraintShaderTable t = 
+		{ 
+			PxVehicleConstraintShader::vehicleSuspLimitConstraintSolverPrep,
+			0,
+			0,
+			0,
+			PxVehicleConstraintShader::visualiseConstraint
+		};
+#endif
+
+
 void PxVehicleWheels::setup
 (PxPhysics* physics, PxRigidDynamic* vehActor, 
  const PxVehicleWheelsSimData& wheelsData,
  const PxU32 numDrivenWheels, const PxU32 numNonDrivenWheels)
 {
-	PX_CHECK_AND_RETURN(wheelsData.getNumWheels() == mWheelsSimData.getNumWheels(), "PxVehicleWheels::setup - vehicle must be setup with same number of wheels as wheelsData");
+	mNbNonDrivenWheels = numNonDrivenWheels;
+
+	PX_CHECK_AND_RETURN(wheelsData.getNbWheels() == mWheelsSimData.getNbWheels(), "PxVehicleWheels::setup - vehicle must be setup with same number of wheels as wheelsData");
 	PX_CHECK_AND_RETURN(vehActor, "PxVehicleWheels::setup - vehActor is null ptr : you need to instantiate an empty PxRigidDynamic for the vehicle");
 	PX_CHECK_AND_RETURN(wheelsData.isValid(), "PxVehicleWheels::setup -invalid wheelsData");
-
+	PX_UNUSED(numDrivenWheels);
+	
 #ifdef PX_CHECKED
 	PxF32 totalSprungMass=0.0f;
 	for(PxU32 i=0;i<(numDrivenWheels+numNonDrivenWheels);i++)
@@ -618,7 +594,7 @@ void PxVehicleWheels::setup
 	mActor=vehActor;
 
 	//Set all the sq result ptrs to null.
-	const PxU32 numSuspWheelTire4=wheelsData.mNumWheels4;
+	const PxU32 numSuspWheelTire4=wheelsData.mNbWheels4;
 	for(PxU32 i=0;i<numSuspWheelTire4;i++)
 	{
 		mWheelsDynData.mWheels4DynData[i].mSqResults=NULL;
@@ -635,111 +611,90 @@ void PxVehicleWheels::setup
 			shader.mData.mSuspLimitData.mErrors[j]=0.0f;
 			shader.mData.mSuspLimitData.mActiveFlags[j]=false;
 
-			shader.mData.mStickyTireData.mCMOffsets[j]=PxVec3(0,0,0);
-			shader.mData.mStickyTireData.mDirs[j]=PxVec3(0,0,0);
-			shader.mData.mStickyTireData.mTargetSpeeds[j]=0.0f;
-			shader.mData.mStickyTireData.mActiveFlags[j]=false;
+			shader.mData.mStickyTireForwardData.mCMOffsets[j]=PxVec3(0,0,0);
+			shader.mData.mStickyTireForwardData.mDirs[j]=PxVec3(0,0,0);
+			shader.mData.mStickyTireForwardData.mTargetSpeeds[j]=0.0f;
+			shader.mData.mStickyTireForwardData.mActiveFlags[j]=false;
+
+			shader.mData.mStickyTireSideData.mCMOffsets[j]=PxVec3(0,0,0);
+			shader.mData.mStickyTireSideData.mDirs[j]=PxVec3(0,0,0);
+			shader.mData.mStickyTireSideData.mTargetSpeeds[j]=0.0f;
+			shader.mData.mStickyTireSideData.mActiveFlags[j]=false;
 		}
 
-#ifdef PX_PS3
-		PxConstraintShaderTable t = 
-		{ 
-			PxVehicleConstraintShader::vehicleSuspLimitConstraintSolverPrep,
-			PxVehicle4WSuspLimitConstraintShaderSpu,
-			PXVEHICLE4WSUSPLIMITCONSTRAINTSHADERSPU_SIZE,
-			0,
-			PxVehicleConstraintShader::visualiseConstraint
-		};
-#else
-		PxConstraintShaderTable t = 
-		{ 
-			PxVehicleConstraintShader::vehicleSuspLimitConstraintSolverPrep,
-			0,
-			0,
-			0,
-			PxVehicleConstraintShader::visualiseConstraint
-		};
-#endif
 
 		shader.mConstraint=physics->createConstraint(vehActor, NULL, shader, t, sizeof(PxVehicleConstraintShader::VehicleConstraintData));
 		shader.mConstraint->markDirty();
 	}
 
 	//Set up the shader data ptrs.
-	for(PxU32 i=0;i<wheelsData.mNumActiveWheels;i++)
+	for(PxU32 i=0;i<wheelsData.mNbActiveWheels;i++)
 	{
 		mWheelsDynData.setTireForceShaderData(i,&mWheelsSimData.getTireData(i));
 	}
 
 	//Disable the unused wheels.
-	for(PxU32 i=wheelsData.mNumActiveWheels;i<4*mWheelsSimData.mNumWheels4;i++)
+	for(PxU32 i=wheelsData.mNbActiveWheels;i<4*mWheelsSimData.mNbWheels4;i++)
 	{
 		mWheelsSimData.disableWheel(i);
 	}
-}
 
-bool PxVehicleWheels::isInAir() const
-{
-	for(PxU32 i=0;i<mWheelsSimData.getNumWheels();i++)
+	//Pose the wheels that are mapped to shapes so that all shapes are at the rest pose.
+	for(PxU32 i=0;i<wheelsData.mNbActiveWheels;i++)
 	{
-		if(!isInAir(i))
+		const PxI32 shapeId = mWheelsSimData.getWheelShapeMapping(i);
+		if(-1!=shapeId)
 		{
-			return false;
+			PX_CHECK_AND_RETURN((PxU32)shapeId < mActor->getNbShapes(), "Illegal wheel shape mapping, shape does not exist on actor");
+
+			//Compute the shape local pose
+			const PxTransform chassisCMOffset=mActor->getCMassLocalPose();
+			PxTransform wheelOffset=chassisCMOffset;
+			wheelOffset.p+=mWheelsSimData.getWheelCentreOffset(i);
+			//Pose the shape.
+			PxShape* shapeBuffer[1];
+			mActor->getShapes(shapeBuffer,1,(PxU32)shapeId);
+			shapeBuffer[0]->setLocalPose(wheelOffset);
 		}
 	}
-	return true;
 }
 
-bool PxVehicleWheels::isInAir(const PxU32 wheelId) const
+void	PxVehicleWheels::requires(PxProcessPxBaseCallback& c)
 {
-	const PxF32 jounce=mWheelsDynData.getSuspJounce(wheelId);
-	const PxF32 maxDroop=mWheelsSimData.getSuspensionData(wheelId).mMaxDroop;
-	return (jounce==-maxDroop);
-}
+	c.process(*mActor);
 
-void PxVehicleWheels::setWheelShapeMapping(const PxU32 wheelId, const PxI32 shapeId)
-{
-	PX_CHECK_AND_RETURN(wheelId<mWheelsSimData.mNumActiveWheels, "Illegal wheelId");
-	PX_CHECK_AND_RETURN(shapeId>=-1, "Illegal shapeId");
-	if(-1!=shapeId)
+	for(PxU32 i=0;i<mWheelsSimData.mNbWheels4;i++)
 	{
-		PX_CHECK_AND_RETURN(mActor, "mActor is still a null ptr.  PxVehicleWheels::setup must be called first.");
-		PX_CHECK_AND_RETURN((PxU32)shapeId < mActor->getNbShapes(), "Illegal wheel shape mapping, shape does not exist on actor");
-
-		//Set the mapping.
-		mWheelShapeMap[wheelId] = shapeId;
-
-		//Compute the shape local pose
-		const PxTransform chassisCMOffset=mActor->getCMassLocalPose();
-		PxTransform wheelOffset=chassisCMOffset;
-		wheelOffset.p+=mWheelsSimData.getWheelCentreOffset(wheelId);
-		//Pose the shape.
-		PxShape* shapeBuffer[1];
-		mActor->getShapes(shapeBuffer,1,shapeId);
-		shapeBuffer[0]->setLocalPose(wheelOffset);
-	}
-	else
-	{
-		mWheelShapeMap[wheelId]=PX_MAX_U8;
+		c.process(*mWheelsDynData.mWheels4DynData[i].getVehicletConstraintShader().getPxConstraint());
 	}
 }
 
-PxI32 PxVehicleWheels::getWheelShapeMapping(const PxU32 wheelId) const
+static PxConstraint* resolveConstraintPtr(PxDeserializationContext& context,
+										  PxConstraint* old,
+										  PxConstraintConnector* connector,
+										  PxConstraintShaderTable &shaders)
 {
-	PX_CHECK_AND_RETURN_VAL(wheelId<mWheelsSimData.mNumActiveWheels, "Illegal wheelId", -1);
-	return (PX_MAX_U8==mWheelShapeMap[wheelId] ? -1 : mWheelShapeMap[wheelId]);
+	context.translatePxBase(old);
+	PxConstraint* new_nx = static_cast<PxConstraint*>(old);
+	new_nx->setConstraintFunctions(*connector, shaders);
+	return new_nx;
 }
 
-void PxVehicleWheels::setSceneQueryFilterData(const PxU32 suspId, const PxFilterData& sqFilterData)
-{
-	PX_CHECK_AND_RETURN(suspId<mWheelsSimData.mNumActiveWheels, "Illegal suspId");
-	mSqFilterData[suspId]=sqFilterData;
-}
+void PxVehicleWheels::resolveReferences(PxDeserializationContext& context)
+{	
+	context.translatePxBase(mActor);
 
-PxFilterData PxVehicleWheels::getSceneQueryFilterData(const PxU32 suspId) const
-{
-	PX_CHECK_AND_RETURN_VAL(suspId<mWheelsSimData.mNumActiveWheels, "Illegal suspId", PxFilterData());
-	return mSqFilterData[suspId];
+	for(PxU32 i=0;i<mWheelsSimData.mNbWheels4;i++)
+	{
+		PxVehicleConstraintShader& shader=mWheelsDynData.mWheels4DynData[i].getVehicletConstraintShader();
+		shader.setPxConstraint(resolveConstraintPtr(context,shader.getPxConstraint(), shader.getConnector(), t));
+	}
+
+	//Set up the shader data ptrs.
+	for(PxU32 i=0;i<mWheelsSimData.mNbActiveWheels;i++)
+	{
+		mWheelsDynData.setTireForceShaderData(i,&mWheelsSimData.getTireData(i));
+	}	
 }
 
 PxReal PxVehicleWheels::computeForwardSpeed() const
@@ -754,35 +709,58 @@ PxReal PxVehicleWheels::computeSidewaysSpeed() const
 	return mActor->getLinearVelocity().dot(vehicleChassisTrnsfm.q.rotate(gRight));
 }
 
-PxVec3 PxVehicleWheelsDynData::getSuspLineStart(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getSuspLineStarts - Illegal wheel", PxVec3(0,0,0));
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mSuspLineStarts[tireIdx & 3];
-}
-
-PxVec3 PxVehicleWheelsDynData::getSuspLineDir(const PxU32 tireIdx) const
-{
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::getSuspLineDirs - Illegal wheel", PxVec3(0,0,0));
-	const PxVehicleWheels4DynData& suspWheelTire4=mWheels4DynData[(tireIdx>>2)];
-	return suspWheelTire4.mSuspLineDirs[tireIdx & 3];
-}
+////////////////////////////////////////////////////////////////////////////
 
 void PxVehicleWheelsDynData::setUserData(const PxU32 tireIdx, void* userData)
 {
-	PX_CHECK_AND_RETURN(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::setUserData - Illegal wheel");
+	PX_CHECK_AND_RETURN(tireIdx < mNbActiveWheels, "PxVehicleWheelsDynData::setUserData - Illegal wheel");
 	mUserDatas[tireIdx]=userData;
 }
 
 void* PxVehicleWheelsDynData::getUserData(const PxU32 tireIdx) const
 {
-	PX_CHECK_AND_RETURN_VAL(tireIdx < mNumActiveWheels, "PxVehicleWheelsDynData::setUserData - Illegal wheel", NULL);
+	PX_CHECK_AND_RETURN_VAL(tireIdx < mNbActiveWheels, "PxVehicleWheelsDynData::setUserData - Illegal wheel", NULL);
 	return mUserDatas[tireIdx];
 }
 
 
+////////////////////////////////////////////////////////////////////////////
 
-///////////////////////////////////
+void PxVehicleWheelsDynData::copy(const PxVehicleWheelsDynData& src, const PxU32 srcWheel, const PxU32 trgWheel)
+{
+	PX_CHECK_AND_RETURN(srcWheel < src.mNbActiveWheels, "PxVehicleWheelsDynData::copy - Illegal src wheel");
+	PX_CHECK_AND_RETURN(trgWheel < mNbActiveWheels, "PxVehicleWheelsDynData::copy - Illegal trg wheel");
+
+	const PxVehicleWheels4DynData& src4 = src.mWheels4DynData[(srcWheel>>2)];
+	PxVehicleWheels4DynData& trg4 = mWheels4DynData[(trgWheel>>2)];
+
+	trg4.mWheelSpeeds[trgWheel & 3] = src4.mWheelSpeeds[srcWheel & 3];
+	trg4.mCorrectedWheelSpeeds[trgWheel & 3] = src4.mCorrectedWheelSpeeds[srcWheel & 3];
+	trg4.mTireLowForwardSpeedTimers[trgWheel & 3] = src4.mTireLowForwardSpeedTimers[srcWheel & 3];
+	trg4.mTireLowSideSpeedTimers[trgWheel & 3] = src4.mTireLowSideSpeedTimers[srcWheel & 3];
+	trg4.mWheelRotationAngles[trgWheel & 3] = src4.mWheelRotationAngles[srcWheel & 3];
+
+	if(src4.mSqResults)
+	{
+		const PxVehicleWheels4DynData::SuspLineRaycast& suspLineRaycastSrc = (const PxVehicleWheels4DynData::SuspLineRaycast&)src4.mRaycastsOrCachedHitResults;
+		PxVehicleWheels4DynData::SuspLineRaycast& suspLineRaycastTrg = (PxVehicleWheels4DynData::SuspLineRaycast&)trg4.mRaycastsOrCachedHitResults;
+
+		suspLineRaycastTrg.mStarts[trgWheel & 3] = suspLineRaycastSrc.mStarts[srcWheel & 3];
+		suspLineRaycastTrg.mDirs[trgWheel & 3] = suspLineRaycastSrc.mDirs[srcWheel & 3];
+		suspLineRaycastTrg.mLengths[trgWheel & 3] = suspLineRaycastSrc.mLengths[srcWheel & 3];
+	}
+	else
+	{
+		const PxVehicleWheels4DynData::CachedSuspLineRaycastHitResult& cachedHitResultSrc = (const PxVehicleWheels4DynData::CachedSuspLineRaycastHitResult&)src4.mRaycastsOrCachedHitResults;
+		PxVehicleWheels4DynData::CachedSuspLineRaycastHitResult& cachedHitResultTrg = (PxVehicleWheels4DynData::CachedSuspLineRaycastHitResult&)trg4.mRaycastsOrCachedHitResults;
+
+		cachedHitResultTrg.mPlanes[trgWheel & 3] = cachedHitResultSrc.mPlanes[srcWheel & 3];
+		cachedHitResultTrg.mFrictionMultipliers[trgWheel & 3] = cachedHitResultSrc.mFrictionMultipliers[srcWheel & 3];
+		cachedHitResultTrg.mCounts[trgWheel & 3] = cachedHitResultSrc.mCounts[srcWheel & 3];
+		cachedHitResultTrg.mDistances[trgWheel & 3] = cachedHitResultSrc.mDistances[srcWheel & 3];
+	}
+}
+
 
 } //namespace physx
 

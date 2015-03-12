@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 
 #include "GLES2RendererIndexBuffer.h"
@@ -109,7 +109,7 @@ void GLES2RendererIndexBuffer::unbind(void) const
 	{
 		glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
 	}
-}
+	}
 }
 
 #endif // #if defined(RENDERER_ENABLE_GLES2)

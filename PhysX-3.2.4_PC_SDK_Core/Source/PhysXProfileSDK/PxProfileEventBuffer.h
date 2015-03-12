@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -136,6 +136,7 @@ namespace physx { namespace profile {
 			, mContextProvider( inProvider )
 			, mEventFilter( inEventFilter )
 		{
+			PxMemSet(&mEventContextInformation,0,sizeof(EventContextInformation));
 		}
 
 		TContextProvider& getContextProvider() { return mContextProvider; }
@@ -154,12 +155,12 @@ namespace physx { namespace profile {
 		inline void startEvent( PxU16 inId, PxU64 contextId )
 		{
 			PxProfileEventExecutionContext ctx( mContextProvider.getExecutionContext() );
-			startEvent( inId, ctx.mThreadId, contextId, ctx.mCpuId, static_cast<PxU8>(ctx.mThreadPriority), Time::getCurrentCounterValue() );
+			startEvent( inId, ctx.mThreadId, contextId, ctx.mCpuId, static_cast<PxU8>(ctx.mThreadPriority), shdfnd::Time::getCurrentCounterValue() );
 		}
 
 		inline void startEvent( PxU16 inId, PxU64 contextId, PxU32 threadId )
 		{
-			startEvent( inId, threadId, contextId, 0, 0, Time::getCurrentCounterValue() );
+			startEvent( inId, threadId, contextId, 0, 0, shdfnd::Time::getCurrentCounterValue() );
 		}
 
 		inline void stopEvent( PxU16 inId, PxU32 threadId, PxU64 contextId, PxU8 cpuId, PxU8 threadPriority, PxU64 inTimestamp )
@@ -176,12 +177,12 @@ namespace physx { namespace profile {
 		inline void stopEvent( PxU16 inId, PxU64 contextId )
 		{
 			PxProfileEventExecutionContext ctx( mContextProvider.getExecutionContext() );
-			stopEvent( inId, ctx.mThreadId, contextId, ctx.mCpuId, static_cast<PxU8>(ctx.mThreadPriority), Time::getCurrentCounterValue() );
+			stopEvent( inId, ctx.mThreadId, contextId, ctx.mCpuId, static_cast<PxU8>(ctx.mThreadPriority), shdfnd::Time::getCurrentCounterValue() );
 		}
 
 		inline void stopEvent( PxU16 inId, PxU64 contextId, PxU32 threadId )
 		{
-			stopEvent( inId, threadId, contextId, 0, 0, Time::getCurrentCounterValue() );
+			stopEvent( inId, threadId, contextId, 0, 0, shdfnd::Time::getCurrentCounterValue() );
 		}
 
 		inline void eventValue( PxU16 inId, PxU64 contextId, PxI64 inValue )
@@ -215,7 +216,7 @@ namespace physx { namespace profile {
 
 		inline void CUDAProfileBuffer( PxF32 batchRuntimeInMilliseconds, const PxU8* cudaData, PxU32 bufLenInBytes, PxU32 bufferVersion = PxProfileEventSender::CurrentCUDABufferFormat )
 		{
-			this->CUDAProfileBuffer( Time::getCurrentCounterValue(), batchRuntimeInMilliseconds, cudaData, bufLenInBytes, bufferVersion );
+			this->CUDAProfileBuffer( shdfnd::Time::getCurrentCounterValue(), batchRuntimeInMilliseconds, cudaData, bufLenInBytes, bufferVersion );
 		}
 
 		void flushProfileEvents()

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -41,10 +41,7 @@
 
 namespace physx
 {
-	namespace pxtask
-	{
-		class BaseTask;
-	}
+	class PxBaseTask;
 }
 
 namespace physx
@@ -69,9 +66,9 @@ namespace Ext
 		DefaultCpuDispatcher(PxU32 numThreads, PxU32* affinityMasks);
 
 		//---------------------------------------------------------------------------------
-		// physx::pxtask::CpuDispatcher implementation
+		// physx::CpuDispatcher implementation
 		//---------------------------------------------------------------------------------
-		virtual void submitTask(pxtask::BaseTask& task);
+		virtual void submitTask(PxBaseTask& task);
 		virtual PxU32 getWorkerCount() const;
 
 		//---------------------------------------------------------------------------------
@@ -79,15 +76,22 @@ namespace Ext
 		//---------------------------------------------------------------------------------
 		virtual void release();
 
+		virtual void setRunProfiled(bool runProfiled) { mRunProfiled = runProfiled; }
+
+		virtual bool getRunProfiled() const { return mRunProfiled; }
+
 		//---------------------------------------------------------------------------------
 		// DefaultCpuDispatcher
 		//---------------------------------------------------------------------------------
-		pxtask::BaseTask*		getJob();
-		pxtask::BaseTask*		stealJob();
+		PxBaseTask*		getJob();
+		PxBaseTask*		stealJob();
+		PxBaseTask*		fetchNextTask();
+		void			runTask(PxBaseTask& task);
+
     	void					waitForWork() { mWorkReady.wait(); }
 	    void					resetWakeSignal();
 
-		static PxU32			getAffinityMask(PxU32 affinityMask);
+		static void				getAffinityMasks(PxU32* affinityMasks, PxU32 threadCount);
 
 
 	protected:
@@ -95,8 +99,10 @@ namespace Ext
 				SharedQueueEntryPool<>			mQueueEntryPool;
 				Ps::SList						mJobList;
 				Ps::Sync						mWorkReady;
+				PxU8*							mThreadNames;
 				PxU32							mNumThreads;
 				bool							mShuttingDown;
+				bool							mRunProfiled;
 	};
 
 #pragma warning(pop)

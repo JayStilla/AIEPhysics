@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -33,6 +33,7 @@
 #include "RendererMemoryMacros.h"
 #include "Renderer.h"
 #include "PsString.h"
+#include "PsUtilities.h"
 #include "SampleBaseInputEventIds.h"
 #include <SampleUserInputIds.h>
 
@@ -45,21 +46,21 @@ using namespace SampleFramework;
 
 // EXIT: a basic command to hide the console
 // Usage: exit
-static void BasicCmdexit(Console* console, const char* text, void* user_data)
+void Console::BasicCmdexit(Console* console, const char* text, void* user_data)
 {
 	console->setActive(false);
 }
 
 // CLS: a basic command to clear the console
 // Usage: cls
-static void BasicCmdcls(Console* console, const char* text, void* user_data)
+void Console::BasicCmdcls(Console* console, const char* text, void* user_data)
 {
 	console->clear();
 }
 
 // PROMPT: a basic command to set the prompt
 // Usage: prompt [text]
-static void BasicCmdSetPrompt(Console* console, const char* text, void* user_data)
+void Console::BasicCmdSetPrompt(Console* console, const char* text, void* user_data)
 {
 	console->setPrompt(text);
 }
@@ -67,7 +68,7 @@ static void BasicCmdSetPrompt(Console* console, const char* text, void* user_dat
 // CMDLIST: a basic command to display a list of all possible commands
 // Usage:	cmdlist				<= display all possible commands
 //			cmdlist [command]	<= check whether a command exists or not
-static void BasicCmdcmdlist(Console* console, const char* text, void* user_data)
+void Console::BasicCmdcmdlist(Console* console, const char* text, void* user_data)
 {
 	ConsoleCommand* pcmd;
 	if(!text)
@@ -99,7 +100,7 @@ static void BasicCmdcmdlist(Console* console, const char* text, void* user_data)
 
 // CMDHIST: a basic command to display command history
 // Usage: cmdhist
-static void BasicCmdcmdhist(Console* console, const char* text, void* user_data)
+void Console::BasicCmdcmdhist(Console* console, const char* text, void* user_data)
 {
 	int index = console->mNewcmd - console->mNumcmdhist;
 	for(int i=0;i<console->mNumcmdhist;i++)
@@ -119,8 +120,7 @@ static void BasicCmdcmdhist(Console* console, const char* text, void* user_data)
 Console::Console(SampleFramework::SamplePlatform* plt) :
 	mViewBottom	(0),
 	mNewline	(0),
-	mIsActive	(false),
-	m_Platform(plt)
+	mIsActive	(false)
 {
 	strcpy(mLastChar, "-");
 	strcpy(mPrompt, ">");
@@ -237,23 +237,6 @@ void Console::out(const char* string)
 	}
 }
 
-// Scroll the console up/down
-void Console::scroll(const SampleFramework::InputEvent& ie)
-{
-	if(ie.m_Id== CONSOLE_SCROLL_UP)
-	{
-		mViewBottom++;
-		if(mViewBottom >= CONSOLE_MAX_ROW)		mViewBottom -= CONSOLE_MAX_ROW;
-		if(mViewBottom == mNewline - NB_LINES)	mViewBottom--;
-	}
-	else if(ie.m_Id== CONSOLE_SCROLL_DOWN)
-	{
-		mViewBottom--;
-		if(mViewBottom < 0)				mViewBottom += CONSOLE_MAX_ROW;
-		if(mViewBottom == mNewline-1)	mViewBottom = mNewline;
-	}
-}
-
 //  Process an instruction
 //		called after the user hits enter
 void Console::process()
@@ -265,7 +248,8 @@ void Console::process()
 
 	// Keep track of command in history buffer
 	strcpy(mCmdhist[mNewcmd], cmd);
-	mNewcmd = mNewcmd++ % CONSOLE_MAX_HIST;
+	mNewcmd = mNewcmd % CONSOLE_MAX_HIST;
+	mNewcmd++;
 	mCurcmd = 0;
 	mNumcmdhist++;
 	if(mNumcmdhist>CONSOLE_MAX_HIST)	mNumcmdhist = CONSOLE_MAX_HIST;
@@ -287,23 +271,10 @@ void Console::process()
 
 
 
-// Called from winmain
 //		up and down arrow
 //		for command history
-void Console::cmdHistory(const SampleFramework::InputEvent& ie)
+void Console::cmdHistory()
 {
-	if(ie.m_Id== CONSOLE_LIST_COMMAND_UP)
-	{
-		mCurcmd++;
-		if( mCurcmd > mNumcmdhist )
-			mCurcmd = mNumcmdhist;
-	}
-	else if(ie.m_Id== CONSOLE_LIST_COMMAND_DOWN)
-	{
-		mCurcmd--;
-		if( mCurcmd <= 0 )
-			mCurcmd = 0;
-	}
 	if( mCurcmd != -1 )
 	{
 		char buf[256];
@@ -332,7 +303,7 @@ bool Console::findBestCommand(char* best_command, const char* text, PxU32& tabIn
 	strcpy(tmp, text);
 	physx::string::strlwr(tmp);
 
-	const char i = tmp[0];
+	const unsigned char i = tmp[0];
 
 	ConsoleCommand* FirstCommand = NULL;
 	ConsoleCommand* BestCommand = NULL;
@@ -500,117 +471,126 @@ void Console::in(PxU32 wparam)
 	if(!mIsActive)
 		return;
 
-	switch(wparam)
+	if ((wparam >= 'a' && wparam <= 'z') || (wparam >= 'A' && wparam <= 'Z') || (wparam >= '0' && wparam <= '9') || wparam == ' ' || wparam == '.' || wparam == '-' || wparam == '_')
 	{
-		case 178:
-			gTabMode = false;
-			break;
-
-		case '\b':
-			gTabMode = false;
-			if(mCol>(long)strlen(mPrompt))
-			{
-				mBuffer[mNewline].mText[mCol] = '\0';
-				mBuffer[mNewline].mText[mCol-1] = mLastChar[0];
-				mCol--;
-			}
-			break;
-
-		// Return/Enter
-		case '\n':
-		case '\r':
-			gTabMode = false;
-			mBuffer[mNewline].mText[mCol] = '\0';
-			process();
-			advance();
-			strcpy(mBuffer[mNewline].mText, mPrompt);
-			strcat(mBuffer[mNewline].mText, mLastChar);
-			resetCol();
-			break;
-
-		// Tab
-		case '\t':
-			{
-			if(!gTabMode)
-			{
-				gTabMode = true;
-
-				// Discard last character
-				mBuffer[mNewline].mText[mCol] = '\0';
-
-				// Discard prompt
-				long Index = (long)strlen(mPrompt);
-				strcpy(gTabCmd, &mBuffer[mNewline].mText[Index]);
-			}
-			char BestCmd[1024];
-			if(findBestCommand(BestCmd, gTabCmd, gTabIndex))
-			{
-				strcpy(mBuffer[mNewline].mText, mPrompt);
-				strcat(mBuffer[mNewline].mText, BestCmd);
-				strcat(mBuffer[mNewline].mText, mLastChar);
-				mCol = PxI32(strlen(mPrompt) + strlen(BestCmd));
-			}
-			else
-			{
-				gTabMode = false;
-				mBuffer[mNewline].mText[mCol] = mLastChar[0];	// Append cursor
-				mBuffer[mNewline].mText[mCol+1] = '\0';
-			}
-			}
-			break;
-
-		case '\x1B':			// Escape
-			gTabMode = false;
-			mCol=0;
-			mBuffer[mNewline].mText[mCol]=mLastChar[0];
-			break;
-
-		default:
-			gTabMode = false;
-			if(mCol >= CONSOLE_MAX_COL-2)	// We need 2 extra characters for the cursor and the final 0
-				break;
-			mBuffer[mNewline].mText[mCol++] = (char)wparam;	// Append new character
-			mBuffer[mNewline].mText[mCol] = mLastChar[0];	// Append cursor
-			mBuffer[mNewline].mText[mCol+1] = '\0';
-			break;
+		gTabMode = false;
+		if(mCol >= CONSOLE_MAX_COL-2)	// We need 2 extra characters for the cursor and the final 0
+			return;
+		mBuffer[mNewline].mText[mCol++] = (char)wparam;	// Append new character
+		mBuffer[mNewline].mText[mCol] = mLastChar[0];	// Append cursor
+		mBuffer[mNewline].mText[mCol+1] = '\0';
 	}
 }
 
 void Console::collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents)
 {
 	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(CONSOLE_ESCAPE,				WKEY_ESCAPE,	XKEY_ESCAPE,	PS3KEY_ESCAPE,	AKEY_UNKNOWN,	OSXKEY_ESCAPE,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_ESCAPE);
-	DIGITAL_INPUT_EVENT_DEF(CONSOLE_LIST_COMMAND_UP,	WKEY_UP,		XKEY_UP,		PS3KEY_UP,		AKEY_UNKNOWN,	OSXKEY_UP,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_UP);
-	DIGITAL_INPUT_EVENT_DEF(CONSOLE_LIST_COMMAND_DOWN,	WKEY_DOWN,		XKEY_DOWN,		PS3KEY_DOWN,	AKEY_UNKNOWN,	OSXKEY_DOWN,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_DOWN);
-	DIGITAL_INPUT_EVENT_DEF(CONSOLE_SCROLL_UP,			WKEY_PRIOR,		XKEY_PRIOR,		PS3KEY_PRIOR,	AKEY_UNKNOWN,	OSXKEY_PRIOR,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_PRIOR);
-	DIGITAL_INPUT_EVENT_DEF(CONSOLE_SCROLL_DOWN,		WKEY_NEXT,		XKEY_NEXT,		PS3KEY_NEXT,	AKEY_UNKNOWN,	OSXKEY_NEXT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NEXT);
+	DIGITAL_INPUT_EVENT_DEF(CONSOLE_OPEN,				WKEY_TAB,		XKEY_TAB,		X1KEY_TAB,			PS3KEY_TAB,			PS4KEY_TAB,				AKEY_UNKNOWN,	OSXKEY_TAB,			PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_TAB,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CONSOLE_ESCAPE,				WKEY_ESCAPE,	XKEY_ESCAPE,	X1KEY_ESCAPE,		PS3KEY_ESCAPE,		PS4KEY_ESCAPE,			AKEY_UNKNOWN,	OSXKEY_ESCAPE,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_ESCAPE,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CONSOLE_ENTER,				WKEY_RETURN,	XKEY_RETURN,	X1KEY_RETURN,		PS3KEY_RETURN,		PS4KEY_RETURN,			AKEY_UNKNOWN,	OSXKEY_RETURN,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_RETURN,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CONSOLE_BACKSPACE,			WKEY_BACKSPACE,	XKEY_BACKSPACE,	X1KEY_BACKSPACE,	PS3KEY_BACKSPACE,	PS4KEY_BACKSPACE,		AKEY_UNKNOWN,	OSXKEY_BACKSPACE,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_BACKSPACE,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CONSOLE_LIST_COMMAND_UP,	WKEY_UP,		XKEY_UP,		X1KEY_UP,			PS3KEY_UP,			PS4KEY_UP,				AKEY_UNKNOWN,	OSXKEY_UP,			PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_UP,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CONSOLE_LIST_COMMAND_DOWN,	WKEY_DOWN,		XKEY_DOWN,		X1KEY_DOWN,			PS3KEY_DOWN,		PS4KEY_DOWN,			AKEY_UNKNOWN,	OSXKEY_DOWN,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_DOWN,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CONSOLE_SCROLL_UP,			WKEY_PRIOR,		XKEY_PRIOR,		X1KEY_PRIOR,		PS3KEY_PRIOR,		PS4KEY_PRIOR,			AKEY_UNKNOWN,	OSXKEY_PRIOR,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_PRIOR,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CONSOLE_SCROLL_DOWN,		WKEY_NEXT,		XKEY_NEXT,		X1KEY_NEXT,			PS3KEY_NEXT,		PS4KEY_NEXT,			AKEY_UNKNOWN,	OSXKEY_NEXT,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NEXT,		WIIUKEY_UNKNOWN);
 }
 
-bool Console::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
+//return true if we processed the key
+void Console::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
 {
-	if(val)
+	//if (val)
 	{
-		if(ie.m_Id == CONSOLE_LIST_COMMAND_UP || ie.m_Id == CONSOLE_LIST_COMMAND_DOWN)
-		{
-			cmdHistory(ie);
-			return true;
-		}
-		else if(ie.m_Id == CONSOLE_SCROLL_UP || ie.m_Id == CONSOLE_SCROLL_DOWN)
-		{
-			scroll(ie);
-			return true;
-		}
-	}
-	else
-	{
-		if(ie.m_Id == CONSOLE_ESCAPE)
-		{
-			mIsActive = false;
-			return false;
-		}
-	}
 
-	return true;
+		if (!mIsActive)
+		{
+
+			if (ie.m_Id == CONSOLE_OPEN)
+			{
+				mIsActive = true;
+				return;
+			}
+		}
+		else 
+		{
+			if (!val)
+			{
+				switch (ie.m_Id)
+				{
+				case CONSOLE_OPEN:
+					if(!gTabMode)
+					{
+						gTabMode = true;
+
+						// Discard last character
+						mBuffer[mNewline].mText[mCol] = '\0';
+
+						// Discard prompt
+						long Index = (long)strlen(mPrompt);
+						strcpy(gTabCmd, &mBuffer[mNewline].mText[Index]);
+					}
+					char BestCmd[1024];
+					if(findBestCommand(BestCmd, gTabCmd, gTabIndex))
+					{
+						strcpy(mBuffer[mNewline].mText, mPrompt);
+						strcat(mBuffer[mNewline].mText, BestCmd);
+						strcat(mBuffer[mNewline].mText, mLastChar);
+						mCol = PxI32(strlen(mPrompt) + strlen(BestCmd));
+					}
+					else
+					{
+						gTabMode = false;
+						mBuffer[mNewline].mText[mCol] = mLastChar[0];	// Append cursor
+						mBuffer[mNewline].mText[mCol+1] = '\0';
+					}
+					break;
+				case CONSOLE_BACKSPACE:
+					gTabMode = false;
+					if(mCol>(long)strlen(mPrompt))
+					{
+						mBuffer[mNewline].mText[mCol] = '\0';
+						mBuffer[mNewline].mText[mCol-1] = mLastChar[0];
+						mCol--;
+					}
+					break;					
+				case CONSOLE_ENTER:
+					gTabMode = false;
+					mBuffer[mNewline].mText[mCol] = '\0';
+					process();
+					advance();
+					strcpy(mBuffer[mNewline].mText, mPrompt);
+					strcat(mBuffer[mNewline].mText, mLastChar);
+					resetCol();
+					break;
+				case CONSOLE_ESCAPE:
+					mIsActive = false;
+					gTabMode = false;
+					break;
+				case CONSOLE_LIST_COMMAND_UP:
+					mCurcmd++;
+					if( mCurcmd > mNumcmdhist )
+						mCurcmd = mNumcmdhist;		
+					cmdHistory();
+					break;
+				case CONSOLE_LIST_COMMAND_DOWN:
+					mCurcmd--;
+					if( mCurcmd <= 0 )
+						mCurcmd = 0;
+					cmdHistory();
+					break;
+				case CONSOLE_SCROLL_UP:
+					mViewBottom++;
+					if(mViewBottom >= CONSOLE_MAX_ROW)		mViewBottom -= CONSOLE_MAX_ROW;
+					if(mViewBottom == mNewline - NB_LINES)	mViewBottom--;
+					break;
+				case CONSOLE_SCROLL_DOWN:
+					mViewBottom--;
+					if(mViewBottom < 0)				mViewBottom += CONSOLE_MAX_ROW;
+					if(mViewBottom == mNewline-1)	mViewBottom = mNewline;
+					break;
+				}
+			}
+		}
+	}
 }
 
 void Console::onKeyDown(SampleFramework::SampleUserInput::KeyCode keyCode, PxU32 param)
@@ -618,6 +598,12 @@ void Console::onKeyDown(SampleFramework::SampleUserInput::KeyCode keyCode, PxU32
 	//sschirm doesn't compile on snc
 	//const int keyparam = (int)param;
 
-	if(param)
-		in(param);
+
+	if (mIsActive)
+	{
+		if(param)
+			in(param);
+	}
+
+	
 }

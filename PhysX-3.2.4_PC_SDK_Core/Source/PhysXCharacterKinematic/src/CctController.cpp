@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -37,7 +37,7 @@
 #include "PxExtensionsAPI.h"
 #include "PsMathUtils.h"
 #include "PsUtilities.h"
-#include "PxCoreUtilities.h"
+#include "PxPhysics.h"
 
 using namespace physx;
 using namespace Cct;
@@ -56,8 +56,6 @@ Controller::Controller(const PxControllerDesc& desc, PxScene* s) :
 	mCachedStandingOnMoving	(false)
 {
 	mType								= PxControllerShapeType::eFORCE_DWORD;
-	mInteractionMode					= desc.interactionMode;
-	mGroupsBitmask						= desc.groupsBitmask;
 
 	mUserParams.mNonWalkableMode		= desc.nonWalkableMode;
 	mUserParams.mSlopeLimit				= desc.slopeLimit;
@@ -67,7 +65,7 @@ Controller::Controller(const PxControllerDesc& desc, PxScene* s) :
 	mUserParams.mMaxJumpHeight			= desc.maxJumpHeight;
 	mUserParams.mHandleSlope			= desc.slopeLimit!=0.0f;
 
-	mCallback							= desc.callback;
+	mReportCallback						= desc.reportCallback;
 	mBehaviorCallback					= desc.behaviorCallback;
 	mUserData							= desc.userData;
 
@@ -83,12 +81,42 @@ Controller::Controller(const PxControllerDesc& desc, PxScene* s) :
 
 	mUserParams.mUpDirection = PxVec3(0.0f);
 	setUpDirectionInternal(desc.upDirection);
+
+	// PT: register ourself as a deletion listener, to be called the SDK whenever an object is deleted
+	PX_ASSERT(s);
+	PxPhysics& physics = s->getPhysics();
+	physics.registerDeletionListener(*this, PxDeletionEventFlag::eUSER_RELEASE);
 }
 
 Controller::~Controller()
 {
-	if(mScene && mKineActor)
-		mKineActor->release();
+	if(mScene)
+	{
+		PxPhysics& physics = mScene->getPhysics();
+		physics.unregisterDeletionListener(*this);
+
+		if(mKineActor)
+			mKineActor->release();
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Controller::onRelease(const PxBase* observed, void* /*userData*/, PxDeletionEventFlag::Enum deletionEvent)
+{
+	PX_ASSERT(deletionEvent == PxDeletionEventFlag::eUSER_RELEASE);  // the only type we registered for
+	PX_UNUSED(deletionEvent);
+
+	mCctModule.onRelease(*observed);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void Controller::onOriginShift(const PxVec3& shift)
+{
+	mPosition -= shift;
+
+	mCctModule.onOriginShift(shift);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -107,32 +135,33 @@ void Controller::setUpDirectionInternal(const PxVec3& up)
 	mUserParams.mUpDirection	= up;
 
 	// Update kinematic actor
-	if(mKineActor)
+	/*if(mKineActor)
 	{
 		PxTransform pose = mKineActor->getGlobalPose();
 		pose.q = q;
 		mKineActor->setGlobalPose(pose);	
-	}
+	}*/
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void Controller::releaseInternal()
 {
-	mManager->releaseController(*getPxController());	
+	mManager->releaseController(*getPxController());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void Controller::getInternalState(PxControllerState& state) const
 {
-	state.deltaXP			= mDeltaXP;
-	state.touchedShape		= mCctModule.mTouchedShape;
+	state.deltaXP				= mDeltaXP;
+	state.touchedShape			= mCctModule.mTouchedShape;
+	state.touchedActor			= const_cast<PxRigidActor*>(mCctModule.mTouchedActor);
 	state.touchedObstacleHandle	= mCctModule.mTouchedObstacleHandle;
-	state.standOnAnotherCCT	= (mCctModule.mFlags & STF_TOUCH_OTHER_CCT)!=0;
-	state.standOnObstacle	= (mCctModule.mFlags & STF_TOUCH_OBSTACLE)!=0;
-	state.isMovingUp		= (mCctModule.mFlags & STF_IS_MOVING_UP)!=0;
-	state.collisionFlags	= mCollisionFlags;
+	state.standOnAnotherCCT		= (mCctModule.mFlags & STF_TOUCH_OTHER_CCT)!=0;
+	state.standOnObstacle		= (mCctModule.mFlags & STF_TOUCH_OBSTACLE)!=0;
+	state.isMovingUp			= (mCctModule.mFlags & STF_IS_MOVING_UP)!=0;
+	state.collisionFlags		= mCollisionFlags;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -142,6 +171,7 @@ void Controller::getInternalStats(PxControllerStats& stats) const
 	stats.nbFullUpdates		= mCctModule.mNbFullUpdates;
 	stats.nbPartialUpdates	= mCctModule.mNbPartialUpdates;
 	stats.nbIterations		= mCctModule.mNbIterations;
+	stats.nbTessellation	= mCctModule.mNbTessellation;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -155,6 +185,7 @@ bool Controller::setPos(const PxExtendedVec3& pos)
 	{
 		PxTransform targetPose = mKineActor->getGlobalPose();
 		targetPose.p = toVec3(mPosition);  // LOSS OF ACCURACY
+		targetPose.q = mUserParams.mQuatFromUp;
 		mKineActor->setKinematicTarget(targetPose);	
 	}
 	return true;
@@ -178,7 +209,7 @@ bool Controller::createProxyActor(PxPhysics& sdk, const PxGeometry& geometry, co
 		return false;
 
 	mKineActor->createShape(geometry, material);
-	mKineActor->setRigidDynamicFlag(PxRigidDynamicFlag::eKINEMATIC, true);
+	mKineActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
 
 	PxRigidBodyExt::updateMassAndInertia(*mKineActor, mProxyDensity);
 	mScene->addActor(*mKineActor);

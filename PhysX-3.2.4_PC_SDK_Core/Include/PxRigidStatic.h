@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,7 @@
 @{
 */
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 #include "PxRigidActor.h"
 
 #ifndef PX_DOXYGEN
@@ -53,24 +53,24 @@ Instances of this class are created by calling #PxPhysics::createRigidStatic() a
 <h3>Visualizations</h3>
 \li #PxVisualizationParameter::eACTOR_AXES
 
-@see PxRigidActor  PxPhysics.createRigidStatic  release()
+@see PxRigidActor  PxPhysics.createRigidStatic()  release()
 */
 
 class PxRigidStatic : public PxRigidActor
 {
 public:
-	virtual		const char*		getConcreteTypeName() const					{	return "PxRigidStatic";	}
+	virtual		const char*		getConcreteTypeName() const { return "PxRigidStatic"; }
 
 protected:
-								PxRigidStatic(PxRefResolver& v) : PxRigidActor(v)		{}
-	PX_INLINE					PxRigidStatic() : PxRigidActor() {}
-	virtual						~PxRigidStatic()	{}
-	virtual		bool			isKindOf(const char* name)	const		{	return !strcmp("PxRigidStatic", name) || PxRigidActor::isKindOf(name); }
+	PX_INLINE					PxRigidStatic(PxType concreteType, PxBaseFlags baseFlags) : PxRigidActor(concreteType, baseFlags) {}
+	PX_INLINE					PxRigidStatic(PxBaseFlags baseFlags) : PxRigidActor(baseFlags) {}
+	virtual						~PxRigidStatic() {}
+	virtual		bool			isKindOf(const char* name)	const { return !strcmp("PxRigidStatic", name) || PxRigidActor::isKindOf(name); }
 
 };
 
-PX_INLINE	PxRigidStatic*			PxActor::isRigidStatic()			{ 	return is<PxRigidStatic>();	}
-PX_INLINE	const PxRigidStatic*	PxActor::isRigidStatic() const		{	return is<PxRigidStatic>();	}
+PX_DEPRECATED PX_INLINE	PxRigidStatic*			PxActor::isRigidStatic()			{ 	return is<PxRigidStatic>();	}
+PX_DEPRECATED PX_INLINE	const PxRigidStatic*	PxActor::isRigidStatic() const		{	return is<PxRigidStatic>();	}
 
 
 #ifndef PX_DOXYGEN

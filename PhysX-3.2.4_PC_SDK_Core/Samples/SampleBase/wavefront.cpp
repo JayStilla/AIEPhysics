@@ -23,10 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
-// Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
-// Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
-
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +31,8 @@
 #include <ctype.h>
 
 #include "wavefront.h"
+#include "FrameworkFoundation.h"
+#include "PsFile.h"
 
 namespace WAVEFRONT
 {
@@ -104,7 +103,7 @@ namespace WAVEFRONT
 			mData = data;
 			mLen  = len;
 			mMyAlloc = false;
-		};
+		}
 
 		int  Parse(InPlaceParserInterface *callback); // returns true if entire file was parsed, false if it aborted for some reason
 
@@ -114,23 +113,23 @@ namespace WAVEFRONT
 
 		void SetHardSeparator(char c) // add a hard separator
 		{
-			mHard[c] = ST_HARD;
+			mHard[(unsigned int)c] = ST_HARD;
 		}
 
 		void SetHard(char c) // add a hard separator
 		{
-			mHard[c] = ST_HARD;
+			mHard[(unsigned int)c] = ST_HARD;
 		}
 
 
 		void SetCommentSymbol(char c) // comment character, treated as 'end of string'
 		{
-			mHard[c] = ST_EOS;
+			mHard[(unsigned int)c] = ST_EOS;
 		}
 
 		void ClearHardSeparator(char c)
 		{
-			mHard[c] = ST_DATA;
+			mHard[(unsigned int)c] = ST_DATA;
 		}
 
 
@@ -138,7 +137,7 @@ namespace WAVEFRONT
 
 		bool EOS(char c)
 		{
-			if ( mHard[c] == ST_EOS )
+			if ( mHard[(unsigned int)c] == ST_EOS )
 			{
 				return true;
 			}
@@ -179,7 +178,8 @@ namespace WAVEFRONT
 		mLen  = 0;
 		mMyAlloc = false;
 
-		FILE *fph = fopen(fname, "rb");
+		SampleFramework::File* fph = NULL;
+		physx::shdfnd::fopen_s(&fph, fname, "rb");
 		if ( fph )
 		{
 			fseek(fph,0L,SEEK_END);
@@ -188,7 +188,7 @@ namespace WAVEFRONT
 			if ( mLen )
 			{
 				mData = (char *) malloc(sizeof(char)*(mLen+1));
-				int ok = int(fread(mData, mLen, 1, fph));
+				int ok = int(fread(mData, 1, mLen, fph));
 				if ( !ok )
 				{
 					free(mData);
@@ -214,7 +214,7 @@ namespace WAVEFRONT
 
 	bool InPlaceParser::IsHard(char c)
 	{
-		return mHard[c] == ST_HARD;
+		return mHard[(unsigned int)c] == ST_HARD;
 	}
 
 	char * InPlaceParser::AddHard(int &argc,const char **argv,char *foo)
@@ -233,7 +233,7 @@ namespace WAVEFRONT
 
 	bool   InPlaceParser::IsWhiteSpace(char c)
 	{
-		return mHard[c] == ST_SOFT;
+		return mHard[(unsigned int)c] == ST_SOFT;
 	}
 
 	char * InPlaceParser::SkipSpaces(char *foo)
@@ -374,7 +374,7 @@ namespace WAVEFRONT
 			}
 		}
 
-		lineno++; // lasst line.
+		lineno++; // last line.
 
 		int v = ProcessLine(lineno,begin,callback);
 		if ( v ) ret = v;
@@ -532,14 +532,14 @@ namespace WAVEFRONT
 		void GetVertex(GeometryVertex &v,const char *face) const;
 
 		float* mVerts;
-		unsigned mNumVerts;
+		unsigned mNumVerts; // this is the tripled number of verts
 		unsigned mMaxVerts;
 
-		float* mTexels;
+		float* mTexels; // doubled number of texcoords
 		unsigned mNumTexels;
 		unsigned mMaxTexels;
 
-		float* mNormals;
+		float* mNormals; // tripled number of normals
 		unsigned mNumNormals;
 		unsigned mMaxNormals;
 
@@ -639,8 +639,8 @@ namespace WAVEFRONT
 			v.mPos[0] = p[0];
 			v.mPos[1] = p[1];
 			v.mPos[2] = p[2];
-		}
-
+		} else
+			assert(0 == "Negative face vertex indices are not supported in wavefront loader.");
 	}
 
 	template<typename T>
@@ -860,6 +860,8 @@ WavefrontObj::~WavefrontObj(void)
 {
 	delete []mIndices;
 	delete []mVertices;
+	if (mTexCoords)
+		delete[] mTexCoords;
 }
 
 unsigned int WavefrontObj::loadObj(const char *fname, bool textured) // load a wavefront obj returns number of triangles that were loaded.  Data is persists until the class is destructed.
@@ -901,16 +903,23 @@ unsigned int WavefrontObj::loadObj(const char *fname, bool textured) // load a w
 
 bool LoadWavefrontBinary(const char* filename, WavefrontObj& wfo)
 {
-	FILE* fp = fopen(filename, "rb");
+	SampleFramework::File* fp = NULL;
+	physx::shdfnd::fopen_s(&fp, filename, "rb");
 	if(!fp)	return false;
 
-	fread(&wfo.mVertexCount, 1, sizeof(int), fp);
+	size_t numRead = fread(&wfo.mVertexCount, 1, sizeof(int), fp);
+	if(numRead != sizeof(int)) { fclose(fp); return false; }
+	
 	wfo.mVertices = new float[wfo.mVertexCount*3];
-	fread(wfo.mVertices, wfo.mVertexCount*3, sizeof(float), fp);
+	numRead = fread(wfo.mVertices, 1, sizeof(float)*wfo.mVertexCount*3, fp);
+	if(numRead != sizeof(float)*wfo.mVertexCount*3) { fclose(fp); return false; }
 
-	fread(&wfo.mTriCount, 1, sizeof(int), fp);
+	numRead = fread(&wfo.mTriCount, 1, sizeof(int), fp);
+	if(numRead != sizeof(int)) { fclose(fp); return false; }
+	
 	wfo.mIndices = new int[wfo.mTriCount*3];
-	fread(wfo.mIndices, wfo.mTriCount*3, sizeof(int), fp);
+	numRead = fread(wfo.mIndices, 1, sizeof(int)*wfo.mTriCount*3, fp);
+	if(numRead != sizeof(int)*wfo.mTriCount*3) { fclose(fp); return false; }
 
 	// NB: mTexCoords not supported
 
@@ -920,14 +929,15 @@ bool LoadWavefrontBinary(const char* filename, WavefrontObj& wfo)
 
 bool SaveWavefrontBinary(const char* filename, const WavefrontObj& wfo)
 {
-	FILE* fp = fopen(filename, "wb");
+	SampleFramework::File* fp = NULL;
+	physx::shdfnd::fopen_s(&fp, filename, "wb");
 	if(!fp)	return false;
 
 	fwrite(&wfo.mVertexCount, 1, sizeof(int), fp);
-	fwrite(wfo.mVertices, wfo.mVertexCount*3, sizeof(float), fp);
+	fwrite(wfo.mVertices, 1, wfo.mVertexCount*3*sizeof(float), fp);
 
 	fwrite(&wfo.mTriCount, 1, sizeof(int), fp);
-	fwrite(wfo.mIndices, wfo.mTriCount*3, sizeof(int), fp);
+	fwrite(wfo.mIndices, 1, wfo.mTriCount*3*sizeof(int), fp);
 
 	// NB: mTexCoords not supported
 

@@ -1,37 +1,29 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #ifndef D3D9_RENDERER_H
 #define D3D9_RENDERER_H
 
@@ -45,7 +37,10 @@
 #if defined(RENDERER_DEBUG)
 	//#define D3D_DEBUG_INFO 1
 #endif
-#include "GLIncludes.h"
+
+#if defined(RENDERER_XBOX360)
+#include <xtl.h>
+#endif
 #include <d3d9.h>
 #include <d3dx9.h>
 
@@ -53,9 +48,12 @@
 // Disabled for now as it appears to actually slow us down significantly on particles.
 #if defined(RENDERER_XBOX360)
 #define RENDERER_ENABLE_DYNAMIC_VB_POOLS 0
+#define RENDERER_ENABLE_DIRECT3D9_SWAPCHAIN 0
 #else
 #define RENDERER_ENABLE_DYNAMIC_VB_POOLS 1
+#define RENDERER_ENABLE_DIRECT3D9_SWAPCHAIN 1
 #endif
+struct IDirect3DSwapChain9;
 
 namespace SampleRenderer
 {
@@ -83,8 +81,11 @@ namespace SampleRenderer
 
 		public:
 			HRESULT CompileShaderFromFileA(LPCSTR srcFile, CONST D3DXMACRO *defines, LPD3DXINCLUDE include, LPCSTR functionName, LPCSTR profile, DWORD flags, LPD3DXBUFFER *shader, LPD3DXBUFFER *errorMsgs, LPD3DXCONSTANTTABLE *constantTable);
+			HRESULT GetShaderConstantTable(const DWORD* pFunction, LPD3DXCONSTANTTABLE *constantTable);
 			LPCSTR  GetVertexShaderProfile(LPDIRECT3DDEVICE9 device);
 			LPCSTR  GetPixelShaderProfile(LPDIRECT3DDEVICE9 device);
+			HRESULT SaveSurfaceToFileInMemory(LPD3DXBUFFER *ppDestBuf, D3DXIMAGE_FILEFORMAT DestFormat, LPDIRECT3DSURFACE9 pSrcSurface, const PALETTEENTRY *pSrcPalette, const RECT *pSrcRect);
+			HRESULT CreateBuffer(DWORD NumBytes, LPD3DXBUFFER *ppBuffer);
 			HRESULT SaveSurfaceToFileA( LPCSTR pDestFile, D3DXIMAGE_FILEFORMAT DestFormat, LPDIRECT3DSURFACE9 pSrcSurface, CONST PALETTEENTRY* pSrcPalette, CONST RECT*  pSrcRect);
 
 		public:
@@ -99,7 +100,10 @@ namespace SampleRenderer
 			DEFINE_D3DX_FUNCTION(D3DXCompileShaderFromFileA, HRESULT, (LPCSTR, CONST D3DXMACRO*, LPD3DXINCLUDE, LPCSTR, LPCSTR, DWORD, LPD3DXBUFFER*, LPD3DXBUFFER*, LPD3DXCONSTANTTABLE *))
 			DEFINE_D3DX_FUNCTION(D3DXGetVertexShaderProfile, LPCSTR, (LPDIRECT3DDEVICE9));
 			DEFINE_D3DX_FUNCTION(D3DXGetPixelShaderProfile,  LPCSTR, (LPDIRECT3DDEVICE9));
+			DEFINE_D3DX_FUNCTION(D3DXSaveSurfaceToFileInMemory, HRESULT, (LPD3DXBUFFER*, D3DXIMAGE_FILEFORMAT, LPDIRECT3DSURFACE9, const PALETTEENTRY*, const RECT*));
 			DEFINE_D3DX_FUNCTION(D3DXSaveSurfaceToFileA, HRESULT, (LPCSTR ,D3DXIMAGE_FILEFORMAT , LPDIRECT3DSURFACE9 , CONST PALETTEENTRY* , CONST RECT* ));
+			DEFINE_D3DX_FUNCTION(D3DXGetShaderConstantTable, HRESULT, (const DWORD* , LPD3DXCONSTANTTABLE*));
+			DEFINE_D3DX_FUNCTION(D3DXCreateBuffer, HRESULT, (DWORD, LPD3DXBUFFER*));
 
 #undef DEFINE_D3DX_FUNCTION
 #endif
@@ -155,11 +159,17 @@ namespace SampleRenderer
 	protected:
 		virtual bool checkResize(bool isDeviceLost);
 		void buildDepthStencilSurface(void);
-		void releaseDepthStencilSurface(void);
+		void buildSwapchain();
+		void releaseSwapchain();
+		bool useSwapchain() const;
+		bool validSwapchain() const;
+		HRESULT presentSwapchain();
 
+		void releaseDepthStencilSurface(void);
 	public:
-		virtual void onDeviceLost(void);
-		virtual void onDeviceReset(void);
+		bool resetDevice(void);
+		void onDeviceLost(void);
+		void onDeviceReset(void);
 
 	public:
 		// clears the offscreen buffers.
@@ -175,10 +185,16 @@ namespace SampleRenderer
 		// get the window size
 		void getWindowSize(PxU32 &width, PxU32 &height) const;
 
+		// gets a handle to the current frame's data, in bitmap format
+		//    note: subsequent calls will invalidate any previously returned data
+		//    return true on successful screenshot capture
+		virtual bool					captureScreen(PxU32 &width, PxU32& height, PxU32& sizeInBytes, const void*& screenshotData);
+
 		virtual RendererVertexBuffer   *createVertexBuffer(  const RendererVertexBufferDesc   &desc);
 		virtual RendererIndexBuffer    *createIndexBuffer(   const RendererIndexBufferDesc    &desc);
 		virtual RendererInstanceBuffer *createInstanceBuffer(const RendererInstanceBufferDesc &desc);
 		virtual RendererTexture2D      *createTexture2D(     const RendererTexture2DDesc      &desc);
+		virtual RendererTexture3D      *createTexture3D(     const RendererTexture3DDesc      &desc);
 		virtual RendererTarget         *createTarget(        const RendererTargetDesc         &desc);
 		virtual RendererMaterial       *createMaterial(      const RendererMaterialDesc       &desc);
 		virtual RendererMesh           *createMesh(          const RendererMeshDesc           &desc);
@@ -187,22 +203,25 @@ namespace SampleRenderer
 		virtual void disableDepthTest();
 		virtual void enableDepthTest();
 
+		virtual void                    setVsync(bool on);
+
 		virtual	bool					initTexter();
 		virtual	void					closeTexter();
-		virtual bool					captureScreen(const char* filename);
 
 		virtual bool beginRender(void);
 		virtual void endRender(void);
 
 		bool canUseManagedResources() { return !m_isDeviceEx; }
 
-		virtual void bindViewProj(const physx::PxMat44 &eye, const PxMat44 &proj);
+		virtual void bindViewProj(const physx::PxMat44 &eye, const RendererProjection &proj);
 		virtual void bindFogState(const RendererColor &fogColor, float fogDistance);
 		virtual void bindAmbientState(const RendererColor &ambientColor);
 		virtual void bindDeferredState(void);
 		virtual void bindMeshContext(const RendererMeshContext &context);
 		virtual void beginMultiPass(void);
 		virtual void endMultiPass(void);
+		virtual void beginTransparentMultiPass(void);
+		virtual void endTransparentMultiPass(void);
 		virtual void renderDeferredLight(const RendererLight &light);
 		virtual PxU32 convertColor(const RendererColor& color) const;
 
@@ -224,13 +243,17 @@ namespace SampleRenderer
 	protected:
 		PxU32                          m_displayWidth;
 		PxU32                          m_displayHeight;
+		ID3DXBuffer                   *m_displayBuffer;
 
 		IDirect3D9                    *m_d3d;
 		IDirect3DDevice9              *m_d3dDevice;
-
-	private:
 		IDirect3DSurface9             *m_d3dDepthStencilSurface;
+		IDirect3DSurface9             *m_d3dSurface;
 
+		IDirect3DSwapChain9           *m_d3dSwapChain;
+		IDirect3DSurface9             *m_d3dSwapDepthStencilSurface;
+		IDirect3DSurface9             *m_d3dSwapSurface;
+	private:
 		bool						   m_isDeviceEx; //implications all over the place
 
 		D3DXInterface                  m_d3dx;
@@ -238,6 +261,7 @@ namespace SampleRenderer
 		ShaderEnvironment              m_environment;
 
 		D3DPRESENT_PARAMETERS          m_d3dPresentParams;
+		bool                           m_d3dPresentParamsChanged;
 
 		physx::PxMat44				   m_viewMatrix;
 

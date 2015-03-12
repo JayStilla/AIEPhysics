@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -44,13 +44,13 @@
 #include <SampleUserInput.h>
 #include <SampleUserInputIds.h>
 #include <SampleUserInputDefines.h>
-
+#include "PsFile.h"
 
 #ifdef PX_PS3
 #include "ps3/PxPS3Config.h"
 #endif
 
-REGISTER_SAMPLE(SampleVehicle, "SampleVehicle")	// PT: registers the sample. Comment this to revert to "hello world" sample.
+REGISTER_SAMPLE(SampleVehicle, "SampleVehicle")
 
 enum
 {
@@ -78,23 +78,53 @@ static PxTransform gPlayerCarStartTransforms[NUM_PLAYER_CARS] =
 };
 
 #define NUM_NONPLAYER_4W_VEHICLES 7
+#if NUM_NONPLAYER_4W_VEHICLES
 static PxTransform gVehicle4WStartTransforms[NUM_NONPLAYER_4W_VEHICLES] = 
 {
 	//Stack of 2 cars
-	PxTransform(PxVec3(-78.796158f,9.9764671f,155.47554f), PxQuat(0.00062184106f,0.97696519f,-0.0029967001f,0.21337670f)),
-	PxTransform(PxVec3(-78.796158f,12.9764671f,155.47554f), PxQuat(0.00062184106f,0.97696519f,-0.0029967001f,0.21337670f)),
+	PxTransform(PxVec3(-78.796158f,9.8764671f,155.47554f), PxQuat(0.00062184106f,0.97696519f,-0.0029967001f,0.21337670f)),
+	PxTransform(PxVec3(-78.796158f,11.7764671f,155.47554f), PxQuat(0.00062184106f,0.97696519f,-0.0029967001f,0.21337670f)),
 
 	//Stack of 2 cars
-	PxTransform(PxVec3(-80.391357f,9.9760214f,161.93578f), PxQuat(1.0251222e-005f, 0.98799443f, -6.0369461e-005f, 0.15448983f)),
-	PxTransform(PxVec3(-80.391357f,12.9760214f,161.93578f), PxQuat(1.0251222e-005f, 0.98799443f, -6.0369461e-005f, 0.15448983f)),
+	PxTransform(PxVec3(-80.391357f,9.8760214f,161.93578f), PxQuat(1.0251222e-005f, 0.98799443f, -6.0369461e-005f, 0.15448983f)),
+	PxTransform(PxVec3(-80.391357f,11.7760214f,161.93578f), PxQuat(1.0251222e-005f, 0.98799443f, -6.0369461e-005f, 0.15448983f)),
 
 	//Bookends to car stacks
 	PxTransform(PxVec3(-77.945328f,9.9765568f,151.78404f), PxQuat(0.0014836629f,-0.86193967f,0.0024594457f,0.50700283f)),
-	PxTransform(PxVec3(-80.395328f,9.0786600f,167.44662f), PxQuat(0.0014836629f,-0.86193967f,0.0024594457f,0.50700283f)),
+	PxTransform(PxVec3(-80.395328f,9.8786600f,167.44662f), PxQuat(0.0014836629f,-0.86193967f,0.0024594457f,0.50700283f)),
 
 	//Car in-between two ramps
 	PxTransform(PxVec3(116.04498f,9.9760214f,139.02933f), PxQuat(7.5981094e-005f,-0.38262743f,-3.1461415e-005f,-0.92390275f)),
 };
+#endif
+
+#define NUM_NONPLAYER_6W_VEHICLES 1
+#if NUM_NONPLAYER_6W_VEHICLES
+static PxTransform gVehicle6WStartTransforms[NUM_NONPLAYER_6W_VEHICLES]=
+{
+	//6-wheeled car
+	PxTransform(PxVec3(-158.09471f,9.8649321f,80.359474f), PxQuat(-0.0017525638f,-0.24773766f,0.00040674198f,-0.96882552f))
+};
+#endif
+
+#define NUM_NONPLAYER_4W_TANKS 0
+#if NUM_NONPLAYER_4W_TANKS 
+static PxTransform gTank4WStartTransforms[NUM_NONPLAYER_4W_TANKS]=
+{
+	//6-wheeled car
+	PxTransform(PxVec3(-158.09471f,9.8649321f,80.359474f), PxQuat(-0.0017525638f,-0.24773766f,0.00040674198f,-0.96882552f))
+};
+#endif
+
+#define NUM_NONPLAYER_6W_TANKS 0
+#if NUM_NONPLAYER_6W_TANKS 
+static PxTransform gTank6WStartTransforms[NUM_NONPLAYER_6W_TANKS]=
+{
+	//6-wheeled car
+	PxTransform(PxVec3(-158.09471f,9.8649321f,80.359474f), PxQuat(-0.0017525638f,-0.24773766f,0.00040674198f,-0.96882552f))
+};
+#endif
+
 
 PxU32 gNumVehicleAdded=0;
 
@@ -118,10 +148,13 @@ enum
 	CAR_PART_REAR_RIGHT_WHEEL,
 	CAR_PART_CHASSIS,
 	CAR_PART_WINDOWS,
-	NUM_CAR4W_RENDER_COMPONENTS
+	NUM_CAR4W_RENDER_COMPONENTS,
+	CAR_PART_EXTRA_WHEEL0=NUM_CAR4W_RENDER_COMPONENTS,
+	CAR_PART_EXTRA_WHEEL1,
+	NUM_CAR6W_RENDER_COMPONENTS
 };
 
-static char gCarPartNames[NUM_CAR4W_RENDER_COMPONENTS][64]=
+static const char gCarPartNames[NUM_CAR4W_RENDER_COMPONENTS][64]=
 {
 	"frontwheelleftshape",	
 	"frontwheelrightshape",	
@@ -139,25 +172,21 @@ struct CarRenderUserData
 	PxU8	pad;
 };
 
-static CarRenderUserData gCar4WRenderUserData[NUM_CAR4W_RENDER_COMPONENTS] = 
+static const CarRenderUserData gCar4WRenderUserData[NUM_CAR6W_RENDER_COMPONENTS] = 
 {
-	//wheel fl		wheel fr		wheel rl		wheel rl		chassis			windows			
-	{0,0,255},		{0,1,255},		{0,2,255},		{0,3,255},		{0,4,255},		{0,4,4}	
+	//wheel fl		wheel fr		wheel rl		wheel rl		chassis			windows		extra wheel0		extra wheel1		
+	{0,0,255},		{0,1,255},		{0,2,255},		{0,3,255},		{0,4,255},		{0,4,4},	{255,255,255},		{255,255,255}
 };
 
-CarRenderUserData gVehicleRenderUserData[NUM_PLAYER_CARS + NUM_NONPLAYER_4W_VEHICLES][NUM_CAR4W_RENDER_COMPONENTS];
-
-static PxVec3 g4WCarPartDependencyOffsets[NUM_CAR4W_RENDER_COMPONENTS]=
+static const CarRenderUserData gCar6WRenderUserData[NUM_CAR6W_RENDER_COMPONENTS] = 
 {
-	PxVec3(0,0,0),
-	PxVec3(0,0,0),
-	PxVec3(0,0,0),
-	PxVec3(0,0,0),
-	PxVec3(0,0,0),
-	PxVec3(0,0,0)
+	//wheel fl		wheel fr		wheel rl		wheel rl		chassis			windows		extra wheel0		extra wheel1	
+	{0,0,255},		{0,1,255},		{0,2,255},		{0,3,255},		{0,6,255},		{0,6,6},	{0,4,255},			{0,5,255}	
 };
 
-RenderMeshActor* gRenderMeshActors[NUM_CAR4W_RENDER_COMPONENTS]={NULL,NULL,NULL,NULL,NULL,NULL};
+CarRenderUserData gVehicleRenderUserData[NUM_PLAYER_CARS + NUM_NONPLAYER_4W_VEHICLES + NUM_NONPLAYER_6W_VEHICLES + NUM_NONPLAYER_4W_TANKS + NUM_NONPLAYER_6W_TANKS][NUM_CAR6W_RENDER_COMPONENTS];
+
+RenderMeshActor* gRenderMeshActors[NUM_CAR6W_RENDER_COMPONENTS]={NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
 
 ////////////////////////////////////////////////////////////////
 //TRANSFORM APPLIED TO CHASSIS RENDER MESH VERTS 
@@ -260,12 +289,19 @@ SampleVehicle::SampleVehicle(PhysXSampleApplication& app) :
 	mTerrainVB							(NULL),
 	mNbTerrainVerts						(0),
 	mNbIB								(0),
-	mChassisMaterial					(NULL),
+	mChassisMaterialDrivable			(NULL),
+	mChassisMaterialNonDrivable			(NULL),
 	mTerrainMaterial					(NULL),
 	mRoadMaterial						(NULL),
 	mRoadIceMaterial					(NULL),
 	mRoadGravelMaterial					(NULL),
 	mPlayerVehicle						(0),
+	mPlayerVehicleType					(ePLAYER_VEHICLE_TYPE_VEHICLE4W),
+	//mPlayerVehicleType					(ePLAYER_VEHICLE_TYPE_VEHICLE6W),
+	//mPlayerVehicleType					(ePLAYER_VEHICLE_TYPE_TANK4W),
+	//mPlayerVehicleType					(ePLAYER_VEHICLE_TYPE_TANK6W),
+	//mTankDriveModel						(PxVehicleDriveTankControlModel::eSPECIAL),
+	//mTankDriveModel						(PxVehicleDriveTankControlModel::eSTANDARD),
 	mTerrainSize						(256),
 	mTerrainWidth						(2.0f),
 	mHFActor							(NULL),
@@ -273,10 +309,12 @@ SampleVehicle::SampleVehicle(PhysXSampleApplication& app) :
 	mDebugRenderFlag					(false),
 	mFixCar								(false),
 	mBackToStart						(false),
+	m3WModeIncremented					(false),
+	m3WMode								(0),
 	mForwardSpeedHud					(0.0f)
 {
 	mCreateGroundPlane	= false;
-	mUseDebugStepper	= false;
+	//mStepperType = FIXED_STEPPER;
 
 	for(PxU32 i=0;i<MAX_NUM_INDEX_BUFFERS;i++)
 		mStandardMaterials[i] = NULL;
@@ -285,6 +323,7 @@ SampleVehicle::SampleVehicle(PhysXSampleApplication& app) :
 	mDebugRenderActiveGraphChannelWheel = 0;
 	mDebugRenderActiveGraphChannelEngine = 0;
 	mTelemetryData4W = NULL;
+	mTelemetryData6W = NULL;
 #endif
 }
 
@@ -303,25 +342,48 @@ void SampleVehicle::setupTelemetryData()
 {
 #if PX_DEBUG_VEHICLE_ON
 
-	mDebugRenderActiveGraphChannelWheel=PxVehicleGraph::eCHANNEL_WHEEL_OMEGA;
-	mDebugRenderActiveGraphChannelEngine=PxVehicleGraph::eCHANNEL_ENGINE_REVS;
+	mDebugRenderActiveGraphChannelWheel=PxVehicleWheelGraphChannel::eWHEEL_OMEGA;
+	mDebugRenderActiveGraphChannelEngine=PxVehicleDriveGraphChannel::eENGINE_REVS;
 
-	mTelemetryData4W = PxVehicleTelemetryData::allocate(4);
+	{
+		const PxF32 graphSizeX=0.25f;
+		const PxF32 graphSizeY=0.25f;
+		const PxF32 engineGraphPosX=0.5f;
+		const PxF32 engineGraphPosY=0.5f;
+		const PxF32 wheelGraphPosX[4]={0.75f,0.25f,0.75f,0.25f};
+		const PxF32 wheelGraphPosY[4]={0.75f,0.75f,0.25f,0.25f};
+		const PxVec3 backgroundColor(255,255,255);
+		const PxVec3 lineColorHigh(255,0,0);
+		const PxVec3 lineColorLow(0,0,0);
 
-	const PxF32 graphSizeX=0.25f;
-	const PxF32 graphSizeY=0.25f;
-	const PxF32 engineGraphPosX=0.5f;
-	const PxF32 engineGraphPosY=0.5f;
-	const PxF32 wheelGraphPosX[4]={0.75f,0.25f,0.75f,0.25f};
-	const PxF32 wheelGraphPosY[4]={0.75f,0.75f,0.25f,0.25f};
-	const PxVec3 backgroundColor(255,255,255);
-	const PxVec3 lineColorHigh(255,0,0);
-	const PxVec3 lineColorLow(0,0,0);
-	mTelemetryData4W->setup
-		 (graphSizeX,graphSizeY,
-		  engineGraphPosX,engineGraphPosY,
-		  wheelGraphPosX,wheelGraphPosY,
-		  backgroundColor,lineColorHigh,lineColorLow);
+		mTelemetryData4W = PxVehicleTelemetryData::allocate(4);
+
+		mTelemetryData4W->setup
+			 (graphSizeX,graphSizeY,
+			  engineGraphPosX,engineGraphPosY,
+			  wheelGraphPosX,wheelGraphPosY,
+			  backgroundColor,lineColorHigh,lineColorLow);
+	}
+
+	{
+		const PxF32 graphSizeX=0.225f;
+		const PxF32 graphSizeY=0.225f;
+		const PxF32 engineGraphPosX=0.5f;
+		const PxF32 engineGraphPosY=0.5f;
+		const PxF32 wheelGraphPosX[6]={0.75f,0.25f,0.75f,0.25f,0.75f,0.25f};
+		const PxF32 wheelGraphPosY[8]={0.83f,0.83f,0.17f,0.17f,0.5f,0.5f};
+		const PxVec3 backgroundColor(255,255,255);
+		const PxVec3 lineColorHigh(255,0,0);
+		const PxVec3 lineColorLow(0,0,0);
+
+		mTelemetryData6W = PxVehicleTelemetryData::allocate(6);
+
+		mTelemetryData6W->setup
+			(graphSizeX,graphSizeY,
+			 engineGraphPosX,engineGraphPosY,
+			 wheelGraphPosX,wheelGraphPosY,
+			 backgroundColor,lineColorHigh,lineColorLow);
+	}
 	
 #endif
 }
@@ -330,20 +392,23 @@ void SampleVehicle::setupTelemetryData()
 
 void SampleVehicle::onInit()
 {
-#if defined(PX_PS3)
-	mNbThreads = 1;
-#elif defined(PX_X360)
-	mNbThreads = 2;
-#else
-	mNbThreads = 3;
+	mNbThreads = PxMax(PxI32(shdfnd::Thread::getNbPhysicalCores())-1, 0);
+#ifdef PX_PS3
+	mNbThreads = 1; // known issue, 0 worker threads and SPU batched query can deadlock.
 #endif
 
 	PhysXSample::onInit();
 
+	PxSceneWriteLock scopedLock(*mScene);
+
 #ifdef PX_PS3
-	PxPS3Config::setSceneParamInt(getActiveScene(), PxPS3ConfigParam::eMEM_CONTACT_BLOCKS, 18);
-	PxPS3Config::setSceneParamInt(getActiveScene(), PxPS3ConfigParam::eMEM_FRICTION_BLOCKS, 17);
-	PxPS3Config::setSceneParamInt(getActiveScene(), PxPS3ConfigParam::eMEM_SHADER_BLOCKS, 5);
+	PxPS3Config::setSceneParamInt(getActiveScene(),PxPS3ConfigParam::eMEM_CONSTRAINT_BLOCKS,11);
+	PxPS3Config::setSceneParamInt(getActiveScene(),PxPS3ConfigParam::eMEM_FRICTION_BLOCKS,25);
+	PxPS3Config::setSceneParamInt(getActiveScene(),PxPS3ConfigParam::eMEM_CONTACT_STREAM_BLOCKS,20);
+#endif
+
+#if defined(SERIALIZE_VEHICLE_BINARY)
+	mMemory = NULL;
 #endif
 
 	//Create physx objects.
@@ -469,15 +534,6 @@ void SampleVehicle::newMesh(const RAWMesh& data)
 		PX_ASSERT(carPart!=0xffffffff);
 		gRenderMeshActors[carPart]=meshActor;
 
-		//Associate a car part with data that tells us how to compute the render transform.
-		for(PxU32 i=0;i<NUM_CAR4W_RENDER_COMPONENTS;i++)
-		{
-			if(0==strcmp(data.mName,gCarPartNames[i]))
-			{
-				g4WCarPartDependencyOffsets[i]=meshActor->getTransform().p;
-			}
-		}
-
 		//Store the wheel offsets from the centre.
 		for(PxU32 i=0;i<=CAR_PART_REAR_RIGHT_WHEEL;i++)
 		{
@@ -504,22 +560,31 @@ void SampleVehicle::newMesh(const RAWMesh& data)
 
 void SampleVehicle::onShutdown()
 {
-	for(PxU32 i=0;i<mNbIB;i++)
-		SAMPLE_FREE(mIB[i]);
-	SAMPLE_FREE(mTerrainVB);
+	{
+		PxSceneWriteLock scopedLock(*mScene);
+		for(PxU32 i=0;i<mNbIB;i++)
+			SAMPLE_FREE(mIB[i]);
+		SAMPLE_FREE(mTerrainVB);
 
 #if PX_DEBUG_VEHICLE_ON
-	mTelemetryData4W->free();
+		mTelemetryData4W->free();
+		mTelemetryData6W->free();
 #endif
-
-	mVehicleManager.shutdown();
+		mVehicleManager.shutdown();
+	}
 
 	PhysXSample::onShutdown();
+
+#if defined(SERIALIZE_VEHICLE_BINARY)
+	if(mMemory)
+		SAMPLE_FREE(mMemory);
+#endif
 }
 
 
 void SampleVehicle::onTickPreRender(PxF32 dtime)
 {
+	mScene->lockWrite();
 	if(mFixCar)
 	{
 		//Get the transform of the last crossed waypoint and reset the player car 
@@ -551,6 +616,30 @@ void SampleVehicle::onTickPreRender(PxF32 dtime)
 #endif
 	}
 
+	//Only switch to 3-wheeled if driving a 4-wheeled car.
+	if(ePLAYER_VEHICLE_TYPE_VEHICLE4W==mPlayerVehicleType)
+	{
+		if(m3WModeIncremented)
+		{
+			const PxU32 old3WMode=m3WMode;
+			const PxU32 new3WMode=(m3WMode+1)%3;
+			if(0==old3WMode && 1==new3WMode)
+			{
+				mVehicleManager.switchTo3WDeltaMode(mPlayerVehicle);
+			}
+			else if(1==old3WMode && 2==new3WMode)
+			{
+				mVehicleManager.switchTo3WTadpoleMode(mPlayerVehicle);
+			}
+			else if(2==old3WMode && 0==new3WMode)
+			{
+				mVehicleManager.switchTo4WMode(mPlayerVehicle);
+			}
+			m3WModeIncremented=false;
+			m3WMode=new3WMode;
+		}
+	}
+
 	//Make sure we can still update the camera in pause model.
 	if(mPause)
 	{
@@ -575,17 +664,21 @@ void SampleVehicle::onTickPreRender(PxF32 dtime)
 
 		//Get the physics shapes of the vehicle.  
 		//The transform of these shapes will be applied to the render meshes.
-		PxShape* carShapes[PX_MAX_NUM_WHEELS+1];
+		PxShape* carShapes[PX_MAX_NB_WHEELS+1];
 		const PxVehicleWheels& vehicle=*mVehicleManager.getVehicle(carId);
 		const PxU32 numShapes=vehicle.getRigidDynamicActor()->getNbShapes();
-		vehicle.getRigidDynamicActor()->getShapes(carShapes,numShapes);
+		const PxRigidDynamic& vehicleActor = *vehicle.getRigidDynamicActor();
+		vehicleActor.getShapes(carShapes,numShapes);
 
 		//Set the transform of the render component from the associated physics shape transform.
 		if(255==carPartDependency)
 		{
 			//The transform of this car component has been computed by the vehicle physics
 			//and stored in the composite bound of the car (chassis + wheels).	
-			actor->setTransform(PxShapeExt::getGlobalPose(*carShapes[carPart]));
+			actor->setTransform(PxShapeExt::getGlobalPose(*carShapes[carPart], vehicleActor));
+
+			//update bounds of render actor, for camera cull
+			actor->setWorldBounds(PxShapeExt::getWorldBounds(*carShapes[carPart], vehicleActor));
 		}
 		else
 		{
@@ -593,11 +686,16 @@ void SampleVehicle::onTickPreRender(PxF32 dtime)
 			//The transform is just an offset from another vehicle physics component.
 			//(This is kind of like a very,very simple skeleton of hierarchical transforms that would normally
 			//be used to render a vehicle).
-			actor->setTransform(PxShapeExt::getGlobalPose(*carShapes[carPartDependency]));
+			actor->setTransform(PxShapeExt::getGlobalPose(*carShapes[carPartDependency], vehicleActor));
+
+			//update bounds of render actor, for camera cull
+			actor->setWorldBounds(PxShapeExt::getWorldBounds(*carShapes[carPartDependency], vehicleActor));
 		}
 	}
 
 	getCamera().lookAt(mCameraController.getCameraPos(), mCameraController.getCameraTar());
+
+	mScene->unlockWrite();
 
 	// Update the physics
 	PhysXSample::onTickPreRender(dtime);
@@ -608,7 +706,6 @@ void SampleVehicle::onTickPostRender(PxF32 dtime)
 {
 	// Fetch results
 	PhysXSample::onTickPostRender(dtime);
-
 
 	if(mDebugRenderFlag)
 	{
@@ -631,24 +728,51 @@ void SampleVehicle::onTickPostRender(PxF32 dtime)
 
 void SampleVehicle::onSubstep(PxF32 dtime)
 {
-	//Update the digital vehicle controls.
-	mVehicleController.setCarKeyboardInputs(
-		mControlInputs.getAccelKeyPressed(),
-		mControlInputs.getBrakeKeyPressed(),
-		mControlInputs.getHandbrakeKeyPressed(),
-		mControlInputs.getSteerLeftKeyPressed(),
-		mControlInputs.getSteerRightKeyPressed(),
-		mControlInputs.getGearUpKeyPressed(),
-		mControlInputs.getGearDownKeyPressed());
-	//Update the analog vehicle controls.
-	mVehicleController.setCarGamepadInputs(
-		mControlInputs.getAccel(),
-		mControlInputs.getBrake(),
-		mControlInputs.getSteer(),
-		mControlInputs.getGearUp(),
-		mControlInputs.getGearDown(),
-		mControlInputs.getHandbrake());
-	//Update the controller.
+	//Update the vehicle controls.
+	switch(mPlayerVehicleType)
+	{
+	case ePLAYER_VEHICLE_TYPE_VEHICLE4W:
+	case ePLAYER_VEHICLE_TYPE_VEHICLE6W:
+		mVehicleController.setCarKeyboardInputs(
+			mControlInputs.getAccelKeyPressed(),
+			mControlInputs.getBrakeKeyPressed(),
+			mControlInputs.getHandbrakeKeyPressed(),
+			mControlInputs.getSteerLeftKeyPressed(),
+			mControlInputs.getSteerRightKeyPressed(),
+			mControlInputs.getGearUpKeyPressed(),
+			mControlInputs.getGearDownKeyPressed());
+		mVehicleController.setCarGamepadInputs(
+			mControlInputs.getAccel(),
+			mControlInputs.getBrake(),
+			mControlInputs.getSteer(),
+			mControlInputs.getGearUp(),
+			mControlInputs.getGearDown(),
+			mControlInputs.getHandbrake());
+		break;
+	case ePLAYER_VEHICLE_TYPE_TANK4W:
+	case ePLAYER_VEHICLE_TYPE_TANK6W:
+		mVehicleController.setTankKeyboardInputs(
+			mControlInputs.getAccelKeyPressed(),
+			mControlInputs.getThrustLeftKeyPressed(),
+			mControlInputs.getThrustRightKeyPressed(),
+			mControlInputs.getBrakeLeftKeyPressed(),
+			mControlInputs.getBrakeRightKeyPressed(),
+			mControlInputs.getGearUpKeyPressed(),
+			mControlInputs.getGearDownKeyPressed());
+		mVehicleController.setTankGamepadInputs(
+			mControlInputs.getAccel(), 
+			mControlInputs.getThrustLeft(),
+			mControlInputs.getThrustRight(),
+			mControlInputs.getBrakeLeft(),
+			mControlInputs.getBrakeRight(),
+			mControlInputs.getGearUp(),
+			mControlInputs.getGearDown());
+		break;
+	default:
+		PX_ASSERT(false);
+		break;
+	}
+
 	updateVehicleController(dtime);
 
 	//Update the vehicles.
@@ -656,6 +780,7 @@ void SampleVehicle::onSubstep(PxF32 dtime)
 
 	if (dtime > 0.0f)
 	{
+		PxSceneWriteLock scopedLock(*mScene);
 #if PX_DEBUG_VEHICLE_ON
 		updateVehicleManager(dtime,getActiveScene().getGravity());
 #else
@@ -674,6 +799,7 @@ void SampleVehicle::onSubstep(PxF32 dtime)
 	//to make the joint rotate in the opposite direction.
 	for(PxU32 i=0;i<gNumRevoluteJoints;i++)
 	{
+		PxSceneWriteLock scopedLock(*mScene);
 		//Get the two actors of the joint.
 		PxRigidActor* actor0=NULL;
 		PxRigidActor* actor1=NULL;
@@ -708,13 +834,17 @@ void SampleVehicle::onSubstep(PxF32 dtime)
 		gRevoluteJointTimers[i]+=dtime;
 	}
 
-	//Update the progress around the track with the latest vehicle transform.
-	PxRigidDynamic* actor=getFocusVehicleRigidDynamicActor();
-	mWayPoints.update(actor->getGlobalPose(),dtime);
+	{
+		PxSceneReadLock scopedLock(*mScene);
 
-	//Cache forward speed for the HUD to avoid making API calls while vehicle update is running
-	const PxVehicleWheels& focusVehicle = *mVehicleManager.getVehicle(mPlayerVehicle);
-	mForwardSpeedHud = focusVehicle.computeForwardSpeed();
+		//Update the progress around the track with the latest vehicle transform.
+		PxRigidDynamic* actor=getFocusVehicleRigidDynamicActor();
+		mWayPoints.update(actor->getGlobalPose(),dtime);
+
+		//Cache forward speed for the HUD to avoid making API calls while vehicle update is running
+		const PxVehicleWheels& focusVehicle = *mVehicleManager.getVehicle(mPlayerVehicle);
+		mForwardSpeedHud = focusVehicle.computeForwardSpeed();
+	}
 }
 
 void SampleVehicle::helpRender(PxU32 x, PxU32 y, PxU8 textAlpha)
@@ -728,35 +858,50 @@ void SampleVehicle::helpRender(PxU32 x, PxU32 y, PxU8 textAlpha)
 	const bool isPadSupported = getApplication().getPlatform()->getSampleUserInput()->gamepadSupported();
 	const char* msg;
 
-	if (isPadSupported && isKeyboardSupported)
-		renderer->print(x, y += yInc, "Use right stick or numpad keys to rotate the camera", scale, shadowOffset, textColor);
-	else if (isPadSupported)
-		renderer->print(x, y += yInc, "Use right stick to rotate the camera", scale, shadowOffset, textColor);
-	else if (isKeyboardSupported)
-		renderer->print(x, y += yInc, "Use numpad keys to rotate the camera", scale, shadowOffset, textColor);
 
-	if (isPadSupported)
-		renderer->print(x, y += yInc, "Use left stick to steer", scale, shadowOffset, textColor);
-
-	msg = mApplication.inputInfoMsg("Press "," for accelerate", ACCELERATE, -1);
-	if(msg)
-		renderer->print(x, y += yInc, msg, scale, shadowOffset, textColor);
-	msg = mApplication.inputInfoMsg("Press "," for brake", BRAKE, -1);
-	if(msg)
-		renderer->print(x, y += yInc, msg, scale, shadowOffset, textColor);
-
-	msg = mApplication.inputInfoMsg("Press "," to steer", STEER_LEFT, STEER_RIGHT);
-	if(msg)
-		renderer->print(x, y += yInc, msg, scale, shadowOffset, textColor);
-	msg = mApplication.inputInfoMsg("Press "," for handbrake", HANDBRAKE_PAD, HANDBRAKE_KBD);
-	if(msg)
-		renderer->print(x, y += yInc, msg, scale, shadowOffset, textColor);
-	if(!getFocusVehicleUsesAutoGears())
+	if(ePLAYER_VEHICLE_TYPE_TANK4W==mPlayerVehicleType || ePLAYER_VEHICLE_TYPE_TANK6W==mPlayerVehicleType)
 	{
-		msg = mApplication.inputInfoMsg("Press "," to gear up", GEAR_UP_PAD, GEAR_UP_KBD);
+		renderer->print(x, y += yInc, "TODO: document inputs for ePLAYER_VEHICLE_TYPE_TANK4W, ePLAYER_VEHICLE_TYPE_TANK6W", scale, shadowOffset, textColor);
+		if(PxVehicleDriveTankControlModel::eSPECIAL==mTankDriveModel)
+		{	
+		}
+		else
+		{
+		}
+	}
+	else
+	{
+		if (isPadSupported && isKeyboardSupported)
+			renderer->print(x, y += yInc, "Use right stick or numpad keys to rotate the camera", scale, shadowOffset, textColor);
+		else if (isPadSupported)
+			renderer->print(x, y += yInc, "Use right stick to rotate the camera", scale, shadowOffset, textColor);
+		else if (isKeyboardSupported)
+			renderer->print(x, y += yInc, "Use numpad keys to rotate the camera", scale, shadowOffset, textColor);
+
+		if (isPadSupported)
+			renderer->print(x, y += yInc, "Use left stick to steer", scale, shadowOffset, textColor);
+
+		msg = mApplication.inputInfoMsg("Press "," for accelerate", VEH_ACCELERATE_PAD, VEH_ACCELERATE_KBD);
 		if(msg)
 			renderer->print(x, y += yInc, msg, scale, shadowOffset, textColor);
-		msg = mApplication.inputInfoMsg("Press "," to gear down", GEAR_DOWN_PAD, GEAR_DOWN_KBD);
+		msg = mApplication.inputInfoMsg("Press "," for brake", CAR_BRAKE_PAD, CAR_BRAKE_KBD);
+		if(msg)
+			renderer->print(x, y += yInc, msg, scale, shadowOffset, textColor);
+		msg = mApplication.inputInfoMsg("Press "," to steer", CAR_STEER_LEFT_KBD, CAR_STEER_RIGHT_KBD);
+		if(msg)
+			renderer->print(x, y += yInc, msg, scale, shadowOffset, textColor);
+	}
+
+	msg = mApplication.inputInfoMsg("Press "," for handbrake", CAR_HANDBRAKE_PAD, CAR_HANDBRAKE_KBD);
+	if(msg)
+		renderer->print(x, y += yInc, msg, scale, shadowOffset, textColor);
+
+	if(!getFocusVehicleUsesAutoGears())
+	{
+		msg = mApplication.inputInfoMsg("Press "," to gear up", VEH_GEAR_UP_PAD, VEH_GEAR_UP_KBD);
+		if(msg)
+			renderer->print(x, y += yInc, msg, scale, shadowOffset, textColor);
+		msg = mApplication.inputInfoMsg("Press "," to gear down", VEH_GEAR_DOWN_PAD, VEH_GEAR_DOWN_KBD);
 		if(msg)
 			renderer->print(x, y += yInc, msg, scale, shadowOffset, textColor);
 	}
@@ -849,18 +994,13 @@ void SampleVehicle::customizeRender()
 
 ///////////////////////////////////////////////////////////////////////////////
 
-enum Word3
-{
-	SWEPT_INTEGRATION_LINEAR = 1,
-};
-
 PxFilterFlags SampleVehicleFilterShader(	
 	PxFilterObjectAttributes attributes0, PxFilterData filterData0, 
 	PxFilterObjectAttributes attributes1, PxFilterData filterData1,
 	PxPairFlags& pairFlags, const void* constantBlock, PxU32 constantBlockSize)
 {
-	PX_FORCE_PARAMETER_REFERENCE(constantBlock);
-	PX_FORCE_PARAMETER_REFERENCE(constantBlockSize);
+	PX_UNUSED(constantBlock);
+	PX_UNUSED(constantBlockSize);
 
 	// let triggers through
 	if(PxFilterObjectIsTrigger(attributes0) || PxFilterObjectIsTrigger(attributes1))
@@ -886,10 +1026,6 @@ PxFilterFlags SampleVehicleFilterShader(
 
 	pairFlags = PxPairFlag::eCONTACT_DEFAULT;
 
-	//enable CCD stuff -- for now just for everything or nothing.
-	if((filterData0.word3|filterData1.word3) & SWEPT_INTEGRATION_LINEAR)
-		pairFlags |= PxPairFlag::eSWEPT_INTEGRATION_LINEAR;
-
 	// The pairFlags for each object are stored in word2 of the filter data. Combine them.
 	pairFlags |= PxPairFlags(PxU16(filterData0.word2 | filterData1.word2));
 	return PxFilterFlags();
@@ -898,7 +1034,8 @@ PxFilterFlags SampleVehicleFilterShader(
 
 void SampleVehicle::customizeSceneDesc(PxSceneDesc& sceneDesc)
 {
-	sceneDesc.filterShader = SampleVehicleFilterShader;
+	sceneDesc.filterShader	= SampleVehicleFilterShader;
+	sceneDesc.flags			|= PxSceneFlag::eREQUIRE_RW_LOCK;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -922,15 +1059,99 @@ void SampleVehicle::createStandardMaterials()
 		mVehicleDrivableSurfaceTypes[i].mType = i;
 	}
 
-	mChassisMaterial = getPhysics().createMaterial(0.0f, 0.0f, 0.0f);
-	if(!mChassisMaterial)
+	mChassisMaterialDrivable = getPhysics().createMaterial(0.0f, 0.0f, 0.0f);
+	if(!mChassisMaterialDrivable)
+	{
+		getSampleErrorCallback().reportError(PxErrorCode::eINTERNAL_ERROR, "createMaterial failed", __FILE__, __LINE__);
+	}
+
+	mChassisMaterialNonDrivable = getPhysics().createMaterial(1.0f, 1.0f, 0.0f);
+	if(!mChassisMaterialNonDrivable)
 	{
 		getSampleErrorCallback().reportError(PxErrorCode::eINTERNAL_ERROR, "createMaterial failed", __FILE__, __LINE__);
 	}
 }
 
+///////////////////////////////////////////////////////////////////////////////
+static const char* getPlatformName()
+{
+#if defined(PX_X86)
+	return "PC32";
+#elif defined(PX_X64)
+	return "PC64";
+#elif defined(PX_X360)
+	return "XBOX";
+#elif defined(PX_PS3)
+	return "PS3";
+#elif defined(PX_ARM)
+	return "ARM";
+#elif defined(PX_WIIU)
+	return "WIIU";
+#else
+	return "";
+#endif
+}
+
+const char* SampleVehicle::getFocusVehicleName()
+{
+	switch(mPlayerVehicleType)
+	{
+	case ePLAYER_VEHICLE_TYPE_VEHICLE4W:
+		return "VEHICLE4W";
+	case ePLAYER_VEHICLE_TYPE_TANK4W:
+		return "TANK4W";
+	case ePLAYER_VEHICLE_TYPE_VEHICLE6W:
+		return "VEHICLE6W";
+	case ePLAYER_VEHICLE_TYPE_TANK6W:
+		return "TANK6W";
+	default:
+		return NULL;
+	}
+}
+
+static PxU32 GetFileSize(const char* name)
+{
+	if(!name)	return 0;
+
+#ifndef SEEK_END
+#define SEEK_END 2
+#endif
+
+	SampleFramework::File* fp;
+	if(physx::shdfnd::fopen_s(&fp, name, "rb"))
+		return 0;
+	fseek(fp, 0, SEEK_END);
+	PxU32 eof_ftell = ftell(fp);
+	fclose(fp);
+	return eof_ftell;
+}
+
 void SampleVehicle::createVehicles()
 {
+#if defined(SERIALIZE_VEHICLE_RPEX) || defined(SERIALIZE_VEHICLE_BINARY)
+	bool hasVehicleFile = false;
+
+	const PxSerialObjectId focusVehicleRef = 1;
+	char thePathBuffer[512];
+	char name[256];
+	strcpy(name, getFocusVehicleName());
+	strcat(name,"_");
+	strcat(name,getPlatformName());
+	
+#if defined(SERIALIZE_VEHICLE_RPEX)
+	strcat(name, ".repx");
+	const char* theVehicleFilePath = getSampleOutputDirManager().getFilePath(name, thePathBuffer, false );
+#elif defined(SERIALIZE_VEHICLE_BINARY)
+	strcat(name, ".bin");
+	const char* theVehicleFilePath = getSampleOutputDirManager().getFilePath(name, thePathBuffer, false );
+#endif
+	PxDefaultFileInputData data(theVehicleFilePath);
+	hasVehicleFile = data.isValid();
+
+	strcpy(mVehicleFilePath, theVehicleFilePath);
+#endif
+	
+	bool hasFocusVehicle = false;
 	//Make sure that we set the foundation before doing anything.
 	mVehicleManager.init(getPhysics(),(const PxMaterial**)mStandardMaterials,mVehicleDrivableSurfaceTypes);
 
@@ -941,6 +1162,10 @@ void SampleVehicle::createVehicles()
 	gLoadType = LOAD_TYPE_VEHICLE;
 	importRAWFile("car2.raw", 1.0f);
 
+	//The extra wheels of an 8-wheeled vehicle are instanced from the 4 wheels of the 4-wheeled car.
+	gRenderMeshActors[CAR_PART_EXTRA_WHEEL0]=gRenderMeshActors[CAR_PART_FRONT_LEFT_WHEEL];
+	gRenderMeshActors[CAR_PART_EXTRA_WHEEL1]=gRenderMeshActors[CAR_PART_FRONT_RIGHT_WHEEL];
+
 	//Clear the array of render actors before adding the actors for each vehicle.
 	for(PxU32 i=0;i<mRenderActors.size();i++)
 	{
@@ -948,27 +1173,170 @@ void SampleVehicle::createVehicles()
 		renderActor->setRendering(false);
 	}
 
-	//Load the player car.
-	for(PxU32 i=0;i<NUM_CAR4W_RENDER_COMPONENTS;i++)
+#if defined(SERIALIZE_VEHICLE_RPEX) || defined(SERIALIZE_VEHICLE_BINARY)
+	if( hasVehicleFile )
 	{
-		gVehicleRenderUserData[gNumVehicleAdded][i]=gCar4WRenderUserData[i];
-		gVehicleRenderUserData[gNumVehicleAdded][i].carId=PxU8(gNumVehicleAdded);
+		PxSerializationRegistry *sr = mVehicleManager.getSerializationRegistry();
+		
+#if defined(SERIALIZE_VEHICLE_RPEX)
+		PxCollection* c = PxSerialization::createCollectionFromXml(data, getCooking(), *sr, NULL, NULL);
+#elif defined(SERIALIZE_VEHICLE_BINARY)
+		char metaDataFilename[256];
+		
+		getSampleOutputDirManager().getFilePath("metaData.tmp", metaDataFilename, false );
+		
+		PxDefaultFileOutputStream* stream = new(PxDefaultFileOutputStream)(metaDataFilename);
+		PxSerialization::dumpBinaryMetaData(*stream, *sr);
+		delete stream;
 
-		RenderMeshActor* clone=SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[i]);
-		clone->setRendering(true);
-		clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][i];;
+		char convertedFilename[256];
+		getSampleOutputDirManager().getFilePath("converted.tmp", convertedFilename, false );
+		
+		PxBinaryConverter* binaryConverter = PxSerialization::createBinaryConverter();
+		binaryConverter->setReportMode(PxConverterReportMode::eNORMAL);
+			
+		PxDefaultFileInputData metaDataInStreamSrc(metaDataFilename);
+		PxDefaultFileInputData metaDataInStreamDst(metaDataFilename);
+		//setMetaData
+		{	
+			bool isMetaDataSet = binaryConverter->setMetaData(metaDataInStreamSrc, metaDataInStreamDst);
+			PX_UNUSED(isMetaDataSet);
+			PX_ASSERT(isMetaDataSet);
+		}
+			
+		//convert
+		{
+			PxDefaultFileInputData binaryDataInStream(theVehicleFilePath);
+			PX_ASSERT(binaryDataInStream.isValid());
+			PxDefaultFileOutputStream binaryDataOutStream(convertedFilename);
+			bool isConverted = binaryConverter->convert(binaryDataInStream, binaryDataInStream.getLength(), binaryDataOutStream);
+			PX_ASSERT(isConverted);
+			PX_UNUSED(isConverted);
+		}
 
-		mVehicleGraphics.push_back(clone);
-		mRenderActors.push_back(clone);
+		theVehicleFilePath = convertedFilename;
+		binaryConverter->release();
+
+		PxU32 theFileSize = GetFileSize(theVehicleFilePath);
+		if(!mMemory)
+			mMemory = SAMPLE_ALLOC(theFileSize + PX_SERIAL_FILE_ALIGN);
+
+		void* theMemory16 = (void*)((size_t(mMemory) + PX_SERIAL_FILE_ALIGN)&~(PX_SERIAL_FILE_ALIGN-1));
+		PxU32 numRead = data.read(theMemory16, theFileSize);
+		PX_UNUSED(numRead);
+		PX_ASSERT(numRead == theFileSize);
+		PxCollection* c = PxSerialization::createCollectionFromBinary(theMemory16, *sr);
+#endif
+		if(c)
+		{
+			mPlayerVehicle = 0;
+			hasFocusVehicle = true;
+			getActiveScene().addCollection(*c);
+			PxBase* s = c->find(focusVehicleRef);
+			PX_ASSERT(s);
+			mVehicleManager.addVehicle(mPlayerVehicle,reinterpret_cast<PxVehicleWheels*>(s));
+			c->release();
+		}
+	}
+#endif
+
+	//Load the player car.
+	switch(mPlayerVehicleType)
+	{
+	case ePLAYER_VEHICLE_TYPE_VEHICLE4W:
+	case ePLAYER_VEHICLE_TYPE_TANK4W:
+		{
+			for(PxU32 i=0;i<NUM_CAR4W_RENDER_COMPONENTS;i++)
+			{
+				gVehicleRenderUserData[gNumVehicleAdded][i]=gCar4WRenderUserData[i];
+				gVehicleRenderUserData[gNumVehicleAdded][i].carId=PxU8(gNumVehicleAdded);
+
+				RenderMeshActor* clone=SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[i]);
+				clone->setRendering(true);
+				clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][i];
+				clone->setEnableCameraCull(true);
+
+				mVehicleGraphics.push_back(clone);
+				mRenderActors.push_back(clone);
+			}
+			
+			mPlayerVehicle=0;
+			if(!hasFocusVehicle)
+			{
+				if(ePLAYER_VEHICLE_TYPE_VEHICLE4W==mPlayerVehicleType)
+				{
+					mVehicleManager.create4WVehicle(getActiveScene(),getPhysics(),getCooking(),*mChassisMaterialDrivable,gChassisMass,gWheelCentreOffsets4,gChassisConvexMesh,gWheelConvexMeshes4,gPlayerCarStartTransforms[0],true);
+				}
+				else
+				{
+					mVehicleManager.create4WTank(getActiveScene(),getPhysics(),getCooking(),*mChassisMaterialDrivable,gChassisMass,gWheelCentreOffsets4,gChassisConvexMesh,gWheelConvexMeshes4,gPlayerCarStartTransforms[0],true,mTankDriveModel);
+				}
+			}
+
+			gNumVehicleAdded++;
+		}
+		break;
+
+	case ePLAYER_VEHICLE_TYPE_VEHICLE6W:
+	case ePLAYER_VEHICLE_TYPE_TANK6W:
+		{
+			for(PxU32 i=0;i<NUM_CAR4W_RENDER_COMPONENTS;i++)
+			{
+				gVehicleRenderUserData[gNumVehicleAdded][i]=gCar6WRenderUserData[i];
+				gVehicleRenderUserData[gNumVehicleAdded][i].carId=PxU8(gNumVehicleAdded);
+
+				RenderMeshActor* clone=SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[i]);
+				clone->setRendering(true);
+				clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][i];
+				clone->setEnableCameraCull(true);
+
+				mVehicleGraphics.push_back(clone);
+				mRenderActors.push_back(clone);
+			}
+
+			gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL0]=gCar6WRenderUserData[CAR_PART_EXTRA_WHEEL0];
+			gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL1]=gCar6WRenderUserData[CAR_PART_EXTRA_WHEEL1];
+			gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL0].carId = PxU8(gNumVehicleAdded);
+			gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL1].carId = PxU8(gNumVehicleAdded);
+
+			//Add the extra wheels.
+			RenderMeshActor* clone;
+			clone = SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[CAR_PART_EXTRA_WHEEL0]);
+			clone->setRendering(true);
+			clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL0];
+			clone->setEnableCameraCull(true);
+			mVehicleGraphics.push_back(clone);
+			mRenderActors.push_back(clone);
+			clone = SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[CAR_PART_EXTRA_WHEEL1]);
+			clone->setRendering(true);
+			clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL1];
+			clone->setEnableCameraCull(true);
+			mVehicleGraphics.push_back(clone);
+			mRenderActors.push_back(clone);
+
+			mPlayerVehicle=0;
+
+			if(!hasFocusVehicle)
+			{
+				if(ePLAYER_VEHICLE_TYPE_VEHICLE6W==mPlayerVehicleType)
+				{
+					mVehicleManager.create6WVehicle(getActiveScene(),getPhysics(),getCooking(),*mChassisMaterialDrivable,gChassisMass,gWheelCentreOffsets4,gChassisConvexMesh,gWheelConvexMeshes4,gPlayerCarStartTransforms[0],true);
+				}
+				else
+				{
+					mVehicleManager.create6WTank(getActiveScene(),getPhysics(),getCooking(),*mChassisMaterialDrivable,gChassisMass,gWheelCentreOffsets4,gChassisConvexMesh,gWheelConvexMeshes4,gPlayerCarStartTransforms[0],true,mTankDriveModel);
+				}
+			}
+			gNumVehicleAdded++;
+		}
+		break;
+
+	default:
+		PX_ASSERT(false);
+		break;
 	}
 
-	mPlayerVehicle=0;
-
-	mVehicleManager.create4WVehicle(getActiveScene(),getPhysics(),getCooking(),*mChassisMaterial,gChassisMass,gWheelCentreOffsets4,gChassisConvexMesh,gWheelConvexMeshes4,gPlayerCarStartTransforms[0],true);
-
-	gNumVehicleAdded++;
-
-
+#if NUM_NONPLAYER_4W_VEHICLES
 	for(PxU32 i=0;i<NUM_NONPLAYER_4W_VEHICLES;i++)
 	{
 		//Clone the meshes from the instanced meshes.
@@ -980,16 +1348,138 @@ void SampleVehicle::createVehicles()
 			RenderMeshActor* clone = SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[j]);
 			clone->setRendering(true);
 			clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][j];
+			clone->setEnableCameraCull(true);
 
 			mVehicleGraphics.push_back(clone);
 			mRenderActors.push_back(clone);
 		}
 
 		//Add the next vehicle.
-		mVehicleManager.create4WVehicle(getActiveScene(),getPhysics(),getCooking(),*mChassisMaterial,gChassisMass,gWheelCentreOffsets4,gChassisConvexMesh,gWheelConvexMeshes4,gVehicle4WStartTransforms[i],true);
+		mVehicleManager.create4WVehicle(getActiveScene(),getPhysics(),getCooking(),*mChassisMaterialNonDrivable,gChassisMass,gWheelCentreOffsets4,gChassisConvexMesh,gWheelConvexMeshes4,gVehicle4WStartTransforms[i],true);
 
 		gNumVehicleAdded++;
 	}
+#endif
+
+#if NUM_NONPLAYER_6W_VEHICLES
+	for(PxU32 i=0;i<NUM_NONPLAYER_6W_VEHICLES;i++)
+	{
+		//Clone the meshes from the instanced meshes.
+		for(PxU32 j=0;j<NUM_CAR4W_RENDER_COMPONENTS;j++)
+		{
+			gVehicleRenderUserData[gNumVehicleAdded][j]=gCar6WRenderUserData[j];
+			gVehicleRenderUserData[gNumVehicleAdded][j].carId=PxU8(gNumVehicleAdded);
+
+			RenderMeshActor* clone = SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[j]);
+			clone->setRendering(true);
+			clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][j];
+			clone->setEnableCameraCull(true);
+
+			mVehicleGraphics.push_back(clone);
+			mRenderActors.push_back(clone);
+		}
+
+		//Add the extra wheels.
+
+		gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL0]=gCar6WRenderUserData[CAR_PART_EXTRA_WHEEL0];
+		gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL1]=gCar6WRenderUserData[CAR_PART_EXTRA_WHEEL1];
+		gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL0].carId = PxU8(gNumVehicleAdded);
+		gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL1].carId = PxU8(gNumVehicleAdded);
+
+		RenderMeshActor* clone;
+		clone = SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[CAR_PART_EXTRA_WHEEL0]);
+		clone->setRendering(true);
+		clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL0];
+		clone->setEnableCameraCull(true);
+		mVehicleGraphics.push_back(clone);
+		mRenderActors.push_back(clone);
+		clone = SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[CAR_PART_EXTRA_WHEEL1]);
+		clone->setRendering(true);
+		clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL1];
+		clone->setEnableCameraCull(true);
+		mVehicleGraphics.push_back(clone);
+		mRenderActors.push_back(clone);
+
+		//Add the next vehicle.
+		mVehicleManager.create6WVehicle(getActiveScene(),getPhysics(),getCooking(),*mChassisMaterialNonDrivable,gChassisMass,gWheelCentreOffsets4,gChassisConvexMesh,gWheelConvexMeshes4,gVehicle6WStartTransforms[i],true);
+
+		gNumVehicleAdded++;
+	}
+#endif
+
+#if NUM_NONPLAYER_4W_TANKS 
+	for(PxU32 i=0;i<NUM_NONPLAYER_4W_TANKS;i++)
+	{
+		//Clone the meshes from the instanced meshes.
+		for(PxU32 j=0;j<NUM_CAR4W_RENDER_COMPONENTS;j++)
+		{
+			gVehicleRenderUserData[gNumVehicleAdded][j]=gCar4WRenderUserData[j];
+			gVehicleRenderUserData[gNumVehicleAdded][j].carId=PxU8(gNumVehicleAdded);
+
+			RenderMeshActor* clone = SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[j]);
+			clone->setRendering(true);
+			clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][j];
+			clone->setEnableCameraCull(true);
+
+			mVehicleGraphics.push_back(clone);
+			mRenderActors.push_back(clone);
+		}
+
+		mPlayerVehicle=0;
+		//Add the next vehicle.
+		mVehicleManager.create4WTank(getActiveScene(),getPhysics(),getCooking(),*mChassisMaterial,gChassisMass,gWheelCentreOffsets4,gChassisConvexMesh,gWheelConvexMeshes4,gTank4WStartTransforms[i],true, PxVehicleDriveTank::eDRIVE_MODEL_SPECIAL);
+
+		gNumVehicleAdded++;
+	}
+#endif
+
+#if NUM_NONPLAYER_6W_TANKS 
+	for(PxU32 i=0;i<NUM_NONPLAYER_6W_TANKS;i++)
+	{
+		//Clone the meshes from the instanced meshes.
+		for(PxU32 j=0;j<NUM_CAR4W_RENDER_COMPONENTS;j++)
+		{
+			gVehicleRenderUserData[gNumVehicleAdded][j]=gTank6WRenderUserData[j];
+			gVehicleRenderUserData[gNumVehicleAdded][j].carId=PxU8(gNumVehicleAdded);
+
+			RenderMeshActor* clone = SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[j]);
+			clone->setRendering(true);
+			clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][j];
+			clone->setEnableCameraCull(true);
+
+			mVehicleGraphics.push_back(clone);
+			mRenderActors.push_back(clone);
+		}
+
+		//Add the extra wheels.
+
+		gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL0]=gTank6WRenderUserData[CAR_PART_EXTRA_WHEEL0];
+		gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL1]=gTank6WRenderUserData[CAR_PART_EXTRA_WHEEL1];
+		gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL0].carId = PxU8(gNumVehicleAdded);
+		gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL1].carId = PxU8(gNumVehicleAdded);
+
+		RenderMeshActor* clone;
+		
+		clone = SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[CAR_PART_EXTRA_WHEEL0]);
+		clone->setRendering(true);
+		clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL0];
+		clone->setEnableCameraCull(true);
+		mVehicleGraphics.push_back(clone);
+		mRenderActors.push_back(clone);
+
+		clone = SAMPLE_NEW(RenderMeshActor)(*gRenderMeshActors[CAR_PART_EXTRA_WHEEL1]);
+		clone->setRendering(true);
+		clone->mUserData=&gVehicleRenderUserData[gNumVehicleAdded][CAR_PART_EXTRA_WHEEL1];
+		clone->setEnableCameraCull(true);
+		mVehicleGraphics.push_back(clone);
+		mRenderActors.push_back(clone);
+
+		//Add the next vehicle.
+		mVehicleManager.create6WTank(getActiveScene(),getPhysics(),getCooking(),*mChassisMaterial,gChassisMass,gWheelCentreOffsets4,gChassisConvexMesh,gWheelConvexMeshes4,gTank6WStartTransforms[i],true);
+
+		gNumVehicleAdded++;
+	}
+#endif
 }
 
 PxRigidStatic* SampleVehicle::addStaticObstacle
@@ -1004,7 +1494,8 @@ PxRigidStatic* SampleVehicle::addStaticObstacle
 	PxRigidStatic* actor=getPhysics().createRigidStatic(transform);
 	for(PxU32 i=0;i<numShapes;i++)
 	{
-		PxShape* shape=actor->createShape(*shapeGeometries[i], *shapeMaterials[i], shapeTransforms[i]);
+		PxShape* shape=actor->createShape(*shapeGeometries[i], *shapeMaterials[i]);
+		shape->setLocalPose(shapeTransforms[i]);
 		shape->setSimulationFilterData(simFilterData);
 		shape->setQueryFilterData(qryFilterData);
 	}
@@ -1025,7 +1516,8 @@ PxRigidDynamic* SampleVehicle::addDynamicObstacle
 	PxRigidDynamic* actor = getPhysics().createRigidDynamic(transform);
 	for(PxU32 i=0;i<numShapes;i++)
 	{
-		PxShape* shape = actor->createShape(*shapeGeometries[i], *shapeMaterials[i], shapeTransforms[i]);
+		PxShape* shape = actor->createShape(*shapeGeometries[i], *shapeMaterials[i]);
+		shape->setLocalPose(shapeTransforms[i]);
 		shape->setSimulationFilterData(simFilterData);
 		shape->setQueryFilterData(qryFilterData);
 	}
@@ -1048,7 +1540,8 @@ PxRigidDynamic* SampleVehicle::addDynamicDrivableObstacle
 	PxRigidDynamic* actor = getPhysics().createRigidDynamic(transform);
 	for(PxU32 i=0;i<numShapes;i++)
 	{
-		PxShape* shape = actor->createShape(*shapeGeometries[i], *shapeMaterials[i], shapeTransforms[i]);
+		PxShape* shape = actor->createShape(*shapeGeometries[i], *shapeMaterials[i]);
+		shape->setLocalPose(shapeTransforms[i]);
 		shape->setSimulationFilterData(simFilterData);
 		shape->setQueryFilterData(qryFilterData);
 	}
@@ -1070,7 +1563,7 @@ void SampleVehicle::createStack(PxU32 numBaseBoxes, PxF32 boxSize, const PxVec3&
 	const PxF32 mass = boxSize*boxSize*boxSize*density;
 	const PxVec3 halfExtents(sizeX*0.5f,sizeY*0.5f,sizeZ*0.5f);
 	PxBoxGeometry geometry(halfExtents);
-	PxTransform shapeTransforms[1]={PxTransform::createIdentity()};
+	PxTransform shapeTransforms[1]={PxTransform(PxIdentity)};
 	PxGeometry* shapeGeometries[1]={&geometry};
 	PxMaterial* shapeMaterials[1]={mStandardMaterials[SURFACE_TYPE_TARMAC]};
 
@@ -1106,7 +1599,7 @@ void SampleVehicle::createWall(const PxU32 numHorizontalBoxes, const PxU32 numVe
 	const PxF32 mass = sizeX*sizeY*sizeZ*density;
 	const PxVec3 halfExtents(sizeX*0.5f,sizeY*0.5f,sizeZ*0.5f);
 	PxBoxGeometry geometry(halfExtents);
-	PxTransform shapeTransforms[1] = {PxTransform::createIdentity()};
+	PxTransform shapeTransforms[1] = {PxTransform(PxIdentity)};
 	PxGeometry* shapeGeometries[1] = {&geometry};
 	PxMaterial* shapeMaterials[1] = {mStandardMaterials[SURFACE_TYPE_TARMAC]};
 
@@ -1139,9 +1632,10 @@ void SampleVehicle::createWall(const PxU32 numHorizontalBoxes, const PxU32 numVe
 
 void SampleVehicle::createObstacles()
 {
+	PxSceneWriteLock scopedLock(*mScene);
 	//Create some giant pendula
 	{
-		PxTransform shapeTransforms[3]={PxTransform::createIdentity(),PxTransform::createIdentity(),PxTransform::createIdentity()};
+		PxTransform shapeTransforms[3]={PxTransform(PxIdentity),PxTransform(PxIdentity),PxTransform(PxIdentity)};
 		PxMaterial* shapeMaterials[3]={NULL,NULL,NULL};
 		PxGeometry* shapeGeometries[3]={NULL,NULL,NULL};
 		PxShape* shapes[3]={NULL,NULL,NULL};
@@ -1157,7 +1651,7 @@ void SampleVehicle::createObstacles()
 			//In the absence of a special material for pendula just use the tarmac material. 
 			PxSphereGeometry geomBall(gPendulumBallRadius);
 			shapeGeometries[0]=&geomBall;
-			shapeTransforms[0]=PxTransform::createIdentity();
+			shapeTransforms[0]=PxTransform(PxIdentity);
 			shapeMaterials[0]=mStandardMaterials[SURFACE_TYPE_TARMAC];
 			PxConvexMeshGeometry geomShaft(createCylinderConvexMesh(gPendulumShaftLength, gPendulumShaftWidth, 8, getPhysics(), getCooking()));
 			shapeGeometries[1]=&geomShaft;
@@ -1187,7 +1681,7 @@ void SampleVehicle::createObstacles()
 			PxConvexMeshGeometry geomVerticalBar(createCylinderConvexMesh(gPendulumShaftLength+groundClearance, gPendulumShaftWidth, 8, getPhysics(), getCooking()));
 			shapeGeometries[0]=&geomHorizontalBar;
 			shapeMaterials[0]=mStandardMaterials[SURFACE_TYPE_TARMAC];
-			shapeTransforms[0]=PxTransform(PxVec3(0, gPendulumShaftLength, 0), PxQuat::createIdentity());
+			shapeTransforms[0]=PxTransform(PxVec3(0, gPendulumShaftLength, 0), PxQuat(PxIdentity));
 			shapeGeometries[1]=&geomVerticalBar;
 			shapeMaterials[1]=mStandardMaterials[SURFACE_TYPE_TARMAC];
 			shapeTransforms[1]=PxTransform(PxVec3(0.5f*gPendulumSuspensionStructureWidth, 0.5f*(gPendulumShaftLength-groundClearance), 0), PxQuat(PxHalfPi, PxVec3(0,0,1)));
@@ -1231,7 +1725,7 @@ void SampleVehicle::createObstacles()
 	{
 		//See-saw made of two separate objects : a static prism-shaped base and a ramp that balances on top of the prism.
 		//In the absence of a special material for see-saws just reuse the tarmac material.
-		PxTransform shapeTransforms[1]={PxTransform::createIdentity()};
+		PxTransform shapeTransforms[1]={PxTransform(PxIdentity)};
 		PxMaterial* shapeMaterials[1]={mStandardMaterials[SURFACE_TYPE_TARMAC]};
 		PxGeometry* shapeGeometries[1]={NULL};
 
@@ -1254,7 +1748,7 @@ void SampleVehicle::createObstacles()
 	{
 		PxVec3 halfExtentsRamp(5.0f,1.9f,7.0f);
 		PxConvexMeshGeometry geomRamp(createWedgeConvexMesh(halfExtentsRamp,getPhysics(),getCooking()));
-		PxTransform shapeTransforms[1]={PxTransform::createIdentity()};
+		PxTransform shapeTransforms[1]={PxTransform(PxIdentity)};
 		PxMaterial* shapeMaterials[1]={mStandardMaterials[SURFACE_TYPE_TARMAC]};
 		PxGeometry* shapeGeometries[1]={&geomRamp};
 		PxTransform tRamp(PxVec3( -89.849564 , 9.950000 , 154.516617 ), PxQuat( -0.000002 , -0.837118 , -0.000004 , 0.547022 ) );
@@ -1265,7 +1759,7 @@ void SampleVehicle::createObstacles()
 	{
 		PxVec3 halfExtents(3.0f,1.5f,3.5f);
 		PxConvexMeshGeometry geometry(createWedgeConvexMesh(halfExtents,getPhysics(),getCooking()));
-		PxTransform shapeTransforms[1]={PxTransform::createIdentity()};
+		PxTransform shapeTransforms[1]={PxTransform(PxIdentity)};
 		PxMaterial* shapeMaterials[1]={mStandardMaterials[SURFACE_TYPE_TARMAC]};
 		PxGeometry* shapeGeometries[1]={&geometry};
 		PxTransform t1(PxVec3( 112.797081 , 10.086022 , 134.419052 ), PxQuat( 0.000013 , -0.406322 , 0.000006 , 0.913730 ) );
@@ -1292,7 +1786,7 @@ void SampleVehicle::createObstacles()
 		PxGeometry* shapeGeometries[128];
 		PxMaterial* shapeMaterials[128];
 		PxTransform shapeTransforms[128];
-		PxTransform shapeTransform=PxTransform(PxVec3(0,0,0),PxQuat::createIdentity());
+		PxTransform shapeTransform=PxTransform(PxVec3(0,0,0),PxQuat(PxIdentity));
 		for(PxU32 i=0;i<128;i++)
 		{
 			shapeTransforms[i]=shapeTransform;
@@ -1312,7 +1806,7 @@ void SampleVehicle::createObstacles()
 	//Add three static walls
 	{
 		PxBoxGeometry box(8,2,1);
-		PxTransform shapeTransforms[1]={PxTransform::createIdentity()};
+		PxTransform shapeTransforms[1]={PxTransform(PxIdentity)};
 		PxGeometry* shapeGeometries[1]={&box};
 		PxMaterial* shapeMaterials[1]={mStandardMaterials[SURFACE_TYPE_TARMAC]};
 
@@ -1336,95 +1830,235 @@ void SampleVehicle::collectInputEvents(std::vector<const SampleFramework::InputE
 	getApplication().getPlatform()->getSampleUserInput()->unregisterInputEvent(HIDE_GRAPHICS);
 	getApplication().getPlatform()->getSampleUserInput()->unregisterInputEvent(VARIABLE_TIMESTEP);
 
-	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(ACCELERATE,						SCAN_CODE_FORWARD,	XKEY_W,			PS3KEY_W,		AKEY_UNKNOWN,	SCAN_CODE_FORWARD,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_FORWARD);
-	DIGITAL_INPUT_EVENT_DEF(BRAKE,							SCAN_CODE_BACKWARD,	XKEY_S,			PS3KEY_S,		AKEY_UNKNOWN,	SCAN_CODE_BACKWARD,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_BACKWARD);
-	DIGITAL_INPUT_EVENT_DEF(STEER_LEFT,						SCAN_CODE_LEFT,		XKEY_A,			PS3KEY_A,		AKEY_UNKNOWN,	SCAN_CODE_LEFT,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_LEFT);
-	DIGITAL_INPUT_EVENT_DEF(STEER_RIGHT,					SCAN_CODE_RIGHT,	XKEY_D,			PS3KEY_D,		AKEY_UNKNOWN,	SCAN_CODE_RIGHT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_RIGHT);
-	DIGITAL_INPUT_EVENT_DEF(GEAR_DOWN_KBD,					SCAN_CODE_9,		XKEY_9,			PS3KEY_9,		AKEY_UNKNOWN,	SCAN_CODE_9,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_9);
-	DIGITAL_INPUT_EVENT_DEF(GEAR_UP_KBD,					SCAN_CODE_0,		XKEY_0,			PS3KEY_0,		AKEY_UNKNOWN,	SCAN_CODE_0,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_0);
-	DIGITAL_INPUT_EVENT_DEF(HANDBRAKE_KBD,					SCAN_CODE_L,		XKEY_L,			PS3KEY_L,		AKEY_UNKNOWN,	SCAN_CODE_L,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_L);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_KBD_ROTATE_LEFT,			WKEY_NUMPAD4,		XKEY_NUMPAD4,	PS3KEY_NUMPAD4,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NUMPAD4);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_KBD_ROTATE_RIGHT,		WKEY_NUMPAD6,		XKEY_NUMPAD6,	PS3KEY_NUMPAD6,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NUMPAD6);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_KBD_ROTATE_UP,			WKEY_NUMPAD8,		XKEY_NUMPAD8,	PS3KEY_NUMPAD8,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NUMPAD8);
-	DIGITAL_INPUT_EVENT_DEF(CAMERA_KBD_ROTATE_DOWN,			WKEY_NUMPAD2,		XKEY_NUMPAD2,	PS3KEY_NUMPAD2,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NUMPAD2);
-	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_FLAG,				WKEY_F9,			XKEY_F9,		PS3KEY_F9,		AKEY_UNKNOWN,	OSXKEY_T,			PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_F9);
-	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_ENGINE,			WKEY_2,				XKEY_2,			PS3KEY_2,		AKEY_UNKNOWN,	OSXKEY_2,			PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_2);
-	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_WHEEL,				WKEY_1,				XKEY_1,			PS3KEY_1,		AKEY_UNKNOWN,	OSXKEY_1,			PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_1);
-	DIGITAL_INPUT_EVENT_DEF(FIX_CAR,						WKEY_K,				XKEY_K,			PS3KEY_K,		AKEY_UNKNOWN,	OSXKEY_K,			PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_K);
+	DIGITAL_INPUT_EVENT_DEF(VEH_SAVE_KBD,	WKEY_I,		XKEY_I,		X1KEY_I,	PS3KEY_I,	PS4KEY_I,	AKEY_UNKNOWN,	SCAN_CODE_FORWARD,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_FORWARD,	WIIUKEY_UNKNOWN);
 
-	//digital gamepad events
-	DIGITAL_INPUT_EVENT_DEF(GEAR_DOWN_PAD,					GAMEPAD_EAST,               GAMEPAD_EAST,               GAMEPAD_EAST,               AKEY_UNKNOWN,   OSXKEY_UNKNOWN, GAMEPAD_EAST,       IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(GEAR_UP_PAD,					GAMEPAD_NORTH,              GAMEPAD_NORTH,              GAMEPAD_NORTH,              AKEY_UNKNOWN,   OSXKEY_UNKNOWN,	GAMEPAD_NORTH,      IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(HANDBRAKE_PAD,					GAMEPAD_SOUTH,              GAMEPAD_SOUTH,              GAMEPAD_SOUTH,              AKEY_UNKNOWN,   OSXKEY_UNKNOWN,	GAMEPAD_SOUTH,      IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_FLAG,				GAMEPAD_WEST,               GAMEPAD_WEST,               GAMEPAD_WEST,               AKEY_UNKNOWN,   OSXKEY_UNKNOWN,	GAMEPAD_WEST,       IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_ENGINE,			GAMEPAD_LEFT_SHOULDER_TOP,	GAMEPAD_LEFT_SHOULDER_TOP,  GAMEPAD_LEFT_SHOULDER_TOP,	AKEY_UNKNOWN,   OSXKEY_UNKNOWN,	GAMEPAD_DIGI_LEFT,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_WHEEL,				GAMEPAD_RIGHT_SHOULDER_TOP,	GAMEPAD_RIGHT_SHOULDER_TOP, GAMEPAD_RIGHT_SHOULDER_TOP,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,	GAMEPAD_DIGI_RIGHT,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-	DIGITAL_INPUT_EVENT_DEF(FIX_CAR,						GAMEPAD_RIGHT_STICK,        GAMEPAD_RIGHT_STICK,        GAMEPAD_RIGHT_STICK,		AKEY_UNKNOWN,	OSXKEY_UNKNOWN,	GAMEPAD_DIGI_DOWN,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN);
-    
-	//analog gamepad events
-	ANALOG_INPUT_EVENT_DEF(ACCELERATE, GAMEPAD_DEFAULT_SENSITIVITY,							GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	AKEY_UNKNOWN,			GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	IKEY_UNKNOWN, LINUXKEY_UNKNOWN);
-	ANALOG_INPUT_EVENT_DEF(BRAKE, GAMEPAD_DEFAULT_SENSITIVITY,								GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	AKEY_UNKNOWN,			GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	IKEY_UNKNOWN, LINUXKEY_UNKNOWN);
-	ANALOG_INPUT_EVENT_DEF(ACCELERATE_BRAKE, GAMEPAD_DEFAULT_SENSITIVITY,					WKEY_UNKNOWN,				XKEY_UNKNOWN,				PS3KEY_UNKNOWN,				GAMEPAD_LEFT_STICK_Y,	OSXKEY_UNKNOWN,				PSP2KEY_UNKNOWN,			GAMEPAD_LEFT_STICK_Y, LINUXKEY_UNKNOWN);
-	ANALOG_INPUT_EVENT_DEF(STEER, GAMEPAD_DEFAULT_SENSITIVITY,								GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,	GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X, LINUXKEY_UNKNOWN);
-	ANALOG_INPUT_EVENT_DEF(CAMERA_GAMEPAD_ROTATE_LEFT_RIGHT, GAMEPAD_ROTATE_SENSITIVITY,	GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,	GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X, LINUXKEY_UNKNOWN);
-	ANALOG_INPUT_EVENT_DEF(CAMERA_GAMEPAD_ROTATE_UP_DOWN, GAMEPAD_ROTATE_SENSITIVITY,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,	GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y, LINUXKEY_UNKNOWN);
+	
+	//Driving keyboard controls.
+	if(ePLAYER_VEHICLE_TYPE_TANK4W==mPlayerVehicleType || ePLAYER_VEHICLE_TYPE_TANK6W==mPlayerVehicleType)
+	{
+		DIGITAL_INPUT_EVENT_DEF(VEH_GEAR_DOWN_KBD,		SCAN_CODE_9,		XKEY_9,			X1KEY_9,		PS3KEY_9,		PS4KEY_9,		AKEY_UNKNOWN,	SCAN_CODE_9,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_9,		WIIUKEY_UNKNOWN);
+		DIGITAL_INPUT_EVENT_DEF(VEH_GEAR_UP_KBD,		SCAN_CODE_0,		XKEY_0,			X1KEY_0,		PS3KEY_0,		PS4KEY_0,		AKEY_UNKNOWN,	SCAN_CODE_0,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_0,		WIIUKEY_UNKNOWN);
 
-    //touch events
-	TOUCH_INPUT_EVENT_DEF(FIX_CAR,          "Reset Car",		ABUTTON_5,          IBUTTON_5);
-    TOUCH_INPUT_EVENT_DEF(HANDBRAKE_PAD,    "Handbrake",    AQUICK_BUTTON_1,    IQUICK_BUTTON_1);
+		DIGITAL_INPUT_EVENT_DEF(TANK_THRUST_LEFT_KBD,	WKEY_Q,				XKEY_S,			X1KEY_S,		PS3KEY_S,		PS4KEY_S,		AKEY_UNKNOWN,	SCAN_CODE_BACKWARD,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_BACKWARD,	WIIUKEY_UNKNOWN);
+		DIGITAL_INPUT_EVENT_DEF(TANK_THRUST_RIGHT_KBD,	WKEY_I,				XKEY_A,			X1KEY_A,		PS3KEY_A,		PS4KEY_A,		AKEY_UNKNOWN,	SCAN_CODE_LEFT,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_LEFT,		WIIUKEY_UNKNOWN);
+		DIGITAL_INPUT_EVENT_DEF(TANK_BRAKE_LEFT_KBD,	WKEY_A,				XKEY_D,			X1KEY_D,		PS3KEY_D,		PS4KEY_D,		AKEY_UNKNOWN,	SCAN_CODE_RIGHT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_RIGHT,	GAMEPAD_LEFT_SHOULDER_BOT);
+		DIGITAL_INPUT_EVENT_DEF(TANK_BRAKE_RIGHT_KBD,	WKEY_J,				XKEY_L,			X1KEY_L,		PS3KEY_L,		PS4KEY_L,		AKEY_UNKNOWN,	SCAN_CODE_L,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_L,		GAMEPAD_RIGHT_SHOULDER_BOT);
+	}
+	else
+	{
+		DIGITAL_INPUT_EVENT_DEF(VEH_ACCELERATE_KBD,		SCAN_CODE_FORWARD,	XKEY_W,			X1KEY_W,		PS3KEY_W,		PS4KEY_W,		AKEY_UNKNOWN,	SCAN_CODE_FORWARD,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_FORWARD,	GAMEPAD_RIGHT_SHOULDER_BOT);
+		DIGITAL_INPUT_EVENT_DEF(VEH_GEAR_DOWN_KBD,		SCAN_CODE_9,		XKEY_9,			X1KEY_9,		PS3KEY_9,		PS4KEY_9,		AKEY_UNKNOWN,	SCAN_CODE_9,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_9,		WIIUKEY_UNKNOWN);
+		DIGITAL_INPUT_EVENT_DEF(VEH_GEAR_UP_KBD,		SCAN_CODE_0,		XKEY_0,			X1KEY_0,		PS3KEY_0,		PS4KEY_0,		AKEY_UNKNOWN,	SCAN_CODE_0,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_0,		WIIUKEY_UNKNOWN);
+
+		DIGITAL_INPUT_EVENT_DEF(CAR_BRAKE_KBD,			SCAN_CODE_BACKWARD,	XKEY_S,			X1KEY_S,		PS3KEY_S,		PS4KEY_S,		AKEY_UNKNOWN,	SCAN_CODE_BACKWARD,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_BACKWARD,	GAMEPAD_LEFT_SHOULDER_BOT);
+		DIGITAL_INPUT_EVENT_DEF(CAR_HANDBRAKE_KBD,		SCAN_CODE_L,		XKEY_L,			X1KEY_L,		PS3KEY_L,		PS4KEY_L,		AKEY_UNKNOWN,	SCAN_CODE_L,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_L,		WIIUKEY_UNKNOWN);
+		DIGITAL_INPUT_EVENT_DEF(CAR_STEER_LEFT_KBD,		SCAN_CODE_LEFT,		XKEY_A,			X1KEY_A,		PS3KEY_A,		PS4KEY_A,		AKEY_UNKNOWN,	SCAN_CODE_LEFT,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_LEFT,		WIIUKEY_UNKNOWN);
+		DIGITAL_INPUT_EVENT_DEF(CAR_STEER_RIGHT_KBD,	SCAN_CODE_RIGHT,	XKEY_D,			X1KEY_D,		PS3KEY_D,		PS4KEY_D,		AKEY_UNKNOWN,	SCAN_CODE_RIGHT,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	SCAN_CODE_RIGHT,	WIIUKEY_UNKNOWN);
+	}
+
+	//Driving gamepad controls 
+	if(ePLAYER_VEHICLE_TYPE_TANK4W==mPlayerVehicleType || ePLAYER_VEHICLE_TYPE_TANK6W==mPlayerVehicleType)
+	{
+		DIGITAL_INPUT_EVENT_DEF(VEH_GEAR_DOWN_PAD,					GAMEPAD_EAST,               GAMEPAD_EAST,               GAMEPAD_EAST,               GAMEPAD_EAST,               GAMEPAD_EAST,               AKEY_UNKNOWN,   OSXKEY_UNKNOWN, GAMEPAD_EAST,       IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_EAST);
+		DIGITAL_INPUT_EVENT_DEF(VEH_GEAR_UP_PAD,					GAMEPAD_NORTH,              GAMEPAD_NORTH,              GAMEPAD_NORTH,              GAMEPAD_NORTH,              GAMEPAD_NORTH,              AKEY_UNKNOWN,   OSXKEY_UNKNOWN,	GAMEPAD_NORTH,      IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_NORTH);
+
+		if(PxVehicleDriveTankControlModel::eSPECIAL==mTankDriveModel)
+		{
+			ANALOG_INPUT_EVENT_DEF(TANK_THRUST_LEFT_PAD,	GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,			GAMEPAD_LEFT_STICK_Y,	OSXKEY_UNKNOWN,	GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,	LINUXKEY_UNKNOWN,	GAMEPAD_LEFT_STICK_Y);
+			ANALOG_INPUT_EVENT_DEF(TANK_THRUST_RIGHT_PAD,	GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,			GAMEPAD_RIGHT_STICK_Y,	OSXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,	LINUXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_Y);
+			ANALOG_INPUT_EVENT_DEF(TANK_BRAKE_LEFT_PAD,		GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,		AKEY_UNKNOWN,			OSXKEY_UNKNOWN,	GAMEPAD_LEFT_SHOULDER_BOT,	IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,	WIIUKEY_UNKNOWN);
+			ANALOG_INPUT_EVENT_DEF(TANK_BRAKE_RIGHT_PAD,	GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,		AKEY_UNKNOWN,			OSXKEY_UNKNOWN,	GAMEPAD_RIGHT_SHOULDER_BOT,	IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,	WIIUKEY_UNKNOWN);
+		}
+		else
+		{
+			ANALOG_INPUT_EVENT_DEF(VEH_ACCELERATE_PAD,		GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,		AKEY_UNKNOWN,			OSXKEY_UNKNOWN,	GAMEPAD_RIGHT_SHOULDER_BOT,	IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,	WIIUKEY_UNKNOWN);
+			ANALOG_INPUT_EVENT_DEF(TANK_THRUST_LEFT_PAD ,	GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,			GAMEPAD_LEFT_STICK_Y,	OSXKEY_UNKNOWN,	GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,	LINUXKEY_UNKNOWN,	GAMEPAD_LEFT_STICK_Y);
+			ANALOG_INPUT_EVENT_DEF(TANK_THRUST_RIGHT_PAD,	GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,			GAMEPAD_RIGHT_STICK_Y,	OSXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,	LINUXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_Y);
+		}
+
+		ANALOG_INPUT_EVENT_DEF(CAMERA_ROTATE_LEFT_RIGHT_PAD,GAMEPAD_ROTATE_SENSITIVITY,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,			GAMEPAD_RIGHT_STICK_X,	OSXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,	LINUXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_X);
+	}
+	else
+	{
+		DIGITAL_INPUT_EVENT_DEF(VEH_GEAR_DOWN_PAD,											GAMEPAD_EAST,               GAMEPAD_EAST,               GAMEPAD_EAST,               GAMEPAD_EAST,               GAMEPAD_EAST,               AKEY_UNKNOWN,   OSXKEY_UNKNOWN, GAMEPAD_EAST,       IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_EAST);
+		DIGITAL_INPUT_EVENT_DEF(VEH_GEAR_UP_PAD,											GAMEPAD_NORTH,              GAMEPAD_NORTH,              GAMEPAD_NORTH,              GAMEPAD_NORTH,              GAMEPAD_NORTH,              AKEY_UNKNOWN,   OSXKEY_UNKNOWN,	GAMEPAD_NORTH,      IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_NORTH);
+		DIGITAL_INPUT_EVENT_DEF(CAR_HANDBRAKE_PAD,											GAMEPAD_SOUTH,              GAMEPAD_SOUTH,              GAMEPAD_SOUTH,              GAMEPAD_SOUTH,              GAMEPAD_SOUTH,              AKEY_UNKNOWN,   OSXKEY_UNKNOWN,	GAMEPAD_SOUTH,      IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_SOUTH);
+
+		ANALOG_INPUT_EVENT_DEF(VEH_ACCELERATE_PAD,			GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,	GAMEPAD_RIGHT_SHOULDER_BOT,		AKEY_UNKNOWN,			OSXKEY_UNKNOWN,	GAMEPAD_RIGHT_SHOULDER_BOT,	IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,	WIIUKEY_UNKNOWN);
+		ANALOG_INPUT_EVENT_DEF(CAR_BRAKE_PAD ,				GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,	GAMEPAD_LEFT_SHOULDER_BOT,		AKEY_UNKNOWN,			OSXKEY_UNKNOWN,	GAMEPAD_LEFT_SHOULDER_BOT,	IKEY_UNKNOWN,			LINUXKEY_UNKNOWN,	WIIUKEY_UNKNOWN);
+		ANALOG_INPUT_EVENT_DEF(CAR_STEER_PAD,				GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,			GAMEPAD_LEFT_STICK_X,	OSXKEY_UNKNOWN,	GAMEPAD_LEFT_STICK_X,		GAMEPAD_LEFT_STICK_X,	LINUXKEY_UNKNOWN,	GAMEPAD_LEFT_STICK_X);
+
+		ANALOG_INPUT_EVENT_DEF(CAR_ACCELERATE_BRAKE,		GAMEPAD_DEFAULT_SENSITIVITY,	GAMEPAD_LEFT_STICK_Y,		XKEY_UNKNOWN,				X1KEY_UNKNOWN,				PS3KEY_UNKNOWN,				PS4KEY_UNKNOWN,					GAMEPAD_LEFT_STICK_Y,	OSXKEY_UNKNOWN,	GAMEPAD_LEFT_STICK_Y,		GAMEPAD_LEFT_STICK_Y,	LINUXKEY_UNKNOWN,	WIIUKEY_UNKNOWN);
+
+		ANALOG_INPUT_EVENT_DEF(CAMERA_ROTATE_LEFT_RIGHT_PAD,GAMEPAD_ROTATE_SENSITIVITY,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,			GAMEPAD_RIGHT_STICK_X,	OSXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_X,		GAMEPAD_RIGHT_STICK_X,	LINUXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_X);
+		ANALOG_INPUT_EVENT_DEF(CAMERA_ROTATE_UP_DOWN_PAD,	GAMEPAD_ROTATE_SENSITIVITY,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,			GAMEPAD_RIGHT_STICK_Y,	OSXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_Y,		GAMEPAD_RIGHT_STICK_Y,	LINUXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK_Y);
+	}
+
+	//Camera keyboard control on keybord
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_ROTATE_LEFT_KBD,			WKEY_NUMPAD4,		XKEY_NUMPAD4,	X1KEY_NUMPAD4,	PS3KEY_NUMPAD4,	PS4KEY_NUMPAD4,	AKEY_UNKNOWN,	OSXKEY_NUMPAD4,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NUMPAD4,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_ROTATE_RIGHT_KBD,		WKEY_NUMPAD6,		XKEY_NUMPAD6,	X1KEY_NUMPAD6,	PS3KEY_NUMPAD6,	PS4KEY_NUMPAD6,	AKEY_UNKNOWN,	OSXKEY_NUMPAD6,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NUMPAD6,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_ROTATE_UP_KBD,			WKEY_NUMPAD8,		XKEY_NUMPAD8,	X1KEY_NUMPAD8,	PS3KEY_NUMPAD8,	PS4KEY_NUMPAD8,	AKEY_UNKNOWN,	OSXKEY_NUMPAD8,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NUMPAD8,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CAMERA_ROTATE_DOWN_KBD,			WKEY_NUMPAD2,		XKEY_NUMPAD2,	X1KEY_NUMPAD2,	PS3KEY_NUMPAD2,	PS4KEY_NUMPAD2,	AKEY_UNKNOWN,	OSXKEY_NUMPAD2,		PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_NUMPAD2,	WIIUKEY_UNKNOWN);
+
+	//General control events on keyboard.
+	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_FLAG,				WKEY_F9,			XKEY_F9,		X1KEY_F9,		PS3KEY_F9,		PS4KEY_F9,		AKEY_UNKNOWN,	OSXKEY_T,			PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_F9,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_ENGINE,			WKEY_2,				XKEY_2,			X1KEY_2,		PS3KEY_2,		PS4KEY_2,		AKEY_UNKNOWN,	OSXKEY_2,			PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_2,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_WHEEL,				WKEY_1,				XKEY_1,			X1KEY_1,		PS3KEY_1,		PS4KEY_1,		AKEY_UNKNOWN,	OSXKEY_1,			PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_1,		WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(FIX_CAR,						WKEY_K,				XKEY_K,			X1KEY_K,		PS3KEY_K,		PS4KEY_K,		AKEY_UNKNOWN,	OSXKEY_K,			PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_K,		WIIUKEY_UNKNOWN);
+
+	//General control events on gamepad.
+	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_FLAG,				GAMEPAD_WEST,               GAMEPAD_WEST,               GAMEPAD_WEST,               GAMEPAD_WEST,               GAMEPAD_WEST,               AKEY_UNKNOWN,   OSXKEY_UNKNOWN,	GAMEPAD_WEST,       IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_WEST);
+	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_ENGINE,			GAMEPAD_LEFT_SHOULDER_TOP,	GAMEPAD_LEFT_SHOULDER_TOP,  GAMEPAD_LEFT_SHOULDER_TOP,  GAMEPAD_LEFT_SHOULDER_TOP,  GAMEPAD_LEFT_SHOULDER_TOP,	AKEY_UNKNOWN,   OSXKEY_UNKNOWN,	GAMEPAD_DIGI_LEFT,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_LEFT_SHOULDER_TOP);
+	DIGITAL_INPUT_EVENT_DEF(DEBUG_RENDER_WHEEL,				GAMEPAD_RIGHT_SHOULDER_TOP,	GAMEPAD_RIGHT_SHOULDER_TOP, GAMEPAD_RIGHT_SHOULDER_TOP, GAMEPAD_RIGHT_SHOULDER_TOP, GAMEPAD_RIGHT_SHOULDER_TOP,	AKEY_UNKNOWN,	OSXKEY_UNKNOWN,	GAMEPAD_DIGI_RIGHT,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_RIGHT_SHOULDER_TOP);
+	DIGITAL_INPUT_EVENT_DEF(FIX_CAR,						GAMEPAD_RIGHT_STICK,        GAMEPAD_RIGHT_STICK,        GAMEPAD_RIGHT_STICK,        GAMEPAD_RIGHT_STICK,        GAMEPAD_RIGHT_STICK,		AKEY_UNKNOWN,	OSXKEY_UNKNOWN,	GAMEPAD_DIGI_DOWN,	IKEY_UNKNOWN,	LINUXKEY_UNKNOWN,	GAMEPAD_RIGHT_STICK);
+
+	//General control events on touch
+	TOUCH_INPUT_EVENT_DEF(FIX_CAR,				"Reset Car",	ABUTTON_5,          IBUTTON_5, TOUCH_BUTTON_5);
+	TOUCH_INPUT_EVENT_DEF(CAR_HANDBRAKE_PAD,    "Handbrake",    AQUICK_BUTTON_1,    IQUICK_BUTTON_1, TOUCH_QUICK_BUTTON_1);
 }
 
-bool SampleVehicle::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
+void SampleVehicle::onDigitalInputEvent(const SampleFramework::InputEvent& ie, bool val)
 {
 	switch (ie.m_Id)
 	{
-	case ACCELERATE:
+	case VEH_SAVE_KBD:
+		{
+			if(val)
+			{	
+#if defined(SERIALIZE_VEHICLE_RPEX) || defined(SERIALIZE_VEHICLE_BINARY)
+				PxSerializationRegistry* sr = mVehicleManager.getSerializationRegistry();
+				PxVehicleWheels& focusVehicle = *mVehicleManager.getVehicle(mPlayerVehicle);
+				PxCollection* c = PxCreateCollection();
+				c->add( focusVehicle, 1 );				
+				PxSerialization::complete(*c, *sr, NULL);
+				PxDefaultFileOutputStream theStream(mVehicleFilePath);
+#if defined(SERIALIZE_VEHICLE_RPEX)
+				PxSerialization::serializeCollectionToXml(theStream, *c, *sr, &getCooking());				
+#elif defined(SERIALIZE_VEHICLE_BINARY)
+				PxSerialization::serializeCollectionToBinary(theStream, *c, *sr);
+#endif
+				c->release();
+#endif				
+			}
+		}
+		break;
+	case VEH_ACCELERATE_KBD:
 		{
 			mControlInputs.setAccelKeyPressed(val);
 		}
 		break;
-	case BRAKE:
-		{
-			mControlInputs.setBrakeKeyPressed(val);
-		}
-		break;
-	case STEER_LEFT:
-		{
-			mControlInputs.setSteerRightKeyPressed(val);
-		}
-		break;
-	case STEER_RIGHT:
-		{
-			mControlInputs.setSteerLeftKeyPressed(val);			
-		}
-		break;
-	case GEAR_DOWN_KBD:
+	case VEH_GEAR_DOWN_KBD:
 		{
 			mControlInputs.setGearDownKeyPressed(val);
 		}
 		break;
-	case GEAR_UP_KBD:
+	case VEH_GEAR_UP_KBD:
 		{
 			mControlInputs.setGearUpKeyPressed(val);
 		}
 		break;
-	case HANDBRAKE_KBD:
+	case CAR_BRAKE_KBD:
+		{
+			mControlInputs.setBrakeKeyPressed(val);
+		}
+		break;
+	case CAR_STEER_LEFT_KBD:
+		{
+			mControlInputs.setSteerRightKeyPressed(val);
+		}
+		break;
+	case CAR_STEER_RIGHT_KBD:
+		{
+			mControlInputs.setSteerLeftKeyPressed(val);			
+		}
+		break;
+	case CAR_HANDBRAKE_KBD:
 		{
 			mControlInputs.setHandbrakeKeyPressed(val);
 		}
 		break;
-	case GEAR_DOWN_PAD:
+
+	case TANK_THRUST_LEFT_KBD:
+		{
+			if(PxVehicleDriveTankControlModel::eSPECIAL==mTankDriveModel)
+			{
+				mControlInputs.setThrustLeftKeyPressed(val);
+				mControlInputs.setAccelKeyPressed(val);
+			}
+			else if(val)
+			{
+				mControlInputs.setThrustLeftKeyPressed(val);
+				mControlInputs.setAccelKeyPressed(val);
+			}
+			else
+			{
+				mControlInputs.setThrustLeftKeyPressed(val);
+			}
+		}
+		break;
+	case TANK_THRUST_RIGHT_KBD:
+		{
+			if(PxVehicleDriveTankControlModel::eSPECIAL==mTankDriveModel)
+			{
+				mControlInputs.setThrustRightKeyPressed(val);
+				mControlInputs.setAccelKeyPressed(val);
+			}
+			else if(val)
+			{
+				mControlInputs.setThrustRightKeyPressed(val);
+				mControlInputs.setAccelKeyPressed(val);
+			}
+			else
+			{
+				mControlInputs.setThrustRightKeyPressed(val);
+			}
+		}
+		break;
+	case TANK_BRAKE_LEFT_KBD:
+		{
+			if(PxVehicleDriveTankControlModel::eSPECIAL==mTankDriveModel)
+			{
+				mControlInputs.setBrakeLeftKeyPressed(val);			
+				mControlInputs.setAccelKeyPressed(val);
+			}
+			else if(val)
+			{
+				mControlInputs.setBrakeLeftKeyPressed(val);			
+			}
+			else
+			{
+				mControlInputs.setBrakeLeftKeyPressed(val);			
+			}
+		}
+		break;
+	case TANK_BRAKE_RIGHT_KBD:
+		{
+			if(PxVehicleDriveTankControlModel::eSPECIAL==mTankDriveModel)
+			{
+				mControlInputs.setBrakeRightKeyPressed(val);			
+				mControlInputs.setAccelKeyPressed(val);
+			}
+			else if(val)
+			{
+				mControlInputs.setBrakeRightKeyPressed(val);			
+			}
+			else
+			{
+				mControlInputs.setBrakeRightKeyPressed(val);			
+			}
+		}
+		break;
+	case VEH_GEAR_DOWN_PAD:
 		{
 			mControlInputs.setGearDown(val);
 		}
 		break;
-	case GEAR_UP_PAD:
+	case VEH_GEAR_UP_PAD:
 		{
 			mControlInputs.setGearUp(val);
 		}
 		break;
-	case HANDBRAKE_PAD:
+	case CAR_HANDBRAKE_PAD:
 		{
 			mControlInputs.setHandbrake(val);
 		}
@@ -1451,7 +2085,7 @@ bool SampleVehicle::onDigitalInputEvent(const SampleFramework::InputEvent& ie, b
 			{
 #if PX_DEBUG_VEHICLE_ON
 				mDebugRenderActiveGraphChannelWheel++;
-				if(mDebugRenderActiveGraphChannelWheel==PxVehicleGraph::eMAX_NUM_WHEEL_CHANNELS)
+				if(mDebugRenderActiveGraphChannelWheel==PxVehicleWheelGraphChannel::eMAX_NB_WHEEL_CHANNELS)
 				{
 					mDebugRenderActiveGraphChannelWheel=0;
 				}
@@ -1465,7 +2099,7 @@ bool SampleVehicle::onDigitalInputEvent(const SampleFramework::InputEvent& ie, b
 			{
 #if PX_DEBUG_VEHICLE_ON
 				mDebugRenderActiveGraphChannelEngine++;
-				if(mDebugRenderActiveGraphChannelEngine==PxVehicleGraph::eMAX_NUM_ENGINE_CHANNELS)
+				if(mDebugRenderActiveGraphChannelEngine==PxVehicleDriveGraphChannel::eMAX_NB_DRIVE_CHANNELS)
 				{
 					mDebugRenderActiveGraphChannelEngine=0;
 				}
@@ -1485,24 +2119,32 @@ bool SampleVehicle::onDigitalInputEvent(const SampleFramework::InputEvent& ie, b
 				mFixCar = true;
 		}
 		break;
-	case CAMERA_KBD_ROTATE_LEFT:
+	case CAMERA_ROTATE_LEFT_KBD:
 		{
 			mControlInputs.setRotateY(val ? -0.5f : 0.0f);
 		}
 		break;
-	case CAMERA_KBD_ROTATE_RIGHT:
+	case CAMERA_ROTATE_RIGHT_KBD:
 		{
 			mControlInputs.setRotateY(val ? 0.5f : 0.0f);
 		}
 		break;
-	case CAMERA_KBD_ROTATE_UP:
+	case CAMERA_ROTATE_UP_KBD:
 		{
 			mControlInputs.setRotateZ(val ? 0.5f : 0.0f);
 		}
 		break;
-	case CAMERA_KBD_ROTATE_DOWN:
+	case CAMERA_ROTATE_DOWN_KBD:
 		{
 			mControlInputs.setRotateZ(val ? -0.5f : 0.0f);
+		}
+		break;
+	case W3MODE:
+		{
+			if(val)
+			{
+				m3WModeIncremented=true;
+			}
 		}
 		break;
 	default:
@@ -1510,54 +2152,135 @@ bool SampleVehicle::onDigitalInputEvent(const SampleFramework::InputEvent& ie, b
 	}
 
 	PhysXSample::onDigitalInputEvent(ie,val);
-
-	return true;
 }
 
 void SampleVehicle::onAnalogInputEvent(const SampleFramework::InputEvent& ie, float val)
 {
-	switch (ie.m_Id)
+	switch(mPlayerVehicleType)
 	{
-	case ACCELERATE:
+	case ePLAYER_VEHICLE_TYPE_VEHICLE4W:
+	case ePLAYER_VEHICLE_TYPE_VEHICLE6W:
+
+		switch (ie.m_Id)
 		{
-			mControlInputs.setAccel(val);
-		}
-		break;
-	case BRAKE:
-		{
-			mControlInputs.setBrake(val);
-		}
-		break;
-	case ACCELERATE_BRAKE:
-		{
-			if (val >= 0.0f)
+		case VEH_ACCELERATE_PAD:
 			{
 				mControlInputs.setAccel(val);
-				mControlInputs.setBrake(0.0f);
 			}
-			else
+			break;
+		case CAR_BRAKE_PAD:
 			{
-				mControlInputs.setBrake(-val);
-				mControlInputs.setAccel(0.0f);
+				mControlInputs.setBrake(val);
 			}
+			break;
+		case CAR_ACCELERATE_BRAKE:
+			{
+				if (val >= 0.0f)
+				{
+					mControlInputs.setAccel(val);
+					mControlInputs.setBrake(0.0f);
+				}
+				else
+				{
+					mControlInputs.setBrake(-val);
+					mControlInputs.setAccel(0.0f);
+				}
+			}
+			break;
+		case CAR_STEER_PAD:
+			{
+				mControlInputs.setSteer(-val);
+			}
+			break;
+		case CAMERA_ROTATE_LEFT_RIGHT_PAD:
+			{
+				mControlInputs.setRotateY(-val);
+			}
+			break;
+		case CAMERA_ROTATE_UP_DOWN_PAD:
+			{
+				mControlInputs.setRotateZ(-val);
+			}
+			break;
+		default:
+			break;
 		}
+
 		break;
-	case STEER:
+
+	case ePLAYER_VEHICLE_TYPE_TANK4W:
+	case ePLAYER_VEHICLE_TYPE_TANK6W:
+
+		switch (ie.m_Id)
 		{
-			mControlInputs.setSteer(-val);
+		case VEH_ACCELERATE_PAD:
+			{
+				PX_ASSERT(PxVehicleDriveTankControlModel::eSTANDARD==mTankDriveModel);
+				mControlInputs.setAccel(val);
+			}
+			break;
+		case TANK_THRUST_RIGHT_PAD:
+			{
+				if(PxVehicleDriveTankControlModel::eSPECIAL==mTankDriveModel)
+				{
+					mControlInputs.setThrustLeft(val);
+					mControlInputs.setAccel(val ? 1.0f : 0.0f);
+				}
+				else if(val>0)
+				{
+					mControlInputs.setThrustLeft(val);
+					mControlInputs.setBrakeLeft(0.0f);				
+				}
+				else
+				{
+					mControlInputs.setThrustLeft(0.0f);
+					mControlInputs.setBrakeLeft(-val);
+				}
+			}
+			break;
+		case TANK_THRUST_LEFT_PAD:
+			{
+				if(PxVehicleDriveTankControlModel::eSPECIAL==mTankDriveModel)
+				{
+					mControlInputs.setThrustRight(val);
+					mControlInputs.setAccel(val ? 1.0f : 0.0f);
+				}
+				else if(val>0)
+				{
+					mControlInputs.setThrustRight(val);
+					mControlInputs.setBrakeRight(0.0f);
+				}
+				else
+				{
+					mControlInputs.setThrustRight(0.0f);
+					mControlInputs.setBrakeRight(-val);
+				}
+			}
+			break;
+		case TANK_BRAKE_LEFT_PAD:
+			{
+				PX_ASSERT(PxVehicleDriveTankControlModel::eSPECIAL==mTankDriveModel);
+				mControlInputs.setBrakeLeft(val);
+			}
+			break;
+		case TANK_BRAKE_RIGHT_PAD:
+			{
+				PX_ASSERT(PxVehicleDriveTankControlModel::eSPECIAL==mTankDriveModel);
+				mControlInputs.setBrakeRight(val);
+			}
+			break;
+		case CAMERA_ROTATE_LEFT_RIGHT_PAD:
+			{
+				mControlInputs.setRotateY(-val);
+			}
+			break;
+		default:
+			break;
 		}
 		break;
-	case CAMERA_GAMEPAD_ROTATE_LEFT_RIGHT:
-		{
-			mControlInputs.setRotateY(-val);
-		}
-		break;
-	case CAMERA_GAMEPAD_ROTATE_UP_DOWN:
-		{
-			mControlInputs.setRotateZ(-val);
-		}
-		break;
+
 	default:
+		PX_ASSERT(false);
 		break;
 	}
 }
@@ -1568,6 +2291,7 @@ void SampleVehicle::onAnalogInputEvent(const SampleFramework::InputEvent& ie, fl
 void SampleVehicle::clearTelemetryData()
 {
 	mTelemetryData4W->clear();
+	mTelemetryData6W->clear();
 }
 #endif
 
@@ -1578,16 +2302,34 @@ void SampleVehicle::updateCameraController(const PxF32 dtime, PxScene& scene)
 
 void SampleVehicle::updateVehicleController(const PxF32 dtime)
 {
-	mVehicleController.update(dtime,*mVehicleManager.getVehicle(mPlayerVehicle));
+	PxSceneReadLock scopedLock(*mScene);
+	mVehicleController.update(dtime, mVehicleManager.getVehicleWheelQueryResults(mPlayerVehicle), *mVehicleManager.getVehicle(mPlayerVehicle));
 }
 
 void SampleVehicle::updateVehicleManager(const PxF32 dtime, const PxVec3& gravity)
 {
+	switch(mPlayerVehicleType)
+	{
+	case ePLAYER_VEHICLE_TYPE_VEHICLE4W:
+	case ePLAYER_VEHICLE_TYPE_TANK4W:
 #if PX_DEBUG_VEHICLE_ON
-	mVehicleManager.updateAndRecordTelemetryData(dtime,gravity,mVehicleManager.getVehicle(mPlayerVehicle),mTelemetryData4W);
+		mVehicleManager.updateAndRecordTelemetryData(dtime,gravity,mVehicleManager.getVehicle(mPlayerVehicle),mTelemetryData4W);
 #else
-	mVehicleManager.update(dtime,gravity);
+		mVehicleManager.update(dtime,gravity);
 #endif
+		break;
+	case ePLAYER_VEHICLE_TYPE_VEHICLE6W:
+	case ePLAYER_VEHICLE_TYPE_TANK6W:
+#if PX_DEBUG_VEHICLE_ON
+		mVehicleManager.updateAndRecordTelemetryData(dtime,gravity,mVehicleManager.getVehicle(mPlayerVehicle),mTelemetryData6W);
+#else
+		mVehicleManager.update(dtime,gravity);
+#endif
+		break;
+	default:
+		PX_ASSERT(false);
+		break;
+	}
 }
 
 void SampleVehicle::resetFocusVehicleAtWaypoint()
@@ -1602,15 +2344,37 @@ PxRigidDynamic*	SampleVehicle::getFocusVehicleRigidDynamicActor()
 
 void SampleVehicle::drawFocusVehicleGraphsAndPrintTireSurfaces()
 {
-	drawGraphsAndPrintTireSurfaceTypes(*mVehicleManager.getVehicle(mPlayerVehicle));
+	drawGraphsAndPrintTireSurfaceTypes(*mVehicleManager.getVehicle(mPlayerVehicle), mVehicleManager.getVehicleWheelQueryResults(mPlayerVehicle));
 }
 
 bool SampleVehicle::getFocusVehicleUsesAutoGears()
 {
 	PxVehicleWheels* vehWheels=mVehicleManager.getVehicle(mPlayerVehicle);
 	PxVehicleDriveDynData* driveDynData=NULL;
-	PX_ASSERT(eVEHICLE_TYPE_DRIVE4W==vehWheels->getVehicleType());
-	PxVehicleDrive4W* vehDrive4W=(PxVehicleDrive4W*)vehWheels;
-	driveDynData=&vehDrive4W->mDriveDynData;
+	switch(vehWheels->getVehicleType())
+	{
+	case PxVehicleTypes::eDRIVE4W:
+		{
+			PxVehicleDrive4W* vehDrive4W=(PxVehicleDrive4W*)vehWheels;
+			driveDynData=&vehDrive4W->mDriveDynData;
+		}
+		break;
+	case PxVehicleTypes::eDRIVENW:
+		{
+			PxVehicleDriveNW* vehDriveNW=(PxVehicleDriveNW*)vehWheels;
+			driveDynData=&vehDriveNW->mDriveDynData;
+		}
+		break;
+	case PxVehicleTypes::eDRIVETANK:
+		{
+			PxVehicleDriveTank* vehDriveTank=(PxVehicleDriveTank*)vehWheels;
+			driveDynData=&vehDriveTank->mDriveDynData;
+		}
+		break;
+	default:
+		PX_ASSERT(false);
+		break;
+	}
+
 	return driveDynData->getUseAutoGears();
 }

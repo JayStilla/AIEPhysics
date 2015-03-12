@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -45,13 +45,15 @@ namespace physx
 	class PxBitAndDataT
 	{
 	public:
-		PX_FORCE_INLINE	PxBitAndDataT()									{}
+
+		PX_FORCE_INLINE PxBitAndDataT(const PxEMPTY&) {}
+		PX_FORCE_INLINE	PxBitAndDataT()	: mData(0)	{}
 		PX_FORCE_INLINE	PxBitAndDataT(storageType data, bool bit=false)	{ mData = bit ? data | bitMask : data;	}
 
-		PX_CUDA_CALLABLE PX_FORCE_INLINE	operator storageType()		const	{ return mData & ~bitMask;	}
+		PX_CUDA_CALLABLE PX_FORCE_INLINE	operator storageType()		const	{ return storageType(mData & ~bitMask);	}
 		PX_CUDA_CALLABLE PX_FORCE_INLINE	void			setBit()			{ mData |= bitMask;			}
 		PX_CUDA_CALLABLE PX_FORCE_INLINE	void			clearBit()			{ mData &= ~bitMask;		}
-		PX_CUDA_CALLABLE PX_FORCE_INLINE	storageType		isBitSet()	const	{ return mData & bitMask;	}
+		PX_CUDA_CALLABLE PX_FORCE_INLINE	storageType		isBitSet()	const	{ return storageType(mData & bitMask);	}
 
 	protected:
 						storageType					mData;

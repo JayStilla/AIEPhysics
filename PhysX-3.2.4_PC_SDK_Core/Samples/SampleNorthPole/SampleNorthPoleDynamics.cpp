@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -43,12 +43,15 @@ void SampleNorthPole::detach()
 	std::vector<PxShape*>::const_iterator ite;
 	for(ite=mDetaching.begin(); ite<mDetaching.end(); ++ite)
 	{
+		PxSceneWriteLock scopedLock(*mScene);
+
 		PxShape* shape = *ite;
+		PxRigidActor* actor = shape->getActor();
 		
 		PxMaterial* mat;
 		shape->getMaterials(&mat,1);
 		PxGeometryHolder geometry = shape->getGeometry();
-		PxTransform newActorPose = PxShapeExt::getGlobalPose(*shape);
+		PxTransform newActorPose = PxShapeExt::getGlobalPose(*shape, *actor);
 
 		PxRigidDynamic* newActor = PxCreateDynamic(*mPhysics, newActorPose, geometry.any(), *mat, 1);
 		if(!newActor) 
@@ -60,19 +63,19 @@ void SampleNorthPole::detach()
 		if(geometry.getType() == PxGeometryType::eCONVEXMESH)
 		{
 			newActor->addForce(PxVec3(0,.1,0),PxForceMode::eFORCE);
-			size_t index = reinterpret_cast<size_t>(shape->getActor().userData);
+			size_t index = reinterpret_cast<size_t>(actor->userData);
 			mSnowman[index].changeMood();
 		}
 
 		// reuse the old shape's rendering actor
-		RenderBaseActor* render = reinterpret_cast<RenderBaseActor*>(shape->userData);
+		RenderBaseActor* render = getRenderActor(actor, shape);
 		PxShape* newShape;
 		newActor->getShapes(&newShape,1);
-		render->setPhysicsShape(newShape);
-		newShape->userData = render;
-		setCCDActive(*newShape);
+		unlink(render, shape, actor);
+		link(render, newShape, newActor);
+		setCCDActive(*newShape, newActor);
 
-		shape->release();
+		actor->detachShape(*shape);
 	}
 	mDetaching.clear();
 }
@@ -88,6 +91,8 @@ void SampleNorthPole::cookCarrotConvexMesh()
 
 PxRigidDynamic* SampleNorthPole::throwBall()
 {
+	PxSceneWriteLock scopedLock(*mScene);
+
 	static unsigned int numBall = 0;
 
 	PxVec3 vel = getCamera().getViewDir() * 20.0f;
@@ -107,7 +112,7 @@ PxRigidDynamic* SampleNorthPole::throwBall()
 	PxRigidBodyExt::updateMassAndInertia(*ballActor,1);
 
 #ifndef USE_RAYCAST_CCD_FOR_SNOWBALLS
-	setCCDActive(*ballShape);
+	setCCDActive(*ballShape, ballActor);
 #endif
 	
 	getActiveScene().addActor(*ballActor);
@@ -115,15 +120,14 @@ PxRigidDynamic* SampleNorthPole::throwBall()
 	RenderBaseActor* actor = mSnowBallsRenderActors[numBall];;
 	if(actor)
 	{
-		ballShape->userData = actor;
-		actor->setPhysicsShape(ballShape);
+		link(actor, ballShape, ballActor);
 	}
 	else
 	{
 #ifdef RENDERER_GXM
-		actor = createRenderObjectFromShape(ballShape,mSnowManMaterial);
+		actor = createRenderObjectFromShape(ballActor, ballShape,mSnowManMaterial);
 #else
-		actor = createRenderObjectFromShape(ballShape,mSnowMaterial);
+		actor = createRenderObjectFromShape(ballActor, ballShape, mSnowMaterial);
 #endif
 		mSnowBallsRenderActors[numBall] = actor;
 	}	
@@ -131,7 +135,7 @@ PxRigidDynamic* SampleNorthPole::throwBall()
 #ifdef USE_RAYCAST_CCD_FOR_SNOWBALLS
 	if(ballShape)
 	{
-		RenderBaseActor* renderActor = reinterpret_cast<RenderBaseActor*>(ballShape->userData);
+		RenderBaseActor* renderActor = getRenderActor(ballActor, ballShape);
 		renderActor->setRaycastCCD(true);
 	}
 #endif
@@ -140,7 +144,7 @@ PxRigidDynamic* SampleNorthPole::throwBall()
 
 	if(oldBall) 
 	{
-		removeActor(oldBall);		
+		removeActor(oldBall);
 		oldBall->release();
 	}	
 
@@ -176,48 +180,97 @@ PxRigidDynamic* SampleNorthPole::createSnowMan(const PxTransform& pos, const PxU
 	{
 	case 0: // with a weight at the bottom
 		{
-			if(!snowmanActor->createShape(PxSphereGeometry(.2),material,PxTransform(PxVec3(0,-.29,0))))
+			PxShape* shape = NULL;
+			shape = snowmanActor->createShape(PxSphereGeometry(.2),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
+			shape->setLocalPose(PxTransform(PxVec3(0,-.29,0)));
 			
 			PxRigidBodyExt::updateMassAndInertia(*snowmanActor,10);
+
+			shape = snowmanActor->createShape(PxSphereGeometry(.5),material);
+			if(!shape)
+				fatalError("creating snowman shape failed");
 			
-			if(!snowmanActor->createShape(PxSphereGeometry(.5),material))
+			shape = snowmanActor->createShape(PxSphereGeometry(.4),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			if(!snowmanActor->createShape(PxSphereGeometry(.4),material,PxTransform(PxVec3(0,.6,0))))
+			shape->setLocalPose(PxTransform(PxVec3(0,.6,0)));
+			
+			shape = snowmanActor->createShape(PxSphereGeometry(.3),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			if(!snowmanActor->createShape(PxSphereGeometry(.3),material,PxTransform(PxVec3(0,1.1,0))))
+			shape->setLocalPose(PxTransform(PxVec3(0,1.1,0)));
+			
+			armL = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material);
+			if(!armL)
 				fatalError("creating snowman shape failed");
-			armL = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material,PxTransform(PxVec3(-.4,.7,0)));
-			armR = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material,PxTransform(PxVec3( .4,.7,0)));
+			armL->setLocalPose(PxTransform(PxVec3(-.4,.7,0)));
+
+			armR = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material);
+			if(!armR)
+				fatalError("creating snowman shape failed");			
+			armR->setLocalPose(PxTransform(PxVec3( .4,.7,0)));
 		}
 		break;
 	case 1: // only considering lowest shape mass
 		{
-			if(!snowmanActor->createShape(PxSphereGeometry(.5),material))
+			PxShape* shape = NULL;
+			shape = snowmanActor->createShape(PxSphereGeometry(.5),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
 			
 			PxRigidBodyExt::updateMassAndInertia(*snowmanActor,1);
 
-			if(!snowmanActor->createShape(PxSphereGeometry(.4),material,PxTransform(PxVec3(0,.6,0))))
+			shape = snowmanActor->createShape(PxSphereGeometry(.4),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			if(!snowmanActor->createShape(PxSphereGeometry(.3),material,PxTransform(PxVec3(0,1.1,0))))
+			shape->setLocalPose(PxTransform(PxVec3(0,.6,0)));
+
+			shape = snowmanActor->createShape(PxSphereGeometry(.3),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			armL = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material,PxTransform(PxVec3(-.4,.7,0)));
-			armR = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material,PxTransform(PxVec3( .4,.7,0)));
+			shape->setLocalPose(PxTransform(PxVec3(0,1.1,0)));
+
+			armL = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material);
+			if(!armL)
+				fatalError("creating snowman shape failed");
+			armL->setLocalPose(PxTransform(PxVec3(-.4,.7,0)));
+
+			armR = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material);
+			if(!armR)
+				fatalError("creating snowman shape failed");			
+			armR->setLocalPose(PxTransform(PxVec3( .4,.7,0)));
 
 			snowmanActor->setCMassLocalPose(PxTransform(PxVec3(0,-.5,0)));
 		}
 		break;
 	case 2: // considering whole mass
 		{
-			if(!snowmanActor->createShape(PxSphereGeometry(.5),material))
+			PxShape* shape = NULL;
+			shape = snowmanActor->createShape(PxSphereGeometry(.5),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			if(!snowmanActor->createShape(PxSphereGeometry(.4),material,PxTransform(PxVec3(0,.6,0))))
+			
+			shape = snowmanActor->createShape(PxSphereGeometry(.4),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			if(!snowmanActor->createShape(PxSphereGeometry(.3),material,PxTransform(PxVec3(0,1.1,0))))
+			shape->setLocalPose(PxTransform(PxVec3(0,.6,0)));
+
+			shape = snowmanActor->createShape(PxSphereGeometry(.3),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			armL = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material,PxTransform(PxVec3(-.4,.7,0)));
-			armR = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material,PxTransform(PxVec3( .4,.7,0)));
+			shape->setLocalPose(PxTransform(PxVec3(0,1.1,0)));
+			
+			armL = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material);
+			if(!armL)
+				fatalError("creating snowman shape failed");
+			armL->setLocalPose(PxTransform(PxVec3(-.4,.7,0)));
+
+			armR = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material);
+			if(!armR)
+				fatalError("creating snowman shape failed");			
+			armR->setLocalPose(PxTransform(PxVec3( .4,.7,0)));
 
 			PxRigidBodyExt::updateMassAndInertia(*snowmanActor,1);
 			snowmanActor->setCMassLocalPose(PxTransform(PxVec3(0,-.5,0)));
@@ -225,14 +278,30 @@ PxRigidDynamic* SampleNorthPole::createSnowMan(const PxTransform& pos, const PxU
 		break;
 	case 3: // considering whole mass with low COM
 		{
-			if(!snowmanActor->createShape(PxSphereGeometry(.5),material))
+			PxShape* shape = NULL;
+			shape = snowmanActor->createShape(PxSphereGeometry(.5),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			if(!snowmanActor->createShape(PxSphereGeometry(.4),material,PxTransform(PxVec3(0,.6,0))))
+
+			shape = snowmanActor->createShape(PxSphereGeometry(.4),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			if(!snowmanActor->createShape(PxSphereGeometry(.3),material,PxTransform(PxVec3(0,1.1,0))))
+			shape->setLocalPose(PxTransform(PxVec3(0,.6,0)));
+
+			shape = snowmanActor->createShape(PxSphereGeometry(.3),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			armL = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material,PxTransform(PxVec3(-.4,.7,0)));
-			armR = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material,PxTransform(PxVec3( .4,.7,0)));
+			shape->setLocalPose(PxTransform(PxVec3(0,1.1,0)));
+
+			armL = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material);
+			if(!armL)
+				fatalError("creating snowman shape failed");
+			armL->setLocalPose(PxTransform(PxVec3(-.4,.7,0)));
+
+			armR = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material);
+			if(!armR)
+				fatalError("creating snowman shape failed");			
+			armR->setLocalPose(PxTransform(PxVec3( .4,.7,0)));
 
 			const PxVec3 localPos = PxVec3(0,-.5,0);
 			PxRigidBodyExt::updateMassAndInertia(*snowmanActor,1,&localPos);
@@ -240,14 +309,30 @@ PxRigidDynamic* SampleNorthPole::createSnowMan(const PxTransform& pos, const PxU
 		break;
 	case 4: // setting up mass properties manually
 		{
-			if(!snowmanActor->createShape(PxSphereGeometry(.5),material))
+			PxShape* shape = NULL;
+			shape = snowmanActor->createShape(PxSphereGeometry(.5),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			if(!snowmanActor->createShape(PxSphereGeometry(.4),material,PxTransform(PxVec3(0,.6,0))))
+			
+			shape = snowmanActor->createShape(PxSphereGeometry(.4),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			if(!snowmanActor->createShape(PxSphereGeometry(.3),material,PxTransform(PxVec3(0,1.1,0))))
+			shape->setLocalPose(PxTransform(PxVec3(0,.6,0)));
+
+			shape = snowmanActor->createShape(PxSphereGeometry(.3),material);
+			if(!shape)
 				fatalError("creating snowman shape failed");
-			armL = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material,PxTransform(PxVec3(-.4,.7,0)));
-			armR = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material,PxTransform(PxVec3( .4,.7,0)));
+			shape->setLocalPose(PxTransform(PxVec3(0,1.1,0)));
+
+			armL = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material);
+			if(!armL)
+				fatalError("creating snowman shape failed");
+			armL->setLocalPose(PxTransform(PxVec3(-.4,.7,0)));
+
+			armR = snowmanActor->createShape(PxCapsuleGeometry(.1,.1),material);
+			if(!armR)
+				fatalError("creating snowman shape failed");			
+			armR->setLocalPose(PxTransform(PxVec3( .4,.7,0)));
 
 			snowmanActor->setMass(1);
 			snowmanActor->setCMassLocalPose(PxTransform(PxVec3(0,-.5,0)));
@@ -258,11 +343,6 @@ PxRigidDynamic* SampleNorthPole::createSnowMan(const PxTransform& pos, const PxU
 		break;
 	}
 	
-	if(!armL)
-		fatalError("creating snowman shape failed");
-	if(!armR)
-		fatalError("creating snowman shape failed");
-
 	setDetachable(*armL);
 	setDetachable(*armR);
 
@@ -272,47 +352,52 @@ PxRigidDynamic* SampleNorthPole::createSnowMan(const PxTransform& pos, const PxU
 	createRenderObjectsFromActor(snowmanActor,mSnowMaterial);
 #endif
 
-	PxShape* carrot = snowmanActor->createShape(PxConvexMeshGeometry(mCarrotConvex),material,PxTransform(PxVec3(0,1.1,.3)));
+	PxShape* carrot = snowmanActor->createShape(PxConvexMeshGeometry(mCarrotConvex),material);
 	if(!carrot)
 		fatalError("create snowman shape failed");
+	carrot->setLocalPose(PxTransform(PxVec3(0,1.1,.3)));
 	setDetachable(*carrot);
-	setCCDActive(*carrot);
 
-	createRenderObjectFromShape(carrot,mCarrotMaterial);
+	createRenderObjectFromShape(snowmanActor, carrot, mCarrotMaterial);
 
 	PxShape* button = NULL;
 	
-	button = snowmanActor->createShape(PxCapsuleGeometry(.02,.05),material,PxTransform(PxVec3(.1,1.2,.3),PxQuat(PxHalfPi/3,PxVec3(0,0,1))));
+	button = snowmanActor->createShape(PxCapsuleGeometry(.02,.05),material);
 	if(!button)
 		fatalError("create snowman shape failed");
+	button->setLocalPose(PxTransform(PxVec3(.1,1.2,.3),PxQuat(PxHalfPi/3,PxVec3(0,0,1))));
+	button->setFlag(PxShapeFlag::eSIMULATION_SHAPE,false);
 	mSnowman[index].eyeL = button;
-	button->setFlag(PxShapeFlag::eSIMULATION_SHAPE,false);
-	createRenderObjectFromShape(button,mButtonMaterial);
+	createRenderObjectFromShape(snowmanActor, button, mButtonMaterial);
 
-	button = snowmanActor->createShape(PxCapsuleGeometry(.02,.05),material,PxTransform(PxVec3(-.1,1.2,.3),PxQuat(-PxHalfPi/3,PxVec3(0,0,1))));
+	button = snowmanActor->createShape(PxCapsuleGeometry(.02,.05),material);
 	if(!button)
 		fatalError("create snowman shape failed");
+	button->setLocalPose(PxTransform(PxVec3(-.1,1.2,.3),PxQuat(-PxHalfPi/3,PxVec3(0,0,1))));
+	button->setFlag(PxShapeFlag::eSIMULATION_SHAPE,false);
 	mSnowman[index].eyeR = button;
-	button->setFlag(PxShapeFlag::eSIMULATION_SHAPE,false);
-	createRenderObjectFromShape(button,mButtonMaterial);
+	createRenderObjectFromShape(snowmanActor, button, mButtonMaterial);
 
-	button = snowmanActor->createShape(PxSphereGeometry(.05),material,PxTransform(PxVec3(0,.8,.35)));
+	button = snowmanActor->createShape(PxSphereGeometry(.05),material);
 	if(!button)
 		fatalError("create snowman shape failed");
+	button->setLocalPose(PxTransform(PxVec3(0,.8,.35)));
 	setDetachable(*button);
-	createRenderObjectFromShape(button,mButtonMaterial);
+	createRenderObjectFromShape(snowmanActor, button, mButtonMaterial);
 
-	button = snowmanActor->createShape(PxSphereGeometry(.05),material,PxTransform(PxVec3(0,.6,.4)));
+	button = snowmanActor->createShape(PxSphereGeometry(.05),material);
 	if(!button)
 		fatalError("create snowman shape failed");
+	button->setLocalPose(PxTransform(PxVec3(0,.6,.4)));
 	setDetachable(*button);
-	createRenderObjectFromShape(button,mButtonMaterial);
+	createRenderObjectFromShape(snowmanActor, button, mButtonMaterial);
 	
-	button = snowmanActor->createShape(PxSphereGeometry(.05),material,PxTransform(PxVec3(0,.4,.35)));
+	button = snowmanActor->createShape(PxSphereGeometry(.05),material);
 	if(!button)
 		fatalError("create snowman shape failed");
+	button->setLocalPose(PxTransform(PxVec3(0,.4,.35)));
 	setDetachable(*button);
-	createRenderObjectFromShape(button,mButtonMaterial);
+	createRenderObjectFromShape(snowmanActor, button, mButtonMaterial);
 
 	getActiveScene().addActor(*snowmanActor);
 

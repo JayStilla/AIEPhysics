@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -31,7 +31,7 @@
 #define PX_REPX_META_DATA_PROPERTY_VISITOR_H
 #include "PvdMetaDataPropertyVisitor.h"
 
-namespace physx { namespace repx {
+namespace physx {
 
 	template<PxU32 TKey, typename TObjectType,typename TSetPropType, typename TPropertyType>
 	struct PxRepXPropertyAccessor : public Pvd::ValueStructOffsetRecord
@@ -46,8 +46,34 @@ namespace physx { namespace repx {
 		}
 		prop_type get( const TObjectType* inObj ) const { return mProperty.get( inObj ); }
 		void set( TObjectType* inObj, prop_type val ) const { return mProperty.set( inObj, val ); }
+
+	private:
+		PxRepXPropertyAccessor& operator=(const PxRepXPropertyAccessor&);
 	};
-	
+
+	template<typename TSetPropType, typename TPropertyType>
+	struct PxRepXPropertyAccessor<PxPropertyInfoName::PxRigidDynamic_WakeCounter, PxRigidDynamic, TSetPropType, TPropertyType> : public Pvd::ValueStructOffsetRecord
+	{
+		typedef PxPropertyInfo<PxPropertyInfoName::PxRigidDynamic_WakeCounter,PxRigidDynamic,TSetPropType,TPropertyType> TPropertyInfoType;
+		typedef TPropertyType prop_type;
+
+		const TPropertyInfoType	mProperty;
+		PxRepXPropertyAccessor( const TPropertyInfoType& inProp )
+			: mProperty( inProp )
+		{
+		}
+		prop_type get( const PxRigidDynamic* inObj ) const { return mProperty.get( inObj ); }
+		void set( PxRigidDynamic* inObj, prop_type val ) const
+		{ 
+			PX_UNUSED(val);
+			PxRigidBodyFlags flags = inObj->getRigidBodyFlags();
+			if( !(flags & PxRigidBodyFlag::eKINEMATIC) )
+				return mProperty.set( inObj, val ); 
+		}
+	private:
+		PxRepXPropertyAccessor& operator=(const PxRepXPropertyAccessor&);
+	};
+
 	typedef PxReadOnlyPropertyInfo<PxPropertyInfoName::PxArticulationLink_InboundJoint, PxArticulationLink, PxArticulationJoint *> TIncomingJointPropType;
 
 
@@ -57,6 +83,8 @@ namespace physx { namespace repx {
 	template<typename TOperatorType>
 	struct RepXPropertyFilter
 	{
+		RepXPropertyFilter<TOperatorType> &operator=(const RepXPropertyFilter<TOperatorType> &);
+
 		Pvd::PvdPropertyFilter<TOperatorType> mFilter;
 		RepXPropertyFilter( TOperatorType op ) : mFilter( op ) {}
 		RepXPropertyFilter( const RepXPropertyFilter<TOperatorType>& other ) : mFilter( other.mFilter ) {}
@@ -64,7 +92,7 @@ namespace physx { namespace repx {
 		template<PxU32 TKey, typename TObjType, typename TPropertyType>
 		void operator()( const PxReadOnlyPropertyInfo<TKey,TObjType,TPropertyType>&, PxU32 ) {} //repx ignores read only and write only properties
 		template<PxU32 TKey, typename TObjType, typename TPropertyType>
-		void operator()( const PxWriteOnlyPropertyInfo<TKey,TObjType,TPropertyType>& inProperty, PxU32 ) {}
+		void operator()( const PxWriteOnlyPropertyInfo<TKey,TObjType,TPropertyType>&, PxU32 ) {}
 		template<PxU32 TKey, typename TObjType, typename TCollectionType>
 		void operator()( const PxReadOnlyCollectionPropertyInfo<TKey, TObjType, TCollectionType>&, PxU32 ) {}
 
@@ -76,16 +104,43 @@ namespace physx { namespace repx {
 		{
 			mFilter( inProp, idx );
 		}
-		template<PxU32 TKey, typename TObjType, typename TIndexType, typename TIndex2Type, typename TPropertyType>
+        
+        template<PxU32 TKey, typename TObjType, typename TIndexType, typename TPropertyType>
+		void operator()( const PxFixedSizeLookupTablePropertyInfo<TKey, TObjType, TIndexType,TPropertyType >& inProp, PxU32 idx ) 
+		{
+			mFilter( inProp, idx );
+		}
+			
+		template<PxU32 TKey, typename TObjType, typename TIndexType, typename TPropertyType>
+		void operator()( const PxExtendedIndexedPropertyInfo<TKey, TObjType, TIndexType, TPropertyType >& inProp, PxU32 idx) 
+		{
+            mFilter( inProp, idx);
+		}
+
+        template<PxU32 TKey, typename TObjType, typename TIndexType, typename TIndex2Type, typename TPropertyType>
 		void operator()( const PxDualIndexedPropertyInfo<TKey, TObjType, TIndexType, TIndex2Type, TPropertyType >& inProp, PxU32 idx ) 
 		{
 			mFilter( inProp, idx );
 		}
+
+		template<PxU32 TKey, typename TObjType, typename TIndexType, typename TIndex2Type, typename TPropertyType>
+		void operator()( const PxExtendedDualIndexedPropertyInfo<TKey, TObjType, TIndexType, TIndex2Type, TPropertyType >& inProp, PxU32 idx ) 
+		{
+			mFilter( inProp, idx );
+		}
+
 		template<PxU32 TKey, typename TObjType, typename TPropertyType>
 		void operator()( const PxRangePropertyInfo<TKey, TObjType, TPropertyType>& inProp, PxU32 idx )
 		{
 			mFilter( inProp, idx );
 		}
+	
+		template<PxU32 TKey, typename TObjType, typename TPropertyType>
+		void operator()( const PxBufferCollectionPropertyInfo<TKey, TObjType, TPropertyType>& inProp, PxU32 count )
+		{
+			mFilter( inProp, count );
+		}
+
 		template<PxU32 TKey, typename TObjType, typename TSetPropType, typename TPropertyType>
 		void operator()( const PxPropertyInfo<TKey,TObjType,TSetPropType,TPropertyType>& prop, PxU32 ) 
 		{
@@ -120,42 +175,42 @@ namespace physx { namespace repx {
 		{
 			mFilter.mOperator.handleIncomingJoint( inProp );
 		}
-
-		void operator()( const PxShapeGeometryProperty& inProp, PxU32 )
+        
+        void operator()( const PxShapeGeometryProperty& inProp, PxU32 )
 		{
 			mFilter.mOperator.handleGeometryProperty( inProp );
 		}
 		
 #define DEFINE_REPX_PROPERTY_NOP(datatype)																\
 		template<PxU32 TKey, typename TObjType, typename TSetPropType>										\
-		void operator()( const PxPropertyInfo<TKey,TObjType,TSetPropType,datatype>& inProperty, PxU32 ){}
+		void operator()( const PxPropertyInfo<TKey,TObjType,TSetPropType,datatype>&, PxU32 ){}
 		
-		DEFINE_REPX_PROPERTY_NOP( const void* );
-		DEFINE_REPX_PROPERTY_NOP( void* );
-		DEFINE_REPX_PROPERTY_NOP( PxSimulationFilterCallback * );
-		DEFINE_REPX_PROPERTY_NOP( physx::pxtask::TaskManager * );
-		DEFINE_REPX_PROPERTY_NOP( PxSimulationFilterShader * );
-		DEFINE_REPX_PROPERTY_NOP( PxSimulationFilterShader);
-		DEFINE_REPX_PROPERTY_NOP( PxContactModifyCallback * );
-		DEFINE_REPX_PROPERTY_NOP( PxSimulationEventCallback * );
-		DEFINE_REPX_PROPERTY_NOP( physx::pxtask::GpuDispatcher* );
-		DEFINE_REPX_PROPERTY_NOP( physx::pxtask::CpuDispatcher * );
-		DEFINE_REPX_PROPERTY_NOP( PxRigidActor );
-		DEFINE_REPX_PROPERTY_NOP( const PxRigidActor );
-		DEFINE_REPX_PROPERTY_NOP( PxRigidActor& );
-		DEFINE_REPX_PROPERTY_NOP( const PxRigidActor& );
-		DEFINE_REPX_PROPERTY_NOP( PxScene* );
-		DEFINE_REPX_PROPERTY_NOP( PxAggregate * );
-		DEFINE_REPX_PROPERTY_NOP( PxArticulation& );
-		DEFINE_REPX_PROPERTY_NOP( const PxArticulationLink * );
-		DEFINE_REPX_PROPERTY_NOP( const PxParticleFluid * );
-		DEFINE_REPX_PROPERTY_NOP( const PxParticleSystem * );
-		DEFINE_REPX_PROPERTY_NOP( const PxRigidDynamic * );
-		DEFINE_REPX_PROPERTY_NOP( const PxRigidStatic * );
-		DEFINE_REPX_PROPERTY_NOP( const PxParticleBase * );
-		DEFINE_REPX_PROPERTY_NOP( PxStridedData ); //These are handled in a custom fasion.
+		DEFINE_REPX_PROPERTY_NOP( const void* )
+		DEFINE_REPX_PROPERTY_NOP( void* )
+		DEFINE_REPX_PROPERTY_NOP( PxSimulationFilterCallback * )
+		DEFINE_REPX_PROPERTY_NOP( physx::PxTaskManager * )
+		DEFINE_REPX_PROPERTY_NOP( PxSimulationFilterShader * )
+		DEFINE_REPX_PROPERTY_NOP( PxSimulationFilterShader)
+		DEFINE_REPX_PROPERTY_NOP( PxContactModifyCallback * )
+		DEFINE_REPX_PROPERTY_NOP( PxCCDContactModifyCallback * )
+		DEFINE_REPX_PROPERTY_NOP( PxSimulationEventCallback * )
+		DEFINE_REPX_PROPERTY_NOP( physx::PxGpuDispatcher* )
+		DEFINE_REPX_PROPERTY_NOP( physx::PxCpuDispatcher * )
+		DEFINE_REPX_PROPERTY_NOP( PxRigidActor )
+		DEFINE_REPX_PROPERTY_NOP( const PxRigidActor )
+		DEFINE_REPX_PROPERTY_NOP( PxRigidActor& )
+		DEFINE_REPX_PROPERTY_NOP( const PxRigidActor& )
+		DEFINE_REPX_PROPERTY_NOP( PxScene* )
+		DEFINE_REPX_PROPERTY_NOP( PxAggregate * )
+		DEFINE_REPX_PROPERTY_NOP( PxArticulation& )
+		DEFINE_REPX_PROPERTY_NOP( const PxArticulationLink * )
+		DEFINE_REPX_PROPERTY_NOP( const PxParticleFluid * )
+		DEFINE_REPX_PROPERTY_NOP( const PxParticleSystem * )
+		DEFINE_REPX_PROPERTY_NOP( const PxRigidDynamic * )
+		DEFINE_REPX_PROPERTY_NOP( const PxRigidStatic * )
+		DEFINE_REPX_PROPERTY_NOP( const PxParticleBase * )
+		DEFINE_REPX_PROPERTY_NOP( PxStridedData ) //These are handled in a custom fasion.
 	};
-
-}}
+}
 
 #endif

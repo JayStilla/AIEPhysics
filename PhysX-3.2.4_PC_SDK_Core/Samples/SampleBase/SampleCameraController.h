@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -53,6 +53,7 @@ class CameraController : public SampleAllocateable
 
 	virtual	void		update(Camera& camera, PxReal dtime)												{}
 	virtual void		collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents)	{}
+	virtual PxReal		getCameraSpeed() { return 0; }
 };
 
 class DefaultCameraController : public CameraController
@@ -64,6 +65,7 @@ class DefaultCameraController : public CameraController
 			void		init(const PxVec3& pos, const PxVec3& rot);
 			void		init(const PxTransform& pose);
 			void		setCameraSpeed(const PxReal speed) { mCameraSpeed = speed; }
+			PxReal		getCameraSpeed() { return mCameraSpeed; }
 			void		setMouseLookOnMouseButton(bool mouseLookOnMB) { mMouseLookOnMB = mouseLookOnMB; }
 			void		setMouseSensitivity(PxReal mouseSensitivity) { mMouseSensitivity = mouseSensitivity; }
 

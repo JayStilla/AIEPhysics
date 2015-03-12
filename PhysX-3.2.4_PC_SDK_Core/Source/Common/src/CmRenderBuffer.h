@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -94,6 +94,28 @@ namespace Cm
 		bool empty() const 
 		{
 			return mPoints.empty() && mLines.empty() && mTriangles.empty() && mTexts.empty()&& mCharBuf.empty();
+		}
+
+		void shift(const PxVec3& delta)
+		{
+			for(PxU32 i=0; i < mPoints.size(); i++)
+				mPoints[i].pos += delta;
+
+			for(PxU32 i=0; i < mLines.size(); i++)
+			{
+				mLines[i].pos0 += delta;
+				mLines[i].pos1 += delta;
+			}
+
+			for(PxU32 i=0; i < mTriangles.size(); i++)
+			{
+				mTriangles[i].pos0 += delta;
+				mTriangles[i].pos1 += delta;
+				mTriangles[i].pos2 += delta;
+			}
+
+			for(PxU32 i=0; i < mTexts.size(); i++)
+				mTexts[i].position += delta;
 		}
 
 		Ps::Array<PxDebugPoint>		mPoints;

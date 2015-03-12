@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -39,11 +39,15 @@ namespace Ext
 	PxU32 FixedJointSolverPrep(Px1DConstraint* constraints,
 		PxVec3& body0WorldOffset,
 		PxU32 maxConstraints,
+		PxConstraintInvMassScale &invMassScale,
 		const void* constantBlock,
 		const PxTransform& bA2w,
 		const PxTransform& bB2w)
 	{
+		PX_UNUSED(maxConstraints);
+
 		const FixedJointData& data = *reinterpret_cast<const FixedJointData*>(constantBlock);
+		invMassScale = data.invMassScale;
 
 		PxTransform cA2w = bA2w.transform(data.c2b[0]);
 		PxTransform cB2w = bB2w.transform(data.c2b[1]);

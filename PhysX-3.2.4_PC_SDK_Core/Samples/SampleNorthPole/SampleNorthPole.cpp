@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -59,7 +59,7 @@ SampleNorthPole::SampleNorthPole(PhysXSampleApplication& app) :
 	mDoStandup					(false)
 {
 	mCreateGroundPlane	= false;
-	mUseFixedStepper	= true;
+	//mStepperType = FIXED_STEPPER;
 	mStandingSize = 1.0f;
 	mCrouchingSize = 0.20f;
 	mControllerRadius = 0.3f;
@@ -85,6 +85,8 @@ void SampleNorthPole::customizeSample(SampleSetup& setup)
 void SampleNorthPole::onInit()
 {
 	PhysXSample::onInit();
+
+	PxSceneWriteLock scopedLock(*mScene);
 
 	mApplication.setMouseCursorHiding(true);
 	mApplication.setMouseCursorRecentering(true);
@@ -113,7 +115,8 @@ void SampleNorthPole::onInit()
 
 	createSnowMen();
 
-	mControllerManager = PxCreateControllerManager(getPhysics().getFoundation());
+	mControllerManager = PxCreateControllerManager(getActiveScene());
+
 	mController = createCharacter(mControllerInitialPosition);
 
 	mNorthPoleCamera = SAMPLE_NEW(SampleNorthPoleCameraController)(*mController,*this);
@@ -124,8 +127,12 @@ void SampleNorthPole::onInit()
 
 void SampleNorthPole::onShutdown()
 {
-	DELETESINGLE(mNorthPoleCamera);
-	mControllerManager->release();
+	{
+		PxSceneWriteLock scopedLock(*mScene);
+		DELETESINGLE(mNorthPoleCamera);
+		mControllerManager->release();
+	}
+	
 	PhysXSample::onShutdown();
 }
 
@@ -223,10 +230,10 @@ void SampleNorthPole::onPointerInputEvent(const SampleFramework::InputEvent& ie,
 
 	if((ie.m_Id == RAYCAST_HIT) && val)
 	{
-		PxRaycastHit hit;
+		PxRaycastBuffer hit;
 		PxSceneQueryFlags flags;
-		getActiveScene().raycastSingle(getCamera().getPos()+getCamera().getViewDir(),getCamera().getViewDir(),1,flags,hit);
-		printf("hits: %p\n",hit.shape);
+		getActiveScene().raycast(getCamera().getPos()+getCamera().getViewDir(), getCamera().getViewDir(), 1.0f, hit);
+		shdfnd::printFormatted("hits: %p\n",hit.block.shape);
 	}
 
 	PhysXSample::onPointerInputEvent(ie,x,y,dx,dy,val);

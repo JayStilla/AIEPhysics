@@ -23,10 +23,20 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
+
+#ifndef FRAMEWORK_FOUNDATION_H
+#define FRAMEWORK_FOUNDATION_H
+
+#include <stdio.h>
+#include "foundation/PxPreprocessor.h"
 
 namespace physx
 {
+#ifdef PX_WIIU
+	struct FILE;
+#endif
+
 	namespace shdfnd{}
 
 	namespace pxtask
@@ -41,6 +51,12 @@ namespace SampleFramework
 	using namespace physx;
 	namespace Fnd = physx::shdfnd;
 
+#ifdef PX_WIIU
+	typedef physx::FILE File;
+#else
+	typedef ::FILE File;
+#endif
+
 } // namespace Renderer
 
 #include <foundation/PxSimpleTypes.h>
@@ -50,3 +66,5 @@ namespace SampleFramework
 #include <foundation/PxTransform.h>
 #include <foundation/PxBounds3.h>
 #include <foundation/PxErrorCallback.h>
+
+#endif

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -43,24 +43,10 @@ PX_FORCE_INLINE	bool testSlope(const PxVec3& normal, const PxVec3& upDirection, 
 	return dp>=0.0f && dp<slopeLimit;
 }
 
-PX_INLINE PxTransform getShapeGlobalPose(const PxShape& shape)
+PX_INLINE PxTransform getShapeGlobalPose(const PxShape& shape, const PxRigidActor& actor)
 {
-/*	const PxRigidActor& rigidActor = shape.getActor();
-
-	const PxType actorType = rigidActor.getConcreteType();
-
-	if(actorType==PxConcreteType::eRIGID_STATIC)
-	{
-//		return shape.getScbShape().getShape2Body();
-		PxTransform tr0 = PxShapeExt::getGlobalPose(shape);
-		PxTransform tr1 = shape.getLocalPose2();
-		return tr1;
-	}*/
-
-	return PxShapeExt::getGlobalPose(shape);
+	return PxShapeExt::getGlobalPose(shape, actor);
 }
-
-
 
 #ifdef PX_BIG_WORLDS
 
@@ -148,13 +134,6 @@ PX_INLINE PxTransform getShapeGlobalPose(const PxShape& shape)
 		PxExtendedVec3 minimum, maximum;
 	};
 
-
-
-	PX_INLINE void	setZero(PxExtendedVec3& v)
-	{
-		v.x = v.y = v.z = 0.0;
-	}
-
 	PX_INLINE PxExtended	distance(const PxExtendedVec3& v2, const PxExtendedVec3& v)
 	{
 		const PxExtended dx = v2.x - v.x;
@@ -181,13 +160,6 @@ PX_INLINE PxTransform getShapeGlobalPose(const PxShape& shape)
 		b.maximum = c;	b.maximum += e;
 	}
 
-	PX_INLINE void	scale(PxExtendedBounds3& b, PxF32 scale)
-	{
-		PxExtendedVec3 center;	getCenter(b, center);
-		PxVec3 extents;	getExtents(b, extents);
-		setCenterExtents(b, center, extents * scale);
-	}
-
 	PX_INLINE void	add(PxExtendedBounds3& b, const PxExtendedBounds3& b2)
 	{
 		// - if we're empty, minimum = MAX,MAX,MAX => minimum will be b2 in all cases => it will copy b2, ok
@@ -196,14 +168,6 @@ PX_INLINE PxTransform getShapeGlobalPose(const PxShape& shape)
 		b.minimum.minimum(b2.minimum);
 		b.maximum.maximum(b2.maximum);
 	}
-
-/*	PX_INLINE bool	intersect(const PxExtendedBounds3& a, const PxExtendedBounds3& b)
-	{
-		if ((b.minimum.x > a.maximum.x) || (a.minimum.x > b.maximum.x)) return false;
-		if ((b.minimum.y > a.maximum.y) || (a.minimum.y > b.maximum.y)) return false;
-		if ((b.minimum.z > a.maximum.z) || (a.minimum.z > b.maximum.z)) return false;
-		return true;
-	}*/
 #else
 
 	#include "GuBox.h"
@@ -225,11 +189,6 @@ PX_INLINE PxTransform getShapeGlobalPose(const PxShape& shape)
 		return PxSqrt(dx * dx + dy * dy + dz * dz);
 	}
 
-	PX_INLINE void	setZero(PxVec3& v)
-	{
-		v.x = v.y = v.z = 0.0f;
-	}
-
 	PX_INLINE void	getCenter(const PxBounds3& b, PxVec3& center)
 	{
 		center = b.minimum + b.maximum;
@@ -248,13 +207,6 @@ PX_INLINE PxTransform getShapeGlobalPose(const PxShape& shape)
 		b.maximum	= center + extents;
 	}
 
-	PX_INLINE void	scale(PxBounds3& b, PxF32 scale)
-	{
-		PxVec3 center;	getCenter(b, center);
-		PxVec3 extents;	getExtents(b, extents);
-		setCenterExtents(b, center, extents * scale);
-	}
-
 	PX_INLINE void	add(PxBounds3& b, const PxBounds3& b2)
 	{
 		// - if we're empty, minimum = MAX,MAX,MAX => minimum will be b2 in all cases => it will copy b2, ok
@@ -263,14 +215,6 @@ PX_INLINE PxTransform getShapeGlobalPose(const PxShape& shape)
 		b.minimum.minimum(b2.minimum);
 		b.maximum.maximum(b2.maximum);
 	}
-
-/*	PX_INLINE bool	intersect(const PxBounds3& a, const PxBounds3& b)
-	{
-		if ((b.minimum.x > a.maximum.x) || (a.minimum.x > b.maximum.x)) return false;
-		if ((b.minimum.y > a.maximum.y) || (a.minimum.y > b.maximum.y)) return false;
-		if ((b.minimum.z > a.maximum.z) || (a.minimum.z > b.maximum.z)) return false;
-		return true;
-	}*/
 #endif
 
 }

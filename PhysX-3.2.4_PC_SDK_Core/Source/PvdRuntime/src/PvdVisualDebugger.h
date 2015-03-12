@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -39,7 +39,7 @@
 #include "CmPhysXCommon.h"
 #include "PxMetaDataPvdBinding.h"
 #include "NpFactory.h"
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 
 namespace physx
 {
@@ -78,7 +78,7 @@ struct SdkGroups
 		ConvexMeshes,
 		HeightFields,
 		ClothFabrics,
-		NUM_ELEMENTS,
+		NUM_ELEMENTS
 	};
 };
 
@@ -91,21 +91,34 @@ to be read by the remote debugger application.
 //////////////////////////////////////////////////////////////////////////
 class VisualDebugger : public PxVisualDebugger, public Ps::UserAllocated, public physx::debugger::comm::PvdConnectionHandler, public Pvd::BufferRegistrar, public NpFactoryListener
 {
+	PX_NOCOPY(VisualDebugger)
 public:
 	VisualDebugger ();
 	virtual ~VisualDebugger ();
 	virtual void disconnect();
-	virtual physx::debugger::comm::PvdConnection* getPvdConnectionFactory();
-	virtual physx::debugger::comm::PvdDataStream* getPvdConnection(const PxScene& scene);
-	virtual void setVisualizeConstraints( bool inViz );
-	virtual bool isVisualizingConstraints();
+	virtual physx::debugger::comm::PvdConnection* getPvdConnection();
+	virtual physx::debugger::comm::PvdDataStream* getPvdDataStream(const PxScene& scene);
 	virtual void updateCamera(const char* name, const PxVec3& origin, const PxVec3& up, const PxVec3& target);
-	virtual void setVisualDebuggerFlag(PxVisualDebuggerFlags::Enum flag, bool value);
+	virtual void sendErrorMessage(PxErrorCode::Enum code, const char* message, const char* file, PxU32 line);
+	virtual void setVisualDebuggerFlag(PxVisualDebuggerFlag::Enum flag, bool value);
+	virtual void setVisualDebuggerFlags(PxVisualDebuggerFlags flags);
 	virtual PxU32 getVisualDebuggerFlags();
 
 	// internal methods
+	void setCreateContactReports(bool value);
+
 	void sendClassDescriptions();
-	bool isConnected();
+
+	// useCachedStaus: 
+	//    1> When useCachedStaus is false, isConnected() checks the lowlevel network status.
+	//       This can be slow because it needs to lock the lowlevel network stream. If isConnected() is 
+	//       called frequently, the expense of locking can be significant.
+	//    2> When useCachedStaus is true, isConnected() checks the highlevel cached status with atomic access.
+	//       It is faster than locking, but the status may be different from the lowlevel network with latency of up to one frame.
+	//       The reason for this is that the cached status is changed inside PvdConnectionHandler listener, which is not called immediately
+	//       when the lowlevel conntion status changes. 
+	bool isConnected(bool useCachedStatus = false);
+
 	void checkConnection();
 	void updateScenesPvdConnection();
 	void setupSceneConnection(Scb::Scene& s);
@@ -120,8 +133,9 @@ public:
 	template<typename TDataType>
 	inline void decreaseReference(const TDataType* inItem)		{ if(decRef(inItem) == 0) { destroyPvdInstance(inItem); flush(); } }
 
-	PX_FORCE_INLINE bool	getTransmitContactsFlag()							{ return (mFlags & PxVisualDebuggerFlags::eTRANSMIT_CONTACTS) != 0; }
-	PX_FORCE_INLINE bool	getTransmitSceneQueriesFlag()						{ return (mFlags & PxVisualDebuggerFlags::eTRANSMIT_SCENEQUERIES) != 0; }
+	PX_FORCE_INLINE bool	getTransmitContactsFlag()							{ return (mFlags & PxVisualDebuggerFlag::eTRANSMIT_CONTACTS) != 0; }
+	PX_FORCE_INLINE bool	getTransmitSceneQueriesFlag()						{ return (mFlags & PxVisualDebuggerFlag::eTRANSMIT_SCENEQUERIES) != 0; }
+	
 
 	static PX_FORCE_INLINE const char* getPhysxNamespace() { return "physx3"; }
 
@@ -145,16 +159,14 @@ public:
 
 	
 	//NpFactoryListener
-	virtual void onGuMeshFactoryBufferRelease(PxConvexMesh& data);
-	virtual void onGuMeshFactoryBufferRelease(PxHeightField& data);
-	virtual void onGuMeshFactoryBufferRelease(PxTriangleMesh& data);
+	virtual void onGuMeshFactoryBufferRelease(const PxBase* object, PxType typeID, bool memRelease);
 #if PX_USE_CLOTH_API
 	virtual void onNpFactoryBufferRelease(PxClothFabric& data);
 #endif
 	///NpFactoryListener
 	
 private:
-	template<typename TDataType> void doMeshFactoryBufferRelease( TDataType& type );
+	template<typename TDataType> void doMeshFactoryBufferRelease( const TDataType* type );
 	void createPvdInstance(const PxTriangleMesh* triMesh);
 	void destroyPvdInstance(const PxTriangleMesh* triMesh);
 	void createPvdInstance(const PxConvexMesh* convexMesh);
@@ -173,15 +185,15 @@ private:
 	PX_FORCE_INLINE PxU32 decRef(const void* ptr);
 
 
-	physx::debugger::comm::PvdDataStream*				mPvdConnection;
-	physx::debugger::comm::PvdConnection*				mPvdConnectionFactory;
+	physx::debugger::comm::PvdDataStream*				mPvdDataStream;
+	physx::debugger::comm::PvdConnection*				mPvdConnection;
 	PvdMetaDataBinding				mMetaDataBinding;
 
 	Ps::HashMap<const void*, PxU32>	mRefCountMap;
 	Ps::Mutex						mRefCountMapLock;
 
-	bool							mConstraintVisualize;
 	PxU32							mFlags;
+	volatile PxI32					mIsConnected;
 };
 
 

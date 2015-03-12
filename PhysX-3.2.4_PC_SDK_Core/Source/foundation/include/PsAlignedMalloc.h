@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -66,7 +66,7 @@ namespace shdfnd
 				return NULL;
 
 			PxU8* ptr = (PxU8*)(size_t(base + pad) & ~(size_t(N) - 1)); // aligned pointer, ensuring N is a size_t wide mask
-			((size_t*)ptr)[-1] = ptr - base; // store offset
+			((size_t*)ptr)[-1] = size_t(ptr - base); // store offset
 
 			return ptr;
 		}

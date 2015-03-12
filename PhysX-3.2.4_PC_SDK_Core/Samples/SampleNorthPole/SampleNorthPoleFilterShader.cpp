@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -36,7 +36,8 @@ void SampleNorthPole::customizeSceneDesc(PxSceneDesc& sceneDesc)
 	sceneDesc.gravity					= PxVec3(0,-9.81,0);
 	sceneDesc.filterShader				= filter;
 	sceneDesc.simulationEventCallback	= this;
-	sceneDesc.flags						|= PxSceneFlag::eENABLE_SWEPT_INTEGRATION;
+	sceneDesc.flags						|= PxSceneFlag::eENABLE_CCD;
+	sceneDesc.flags						|= PxSceneFlag::eREQUIRE_RW_LOCK;
 }
 
 void SampleNorthPole::setSnowball(PxShape& shape)
@@ -65,11 +66,9 @@ bool SampleNorthPole::isDetachable(PxFilterData& filterData)
 	return filterData.word3 & PxU32(DETACHABLE_FLAG) ? true : false;
 }
 
-void SampleNorthPole::setCCDActive(PxShape& shape)
+void SampleNorthPole::setCCDActive(PxShape& shape, PxRigidBody* rigidBody)
 {
-	
-	shape.setFlag(PxShapeFlag::eUSE_SWEPT_BOUNDS,true);
-
+	rigidBody->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, true);
 	PxFilterData fd = shape.getSimulationFilterData();
 	fd.word3 |= CCD_FLAG;
 	shape.setSimulationFilterData(fd);
@@ -92,7 +91,7 @@ PxFilterFlags SampleNorthPole::filter(	PxFilterObjectAttributes attributes0,
 
 	if (isCCDActive(filterData0) || isCCDActive(filterData1))
 	{
-		pairFlags |= PxPairFlag::eSWEPT_INTEGRATION_LINEAR;
+		pairFlags |= PxPairFlag::eCCD_LINEAR;
 	}
 
 	if (needsContactReport(filterData0, filterData1))
@@ -109,7 +108,7 @@ void SampleNorthPole::onContact(const PxContactPairHeader& pairHeader, const PxC
 	for(PxU32 i=0; i < nbPairs; i++)
 	{
 		PxU32 n = 2;
-		const PxContactPairFlag::Enum delShapeFlags[] = { PxContactPairFlag::eDELETED_SHAPE_0, PxContactPairFlag::eDELETED_SHAPE_1 };
+		const PxContactPairFlag::Enum delShapeFlags[] = { PxContactPairFlag::eREMOVED_SHAPE_0, PxContactPairFlag::eREMOVED_SHAPE_1 };
 		const PxContactPair& cp = pairs[i];
 		while(n--)
 		{

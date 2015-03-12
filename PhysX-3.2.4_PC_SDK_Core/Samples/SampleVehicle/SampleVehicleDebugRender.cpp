@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -38,6 +38,7 @@ using namespace SampleRenderer;
 
 void SampleVehicle::drawWheels()
 {
+	PxSceneReadLock scopedLock(*mScene);
 	const RendererColor colorPurple(255, 0, 255);
 
 	for(PxU32 i=0;i<mVehicleManager.getNbVehicles();i++)
@@ -45,10 +46,10 @@ void SampleVehicle::drawWheels()
 		//Draw a rotating arrow to get an idea of the wheel rotation speed.
 		PxVehicleWheels* veh=mVehicleManager.getVehicle(i);
 		const PxRigidDynamic* actor=veh->getRigidDynamicActor();
-		PxShape* shapeBuffer[PX_MAX_NUM_WHEELS];
-		actor->getShapes(shapeBuffer,veh->mWheelsSimData.getNumWheels());
+		PxShape* shapeBuffer[PX_MAX_NB_WHEELS];
+		actor->getShapes(shapeBuffer,veh->mWheelsSimData.getNbWheels());
 		const PxTransform vehGlobalPose=actor->getGlobalPose();
-		const PxU32 numWheels=veh->mWheelsSimData.getNumWheels();
+		const PxU32 numWheels=veh->mWheelsSimData.getNbWheels();
 		for(PxU32 j=0;j<numWheels;j++)
 		{
 			const PxTransform wheelTransform=vehGlobalPose.transform(shapeBuffer[j]->getLocalPose());
@@ -64,24 +65,44 @@ void SampleVehicle::drawWheels()
 
 void SampleVehicle::drawVehicleDebug()
 {
+	PxSceneReadLock scopedLock(*mScene);
 	const RendererColor colorColl(255, 0, 0);
 	const RendererColor colorCol2(0, 255, 0);
 	const RendererColor colorCol3(0, 0, 255);
 	
 #if PX_DEBUG_VEHICLE_ON
-	const PxVec3* tireForceAppPoints=mTelemetryData4W->getTireforceAppPoints();
-	const PxVec3* suspForceAppPoints=mTelemetryData4W->getSuspforceAppPoints();
+	const PxVec3* tireForceAppPoints=NULL;
+	const PxVec3* suspForceAppPoints=NULL;
+	switch(mPlayerVehicleType)
+	{
+	case ePLAYER_VEHICLE_TYPE_VEHICLE4W:
+	case ePLAYER_VEHICLE_TYPE_TANK4W:
+		tireForceAppPoints=mTelemetryData4W->getTireforceAppPoints();
+		suspForceAppPoints=mTelemetryData4W->getSuspforceAppPoints();
+		break;
+	case ePLAYER_VEHICLE_TYPE_VEHICLE6W:
+	case ePLAYER_VEHICLE_TYPE_TANK6W:
+		tireForceAppPoints=mTelemetryData6W->getTireforceAppPoints();
+		suspForceAppPoints=mTelemetryData6W->getSuspforceAppPoints();
+		break;
+	default:
+		PX_ASSERT(false);
+		break;
+	}
 #endif
 
 	const PxVehicleWheels& vehicle4W=*mVehicleManager.getVehicle(mPlayerVehicle);
+	const PxVehicleWheelQueryResult& vehicleWheelQueryResults=mVehicleManager.getVehicleWheelQueryResults(mPlayerVehicle);
 	const PxRigidDynamic* actor=vehicle4W.getRigidDynamicActor();
-	const PxU32 numWheels=vehicle4W.mWheelsSimData.getNumWheels();
+	const PxU32 numWheels=vehicle4W.mWheelsSimData.getNbWheels();
 	PxVec3 v[8];
 	PxVec3 w[8];
 	PxF32 l[8];
 	for(PxU32 i=0;i<numWheels;i++)
 	{
-		vehicle4W.mWheelsDynData.getSuspRaycast(i,v[i],w[i],l[i]);
+		v[i] = vehicleWheelQueryResults.wheelQueryResults[i].suspLineStart;
+		w[i] = vehicleWheelQueryResults.wheelQueryResults[i].suspLineDir;
+		l[i] = vehicleWheelQueryResults.wheelQueryResults[i].suspLineLength;
 	}
 
 
@@ -142,10 +163,35 @@ static void print(Renderer* renderer, PxF32 x, PxF32 y, PxF32 scale_, const char
 void SampleVehicle::drawHud()
 {
 	const PxVehicleWheels& focusVehicle = *mVehicleManager.getVehicle(mPlayerVehicle);
-	PX_ASSERT(eVEHICLE_TYPE_DRIVE4W==focusVehicle.getVehicleType());
-	PxVehicleDrive4W& vehDrive4W=(PxVehicleDrive4W&)focusVehicle;
-	PxVehicleDriveDynData* driveDynData=&vehDrive4W.mDriveDynData;
-	PxVehicleDriveSimData*driveSimData=&vehDrive4W.mDriveSimData;
+	PxVehicleDriveDynData* driveDynData=NULL;
+	PxVehicleDriveSimData* driveSimData=NULL;
+	switch(focusVehicle.getVehicleType())
+	{
+	case PxVehicleTypes::eDRIVE4W:
+		{
+			PxVehicleDrive4W& vehDrive4W=(PxVehicleDrive4W&)focusVehicle;
+			driveDynData=&vehDrive4W.mDriveDynData;
+			driveSimData=&vehDrive4W.mDriveSimData;
+		}
+		break;
+	case PxVehicleTypes::eDRIVENW:
+		{
+			PxVehicleDriveNW& vehDriveNW=(PxVehicleDriveNW&)focusVehicle;
+			driveDynData=&vehDriveNW.mDriveDynData;
+			driveSimData=&vehDriveNW.mDriveSimData;
+		}
+		break;
+	case PxVehicleTypes::eDRIVETANK:
+		{
+			PxVehicleDriveTank& vehDriveTank=(PxVehicleDriveTank&)focusVehicle;
+			driveDynData=&vehDriveTank.mDriveDynData;
+			driveSimData=&vehDriveTank.mDriveSimData;
+		}
+		break;
+	default:
+		PX_ASSERT(false);
+		break;
+	}
 
 	const PxU32 currentGear=driveDynData->getCurrentGear();
 	const PxF32 vz=mForwardSpeedHud*3.6f;
@@ -164,7 +210,7 @@ void SampleVehicle::drawHud()
 	drawBox2D(renderer, x-length-textheight, x+length+textheight, y, y+length+textheight, RendererColor(255, 255, 255), 0.5f);
 
 	//Gear
-	char gear[PxVehicleGearsData::eMAX_NUM_GEAR_RATIOS][64]=
+	char gear[PxVehicleGearsData::eGEARSRATIO_COUNT][64]=
 	{
 		"R","N","1","2","3","4","5"
 	};
@@ -209,13 +255,13 @@ static PX_FORCE_INLINE RendererColor getColor(const PxVec3& c)
 
 static PX_FORCE_INLINE void convertColors(const PxVec3* src, RendererColor* dst)
 {
-	for(PxU32 i=0;i<PxVehicleGraph::eMAX_NUM_SAMPLES;i++)
+	for(PxU32 i=0;i<PxVehicleGraph::eMAX_NB_SAMPLES;i++)
 		*dst++ = getColor(src[i]);
 }
 
 static void convertY(PxF32* xy)
 {
-	for(PxU32 i=0;i<PxVehicleGraph::eMAX_NUM_SAMPLES;i++)
+	for(PxU32 i=0;i<PxVehicleGraph::eMAX_NB_SAMPLES;i++)
 		xy[2*i+1]=1.0f-xy[2*i+1];
 }
 
@@ -229,12 +275,12 @@ void drawGraphsAndPrintTireSurfaceTypesN
  SampleRenderer::Renderer* renderer)
 {
 
-	PxF32 xy[2*PxVehicleGraph::eMAX_NUM_SAMPLES];
-	PxVec3 color[PxVehicleGraph::eMAX_NUM_SAMPLES];
-	RendererColor rendererColor[PxVehicleGraph::eMAX_NUM_SAMPLES];
-	char title[PxVehicleGraph::eMAX_NUM_TITLE_CHARS];
+	PxF32 xy[2*PxVehicleGraph::eMAX_NB_SAMPLES];
+	PxVec3 color[PxVehicleGraph::eMAX_NB_SAMPLES];
+	RendererColor rendererColor[PxVehicleGraph::eMAX_NB_SAMPLES];
+	char title[PxVehicleGraph::eMAX_NB_TITLE_CHARS];
 
-	const PxU32 numWheelGraphs=telemetryData.getNumWheelGraphs();
+	const PxU32 numWheelGraphs=telemetryData.getNbWheelGraphs();
 
 	for(PxU32 i=0;i<numWheelGraphs;i++)
 	{
@@ -247,7 +293,7 @@ void drawGraphsAndPrintTireSurfaceTypesN
 		telemetryData.getWheelGraph(i).computeGraphChannel(activeWheelGraphChannel,xy,color,title);
 		convertY(xy);
 		convertColors(color, rendererColor);
-		renderer->drawLines2D(PxVehicleGraph::eMAX_NUM_SAMPLES, xy, rendererColor);
+		renderer->drawLines2D(PxVehicleGraph::eMAX_NB_SAMPLES, xy, rendererColor);
 
 		print(renderer, xMin,yMax-0.02f, 0.02f, title);
 
@@ -256,8 +302,8 @@ void drawGraphsAndPrintTireSurfaceTypesN
 
 		if (PxVehicleDrivableSurfaceType::eSURFACE_TYPE_UNKNOWN!=tireSurfaceType)
 		{
-			const char* surfaceType= gSurfaceTypes[tireSurfaceType];
-			const PxF32 friction=(gTireFrictionMultipliers[tireSurfaceType])[tireType];
+			const char* surfaceType= SurfaceTypeNames::getName(tireSurfaceType);
+			const PxF32 friction=TireFrictionMultipliers::getValue(tireSurfaceType, tireType);
 			char surfaceDetails[64];
 			sprintf(surfaceDetails, "%s %1.2f \n", surfaceType, friction);
 			print(renderer, xMin+0.1f, yMax-0.12f, 0.02f, surfaceDetails);
@@ -273,29 +319,45 @@ void drawGraphsAndPrintTireSurfaceTypesN
 	telemetryData.getEngineGraph().computeGraphChannel(activeEngineGraphChannel,xy,color,title);
 	convertY(xy);
 	convertColors(color, rendererColor);
-	renderer->drawLines2D(PxVehicleGraph::eMAX_NUM_SAMPLES, xy, rendererColor);
+	renderer->drawLines2D(PxVehicleGraph::eMAX_NB_SAMPLES, xy, rendererColor);
 
 	print(renderer, xMin,yMax-0.02f,0.02f,title);
 }
 
 #endif //PX_DEBUG_VEHICLE_GRAPH_ON
 
-void SampleVehicle::drawGraphsAndPrintTireSurfaceTypes(const PxVehicleWheels& focusVehicle)
+void SampleVehicle::drawGraphsAndPrintTireSurfaceTypes(const PxVehicleWheels& focusVehicle, const PxVehicleWheelQueryResult& focusVehicleWheelQueryResults)
 {
 #if PX_DEBUG_VEHICLE_ON
 
 	PxU32 tireTypes[8];
 	PxU32 surfaceTypes[8];
-	const PxU32 numWheels=focusVehicle.mWheelsSimData.getNumWheels();
+	const PxU32 numWheels=focusVehicle.mWheelsSimData.getNbWheels();
 	PX_ASSERT(numWheels<=8);
 	for(PxU32 i=0;i<numWheels;i++)
 	{
 		tireTypes[i]=focusVehicle.mWheelsSimData.getTireData(i).mType;
-		surfaceTypes[i]=focusVehicle.mWheelsDynData.getTireDrivableSurfaceType(i);
+		surfaceTypes[i]=focusVehicleWheelQueryResults.wheelQueryResults[i].tireSurfaceType;
+	}
+
+	PxVehicleTelemetryData* vehTelData=NULL;
+	switch(mPlayerVehicleType)
+	{
+	case ePLAYER_VEHICLE_TYPE_VEHICLE4W:
+	case ePLAYER_VEHICLE_TYPE_TANK4W:
+		vehTelData=mTelemetryData4W;
+		break;
+	case ePLAYER_VEHICLE_TYPE_VEHICLE6W:
+	case ePLAYER_VEHICLE_TYPE_TANK6W:
+		vehTelData=mTelemetryData6W;
+		break;
+	default:
+		PX_ASSERT(false);
+		break;
 	}
 
 	drawGraphsAndPrintTireSurfaceTypesN(
-		*mTelemetryData4W,tireTypes,surfaceTypes,
+		*vehTelData,tireTypes,surfaceTypes,
 		mDebugRenderActiveGraphChannelEngine,mDebugRenderActiveGraphChannelWheel,
 		getRenderer());
 

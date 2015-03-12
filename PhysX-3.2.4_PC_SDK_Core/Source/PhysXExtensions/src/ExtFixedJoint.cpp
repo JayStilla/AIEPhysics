@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,10 +32,11 @@
 #include "ExtConstraintHelper.h"
 #include "CmRenderOutput.h"
 #include "CmVisualization.h"
-#include "CmSerialAlignment.h"
 #ifdef PX_PS3
 #include "PS3/ExtFixedJointSpu.h"
 #endif
+
+#include "common/PxSerialFramework.h"
 
 using namespace physx;
 using namespace Ext;
@@ -53,10 +54,11 @@ PxFixedJoint* physx::PxFixedJointCreate(PxPhysics& physics,
 {
 	PX_CHECK_AND_RETURN_NULL(localFrame0.isSane(), "PxFixedJointCreate: local frame 0 is not a valid transform"); 
 	PX_CHECK_AND_RETURN_NULL(localFrame1.isSane(), "PxFixedJointCreate: local frame 1 is not a valid transform"); 
-	PX_CHECK_AND_RETURN_NULL(actor0 && actor0->is<PxRigidBody>() || actor1 && actor1->is<PxRigidBody>(), "PxFixedJointCreate: at least one actor must be dynamic");
+	PX_CHECK_AND_RETURN_NULL((actor0 && actor0->is<PxRigidBody>()) || (actor1 && actor1->is<PxRigidBody>()), "PxFixedJointCreate: at least one actor must be dynamic");
 	PX_CHECK_AND_RETURN_NULL(actor0 != actor1, "PxFixedJointCreate: actors must be different");
 
-	FixedJoint* j = PX_NEW(FixedJoint)(physics.getTolerancesScale(), actor0, localFrame0, actor1, localFrame1);
+	FixedJoint* j;
+	PX_NEW_SERIALIZED(j,FixedJoint)(physics.getTolerancesScale(), actor0, localFrame0, actor1, localFrame1);
 
 	if(j->attach(physics, actor0, actor1))
 		return j;
@@ -72,7 +74,7 @@ PxReal FixedJoint::getProjectionLinearTolerance() const
 
 void FixedJoint::setProjectionLinearTolerance(PxReal tolerance)
 { 
-	PX_CHECK_AND_RETURN(PxIsFinite(tolerance), "PxFixedJoint::setProjectionLinearTolerance: invalid parameter");
+	PX_CHECK_AND_RETURN(PxIsFinite(tolerance) && tolerance >=0, "PxFixedJoint::setProjectionLinearTolerance: invalid parameter");
 	data().projectionLinearTolerance = tolerance; 
 	markDirty(); 
 }
@@ -95,7 +97,7 @@ void FixedJointVisualize(PxConstraintVisualizer& viz,
 						 const void* constantBlock,
 						 const PxTransform& body0Transform,
 						 const PxTransform& body1Transform,
-						 PxU32 flags)
+						 PxU32 /*flags*/)
 {
 	const FixedJointData& data = *reinterpret_cast<const FixedJointData*>(constantBlock);
 
@@ -134,41 +136,37 @@ bool Ext::FixedJoint::attach(PxPhysics &physics, PxRigidActor* actor0, PxRigidAc
 	return mPxConstraint!=NULL;
 }
 
-
-
-
-// PX_SERIALIZATION
-BEGIN_FIELDS(FixedJoint)
-//	DEFINE_STATIC_ARRAY(FixedJoint, mData, PxField::eBYTE, sizeof(FixedJointData), Ps::F_SERIALIZE),
-END_FIELDS(FixedJoint)
-
-void FixedJoint::exportExtraData(PxSerialStream& stream)
+void FixedJoint::exportExtraData(PxSerializationContext& stream) const
 {
 	if(mData)
 	{
-		Cm::alignStream(stream, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-		stream.storeBuffer(mData, sizeof(FixedJointData));
+		stream.alignData(PX_SERIAL_ALIGN);
+		stream.writeData(mData, sizeof(FixedJointData));
 	}
+	stream.writeName(mName);
 }
 
-char* FixedJoint::importExtraData(char* address, PxU32& totalPadding)
+void FixedJoint::importExtraData(PxDeserializationContext& context)
 {
 	if(mData)
-	{
-		address = Cm::alignStream(address, totalPadding, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-		mData = reinterpret_cast<FixedJointData*>(address);
-		address += sizeof(FixedJointData);
-	}
-	return address;
+		mData = context.readExtraData<FixedJointData, PX_SERIAL_ALIGN>();
+	context.readName(mName);
 }
 
-bool FixedJoint::resolvePointers(PxRefResolver& v, void* context)
+void FixedJoint::resolveReferences(PxDeserializationContext& context)
 {
-	FixedJointT::resolvePointers(v, context);
-
-	setPxConstraint(resolveConstraintPtr(v, getPxConstraint(), getConnector(), sShaders));
-	return true;
+	setPxConstraint(resolveConstraintPtr(context, getPxConstraint(), getConnector(), sShaders));	
 }
+
+FixedJoint* FixedJoint::createObject(PxU8*& address, PxDeserializationContext& context)
+{
+	FixedJoint* obj = new (address) FixedJoint(PxBaseFlag::eIS_RELEASABLE);
+	address += sizeof(FixedJoint);	
+	obj->importExtraData(context);
+	obj->resolveReferences(context);
+	return obj;
+}
+
 
 //~PX_SERIALIZATION
 

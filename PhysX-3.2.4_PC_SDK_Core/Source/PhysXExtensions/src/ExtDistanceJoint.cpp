@@ -23,16 +23,16 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 
 #include "ExtDistanceJoint.h"
-#include "CmSerialAlignment.h"
 #ifdef PX_PS3
 #include "PS3/ExtDistanceJointSpu.h"
 #endif
+#include "common/PxSerialFramework.h"
 
 using namespace physx;
 using namespace Ext;
@@ -51,15 +51,20 @@ PxDistanceJoint* physx::PxDistanceJointCreate(PxPhysics& physics,
 	PX_CHECK_AND_RETURN_NULL(localFrame0.isSane(), "PxDistanceJointCreate: local frame 0 is not a valid transform"); 
 	PX_CHECK_AND_RETURN_NULL(localFrame1.isSane(), "PxDistanceJointCreate: local frame 1 is not a valid transform"); 
 	PX_CHECK_AND_RETURN_NULL(actor0 != actor1, "PxDistanceJointCreate: actors must be different");
-	PX_CHECK_AND_RETURN_NULL(actor0 && actor0->is<PxRigidBody>() || actor1 && actor1->is<PxRigidBody>(), "PxD6JointCreate: at least one actor must be dynamic");
+	PX_CHECK_AND_RETURN_NULL((actor0 && actor0->is<PxRigidBody>()) || (actor1 && actor1->is<PxRigidBody>()), "PxD6JointCreate: at least one actor must be dynamic");
 
-	DistanceJoint* j = PX_NEW(DistanceJoint)(physics.getTolerancesScale(), actor0, localFrame0, actor1, localFrame1);
-
+	DistanceJoint* j;
+	PX_NEW_SERIALIZED(j,DistanceJoint)(physics.getTolerancesScale(), actor0, localFrame0, actor1, localFrame1);
 	if(j->attach(physics, actor0, actor1))
 		return j;
 
 	PX_DELETE(j);
 	return NULL;
+}
+
+PxReal DistanceJoint::getDistance() const
+{
+	return getRelativeTransform().p.magnitudeSquared();
 }
 
 void DistanceJoint::setMinDistance(PxReal distance)	
@@ -98,16 +103,16 @@ PxReal DistanceJoint::getTolerance() const
 	return data().tolerance;			
 }
 
-void DistanceJoint::setSpring(PxReal spring)
+void DistanceJoint::setStiffness(PxReal stiffness)
 { 
-	PX_CHECK_AND_RETURN(PxIsFinite(spring), "PxDistanceJoint::setSpring: invalid parameter");
-	data().spring = spring;
+	PX_CHECK_AND_RETURN(PxIsFinite(stiffness), "PxDistanceJoint::setStiffness: invalid parameter");
+	data().stiffness = stiffness;
 	markDirty();
 }
 
-PxReal DistanceJoint::getSpring() const	
+PxReal DistanceJoint::getStiffness() const	
 { 
-	return data().spring;
+	return data().stiffness;
 }
 
 void DistanceJoint::setDamping(PxReal damping)
@@ -146,18 +151,18 @@ void DistanceJoint::setDistanceJointFlag(PxDistanceJointFlag::Enum flag, bool va
 
 namespace
 {
-void DistanceJointVisualize(PxConstraintVisualizer& viz,
-							const void* constantBlock,
-							const PxTransform& body0Transform,
-							const PxTransform& body1Transform,
-							PxU32 flags)
+void DistanceJointVisualize(PxConstraintVisualizer& /*viz*/,
+							const void* /*constantBlock*/,
+							const PxTransform& /*body0Transform*/,
+							const PxTransform& /*body1Transform*/,
+							PxU32 /*flags*/)
 {
 }
 
-void DistanceJointProject(const void* constantBlock,
-						  PxTransform& bodyAToWorld,
-						  PxTransform& bodyBToWorld,
-						  bool projectToA)
+void DistanceJointProject(const void* /*constantBlock*/,
+						  PxTransform& /*bodyAToWorld*/,
+						  PxTransform& /*bodyBToWorld*/,
+						  bool /*projectToA*/)
 {
 	// TODO
 }
@@ -171,40 +176,37 @@ bool Ext::DistanceJoint::attach(PxPhysics &physics, PxRigidActor* actor0, PxRigi
 	return mPxConstraint!=NULL;
 }
 
-
-// PX_SERIALIZATION
-BEGIN_FIELDS(DistanceJoint)
-//	DEFINE_STATIC_ARRAY(DistanceJoint, mData, PxField::eBYTE, sizeof(DistanceJointData), Ps::F_SERIALIZE),
-END_FIELDS(DistanceJoint)
-
-void DistanceJoint::exportExtraData(PxSerialStream& stream)
+void DistanceJoint::exportExtraData(PxSerializationContext& stream)
 {
 	if(mData)
 	{
-		Cm::alignStream(stream, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-		stream.storeBuffer(mData, sizeof(DistanceJointData));
+		stream.alignData(PX_SERIAL_ALIGN);
+		stream.writeData(mData, sizeof(DistanceJointData));
 	}
+	stream.writeName(mName);
 }
 
-char* DistanceJoint::importExtraData(char* address, PxU32& totalPadding)
+void DistanceJoint::importExtraData(PxDeserializationContext& context)
 {
 	if(mData)
-	{
-		address = Cm::alignStream(address, totalPadding, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-		mData = reinterpret_cast<DistanceJointData*>(address);
-		address += sizeof(DistanceJointData);
-	}
-	return address;
+		mData = context.readExtraData<DistanceJointData, PX_SERIAL_ALIGN>();
+
+	context.readName(mName);
 }
 
-bool DistanceJoint::resolvePointers(PxRefResolver& v, void* context)
+void DistanceJoint::resolveReferences(PxDeserializationContext& context)
 {
-	DistanceJointT::resolvePointers(v, context);
-
-	setPxConstraint(resolveConstraintPtr(v, getPxConstraint(), getConnector(), sShaders));
-	return true;
+	setPxConstraint(resolveConstraintPtr(context, getPxConstraint(), getConnector(), sShaders));	
 }
 
+DistanceJoint* DistanceJoint::createObject(PxU8*& address, PxDeserializationContext& context)
+{
+	DistanceJoint* obj = new (address) DistanceJoint(PxBaseFlag::eIS_RELEASABLE);
+	address += sizeof(DistanceJoint);	
+	obj->importExtraData(context);
+	obj->resolveReferences(context);
+	return obj;
+}
 //~PX_SERIALIZATION
 #ifdef PX_PS3
 PxConstraintShaderTable Ext::DistanceJoint::sShaders = { Ext::DistanceJointSolverPrep, ExtDistanceJointSpu, EXTDISTANCEJOINTSPU_SIZE, DistanceJointProject, DistanceJointVisualize };

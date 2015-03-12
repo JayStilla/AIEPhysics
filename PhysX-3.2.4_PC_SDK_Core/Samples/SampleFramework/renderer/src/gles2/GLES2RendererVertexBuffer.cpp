@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 
 #include "GLES2RendererVertexBuffer.h"
@@ -79,10 +79,13 @@ GLES2RendererVertexBuffer::~GLES2RendererVertexBuffer(void)
 
 void GLES2RendererVertexBuffer::swizzleColor(void *colors, PxU32 stride, PxU32 numColors, RendererVertexBuffer::Format inFormat)
 {
-	void *end = ((PxU8*)colors)+(stride*numColors);
-	for(; colors < end; colors=((PxU8*)colors)+stride)
+	if (inFormat == RendererVertexBuffer::FORMAT_COLOR_RGBA)
 	{
-		((RendererColor*)colors)->swizzleRB();
+		const void *end = ((PxU8*)colors)+(stride*numColors);
+		for(PxU8* iterator = (PxU8*)colors; iterator < end; iterator+=stride)
+		{
+			std::swap(((PxU8*)iterator)[0], ((PxU8*)iterator)[2]);
+		}
 	}
 }
 
@@ -97,7 +100,7 @@ void *GLES2RendererVertexBuffer::lock(void)
 	if(m_vbo)
 	{
 		glBindBufferARB(GL_ARRAY_BUFFER_ARB, m_vbo);
-		buffer = glMapBufferOES(GL_ARRAY_BUFFER, GL_WRITE_ONLY_OES);
+		buffer = glMapBufferOES(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
 		glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	}
 	return buffer;
@@ -107,10 +110,10 @@ void GLES2RendererVertexBuffer::unlock(void)
 {
 	if(m_vbo)
 	{
+		/* TODO: print out if format is USHORT4 */
 		glBindBufferARB(GL_ARRAY_BUFFER_ARB, m_vbo);
 		glUnmapBufferOES(GL_ARRAY_BUFFER);
 		glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
-        glFlush();
 	}
 }
 
@@ -264,11 +267,15 @@ void GLES2RendererVertexBuffer::bind(PxU32 streamID, PxU32 firstVertex)
 					}
 					case SEMANTIC_BONEINDEX:
 					{
+						glActiveTextureARB((GLenum)(GL_TEXTURE0_ARB + RENDERER_BONEINDEX_CHANNEL));
+						glClientActiveTextureARB((GLenum)(GL_TEXTURE0_ARB + RENDERER_BONEINDEX_CHANNEL));
                         bindGL(mat->m_program[mat->m_currentPass].boneIndexAttr, sm, buffer);
                         break;
 					}
 					case SEMANTIC_BONEWEIGHT:
 					{
+						glActiveTextureARB((GLenum)(GL_TEXTURE0_ARB + RENDERER_BONEWEIGHT_CHANNEL));
+						glClientActiveTextureARB((GLenum)(GL_TEXTURE0_ARB + RENDERER_BONEWEIGHT_CHANNEL));
                         bindGL(mat->m_program[mat->m_currentPass].boneWeightAttr, sm, buffer);
 						break;
 					}

@@ -23,15 +23,16 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
-// Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
+// Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
 
 
 #ifndef PX_PHYSICS_DELAY_LOAD_HOOK
 #define PX_PHYSICS_DELAY_LOAD_HOOK
 
-#include <common/PxPhysXCommon.h>
+#include <foundation/PxPreprocessor.h>
+#include <common/PxPhysXCommonConfig.h>
 
 /** \addtogroup foundation
 @{
@@ -42,31 +43,47 @@ namespace physx
 {
 #endif
 	/**
-	\brief PxDelayLoadHook
+ 	\brief PxDelayLoadHook
 
-	PxDelayLoadHook class is a helper class for delay load dll. It suppose to get the names of the common dll's which can be delay loaded inside PhysX and PhysXCooking dll.
+	This is a helper class for delay loading the PhysXCommon dll. If a PhysXCommon dll with a different file name than default needs to be loaded, it is possible to assign this name by subclassing this class and implementing the virtual member functions to return the correct file names.
 
-	Once the names are set, the instance must be set for PhysX and PhysXCooking dlls.
+	Once the names are set, the instance must be set for use by PhysX.dll using setPhysXInstance() and by PhysXCooking .dll using setPhysXCookingInstance().
 
-	@see Startup documentation
-	*/
+	@see PxSetPhysXDelayLoadHook(), PxSetPhysXCookingDelayLoadHook()
+ 	*/
 	class PxDelayLoadHook
 	{
 	public:
 		PxDelayLoadHook() {}
 		virtual ~PxDelayLoadHook() {}
 
-		virtual const char* GetPhysXCommonDEBUGDllName() const = 0;
-		virtual const char* GetPhysXCommonCHECKEDDllName() const = 0;
-		virtual const char* GetPhysXCommonPROFILEDllName() const = 0;
-		virtual const char* GetPhysXCommonDllName() const = 0;
-	
-		PX_PHYSX_CORE_API static void SetPhysXInstance(const PxDelayLoadHook* hook);
-		PX_PHYSX_CORE_API static void SetPhysXCookingInstance(const PxDelayLoadHook* hook);
+		virtual const char* getPhysXCommonDEBUGDllName() const = 0;
+		virtual const char* getPhysXCommonCHECKEDDllName() const = 0;
+		virtual const char* getPhysXCommonPROFILEDllName() const = 0;
+		virtual const char* getPhysXCommonDllName() const = 0;
+
 	protected:
 	private:
 	};
-		
+
+	/**
+	\brief Sets delay load hook instance for PhysX dll.
+
+	\param[in] hook Delay load hook.
+
+	@see PxDelayLoadHook
+	*/
+	PX_C_EXPORT PX_PHYSX_CORE_API void PX_CALL_CONV PxSetPhysXDelayLoadHook(const physx::PxDelayLoadHook* hook);
+
+	/**
+	\brief Sets delay load hook instance for PhysXCooking dll.
+
+	\param[in] hook Delay load hook.
+
+	@see PxDelayLoadHook
+	*/
+	PX_C_EXPORT PX_PHYSX_CORE_API void PX_CALL_CONV PxSetPhysXCookingDelayLoadHook(const physx::PxDelayLoadHook* hook);
+
 
 #ifndef PX_DOXYGEN
 } // namespace physx

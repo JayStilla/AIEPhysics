@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -36,6 +36,24 @@ namespace physx
 {
 namespace shdfnd
 {
+	/**
+	\brief The maximum supported formatted output string length 
+	(number of characters after replacement).
+
+	@see printFormatted()
+	*/
+	static const size_t PS_MAX_PRINTFORMATTED_LENGTH = 1024;
+	
+	/** 
+	\brief Prints the formatted data.
+	
+	@see PS_MAX_PRINTFORMATTED_LENGTH
+	*/
+	PX_FOUNDATION_API void	printFormatted(const char*, ...);
+	
+	/** 
+	\brief Prints the string literally (does not consume % specifier).
+	*/
 	PX_FOUNDATION_API void	printString(const char*);
 
 } // namespace shdfnd

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -36,6 +36,9 @@
 #include "PxMat33.h"
 
 #include "CmPhysXCommon.h"
+#include "PxSerialFramework.h"
+#include "PxBase.h"
+#include "PsUserAllocated.h"
 
 namespace physx
 {
@@ -94,7 +97,7 @@ public:
 
 		PX_ASSERT(&element<mData || &element>=mData+mSize);
 		if(mSize==mCapacity)
-			(owner.*realloc)(mData, mCapacity, mSize, mSize+1);
+			(owner.*realloc)(mData, mCapacity, mSize, PxU16(mSize+1));
 
 		PX_ASSERT(mData && mSize<mCapacity);
 		mData[mSize++] = element;
@@ -159,7 +162,109 @@ private:
 	};
 };
 
+PX_INLINE PxU32 getPadding(size_t value, PxU32 alignment)
+{
+	const PxU32 mask = alignment-1;
+	const PxU32 overhead = PxU32(value) & mask;
+	return (alignment - overhead) & mask;
+}
+
+PX_INLINE PxU8* alignPtr(PxU8* ptr, PxU32 alignment = PX_SERIAL_ALIGN)
+{
+	if(!alignment)
+		return ptr;
+
+	const PxU32 padding = getPadding(size_t(ptr), alignment);
+	PX_ASSERT(!getPadding(size_t(ptr + padding), alignment));
+	return ptr + padding;
+}
+
+/**
+Any object deriving from PxBase needs to call this function instead of 'delete object;'. 
+
+We don't want implement 'operator delete' in PxBase because that would impose how
+memory of derived classes is allocated. Even though most or all of the time derived classes will 
+be user allocated, we don't want to put UserAllocatable into the API and derive from that.
+*/
+template<typename T>
+PX_INLINE void deletePxBase(T* object)
+{
+	if(object->getBaseFlags() & PxBaseFlag::eOWNS_MEMORY)
+		PX_DELETE(object);
+	else
+		object->~T();
+}
+
+#if defined(PX_CHECKED)
+/**
+Mark a specified amount of memory with 0xcd pattern. This is used to check that the meta data 
+definition for serialized classes is complete in checked builds.
+*/
+PX_INLINE void markSerializedMem(void* ptr, PxU32 byteSize)
+{
+	for (PxU32 i = 0; i < byteSize; ++i)
+      reinterpret_cast<PxU8*>(ptr)[i] = 0xcd;
+}
+
+/**
+Macro to instantiate a type for serialization testing. 
+Note: Only use PX_NEW_SERIALIZED once in a scope.
+*/
+#define PX_NEW_SERIALIZED(v,T) 															        \
+    void* _buf = physx::shdfnd::ReflectionAllocator<T>().allocate(sizeof(T),__FILE__,__LINE__);  \
+	Cm::markSerializedMem(_buf, sizeof(T));                                                      \
+    v = PX_PLACEMENT_NEW(_buf, T)
+
+#else
+PX_INLINE void markSerializedMem(void*, PxU32){}
+
+#define PX_NEW_SERIALIZED(v,T)  v = PX_NEW(T)
+#endif
+
+template<typename T, class Alloc>
+struct ArrayAccess: public Ps::Array<T, Alloc> 
+{
+	void store(PxSerializationContext& context) const
+	{
+		if(this->mData && (this->mSize || this->capacity()))
+			context.writeData(this->mData, this->capacity()*sizeof(T));
+	}
+
+	void load(PxDeserializationContext& context)
+	{
+		if(this->mData && (this->mSize || this->capacity()))
+			this->mData = context.readExtraData<T>(this->capacity());
+	}
+};
+
+template<typename T, typename Alloc>
+void exportArray(const Ps::Array<T, Alloc>& a, PxSerializationContext& context)
+{
+	static_cast<const ArrayAccess<T, Alloc>&>(a).store(context);
+}
+
+template<typename T, typename Alloc>
+void importArray(Ps::Array<T, Alloc>& a, PxDeserializationContext& context)
+{
+	static_cast<ArrayAccess<T, Alloc>&>(a).load(context);
+}
+
+template<typename T, PxU32 N, typename Alloc>
+void exportInlineArray(const Ps::InlineArray<T, N, Alloc>& a, PxSerializationContext& context)
+{
+	if(!a.isInlined())
+		Cm::exportArray(a, context);
+}
+
+template<typename T, PxU32 N, typename Alloc>
+void importInlineArray(Ps::InlineArray<T, N, Alloc>& a, PxDeserializationContext& context)
+{
+	if(!a.isInlined())
+		Cm::importArray(a, context);
+}
 } // namespace Cm
+
+
 
 }
 

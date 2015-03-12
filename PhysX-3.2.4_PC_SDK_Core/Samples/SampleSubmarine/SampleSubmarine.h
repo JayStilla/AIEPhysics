@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -55,6 +55,8 @@ struct ClassType
 	PxU32 getType() const						{ return mType; }
 
 	const PxU32 mType;
+private:
+	ClassType& operator=(const ClassType&);
 };
 
 struct FilterGroup
@@ -75,6 +77,7 @@ struct Seamine: public ClassType, public SampleAllocateable
 
 	std::vector<PxRigidDynamic*>	mLinks;
 	PxRigidDynamic*					mMineHead;
+	
 };
 
 class SampleSubmarine : public PhysXSample, public PxSimulationEventCallback
@@ -97,9 +100,10 @@ class SampleSubmarine : public PhysXSample, public PxSimulationEventCallback
 
 	// Implements SampleApplication
 	virtual	void							onInit();
+    virtual	void						    onInit(bool restart) { onInit(); }
 	virtual	void							onShutdown();
 	virtual	void							onTickPreRender(float dtime);
-	virtual bool							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);
+	virtual void							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);
 	virtual void							onAnalogInputEvent(const SampleFramework::InputEvent& , float val);
 	virtual void							onPointerInputEvent(const SampleFramework::InputEvent& ie, physx::PxU32 x, physx::PxU32 y, physx::PxReal dx, physx::PxReal dy, bool val);
 
@@ -116,7 +120,7 @@ class SampleSubmarine : public PhysXSample, public PxSimulationEventCallback
 	virtual	void							onSubstep(float dtime);
 	// called before the simulation begins, useful for setting up 
 	// tasks that need to finish before the completionTask can be called
-	virtual void							onSubstepSetup(float dtime, pxtask::BaseTask* completionTask);	
+	virtual void							onSubstepSetup(float dtime, PxBaseTask* completionTask);	
 	// called once the simulation has begun running
 	virtual	void							onSubstepStart(float dtime);
 
@@ -134,11 +138,14 @@ class SampleSubmarine : public PhysXSample, public PxSimulationEventCallback
 	void				createDynamicActors();
 	void				resetScene();
 
+	std::vector<void*>&	getCrabsMemoryDeleteList() { return mCrabsMemoryDeleteList; }
+
 	private:
 			std::vector<PxJoint*>			mJoints;
 			std::vector<Seamine*>			mMinesToExplode;
 			std::vector<Seamine*>			mSeamines;
 			std::vector<Crab*>				mCrabs;
+			std::vector<void*>				mCrabsMemoryDeleteList;
 			PxRigidDynamic*					mSubmarineActor;
 			RenderMaterial*					mSeamineMaterial;
 			PxRigidDynamic*					mCameraAttachedToActor;

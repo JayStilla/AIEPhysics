@@ -23,12 +23,11 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 
-#include <stdio.h>
 #include "ExtD6Joint.h"
 #include "ExtConstraintHelper.h"
 #include "CmRenderOutput.h"
@@ -41,14 +40,20 @@ namespace Ext
 	PxU32 D6JointSolverPrep(Px1DConstraint* constraints,
 		PxVec3& body0WorldOffset,
 		PxU32 maxConstraints,
+		PxConstraintInvMassScale& invMassScale,
 		const void* constantBlock,
 		const PxTransform& bA2w,
 		const PxTransform& bB2w)
 	{
+		PX_UNUSED(maxConstraints);
+
 		using namespace joint;
 
+		PX_UNUSED(maxConstraints);
 		const D6JointData& data = 
 			*reinterpret_cast<const D6JointData*>(constantBlock);
+
+		invMassScale = data.invMassScale;
 
 		const PxU32 SWING1_FLAG = 1<<PxD6Axis::eSWING1, 
 			SWING2_FLAG = 1<<PxD6Axis::eSWING2, 
@@ -88,8 +93,9 @@ namespace Ext
 			PxVec3 posErr = data.drivePosition.p - cB2cA.p;
 			for(PxU32 i = 0; i < 3; i++)
 			{
+				// -driveVelocity because velTarget is child (body1) - parent (body0) and Jacobian is 1 for body0 and -1 for parent
 				if(driving & (1<<(PxD6Drive::eX+i)))
-					g.linear(cA2w_m[i], data.driveLinearVelocity[i], posErr[i], drives[PxD6Drive::eX+i]); 
+					g.linear(cA2w_m[i], -data.driveLinearVelocity[i], posErr[i], drives[PxD6Drive::eX+i]); 
 			}
 		}
 
@@ -102,12 +108,15 @@ namespace Ext
 
 			if(driving & (1<<PxD6Drive::eSLERP))
 			{
-				PxVec3 axis[3];
-				computeJacobianAxes(axis, cA2w.q * d2cA_q, cB2w.q);
-				PxVec3 velTarget = (d2cA_q.getConjugate() * PxQuat(v.x, v.y, v.z, 0) * cB2cA.q).getImaginaryPart();
+				PxVec3 velTarget = -cA2w.rotate(data.driveAngularVelocity);
+
+				PxVec3 axis[3] = { PxVec3(1.f,0,0), PxVec3(0,1.f,0), PxVec3(0,0,1.f) };
+				
+				if(drives[PxD6Drive::eSLERP].stiffness!=0)
+					computeJacobianAxes(axis, cA2w.q * d2cA_q, cB2w.q);	// converges faster if there is only velocity drive
 
 				for(PxU32 i = 0; i < 3; i++)
-					g.angular(axis[i], velTarget[i], -2.0f * delta.getImaginaryPart()[i], drives[PxD6Drive::eSLERP]);
+					g.angular(axis[i], axis[i].dot(velTarget), -delta.getImaginaryPart()[i], drives[PxD6Drive::eSLERP], PxConstraintSolveHint::eSLERP_SPRING);
 			}
 			else 
 			{
@@ -116,7 +125,7 @@ namespace Ext
 
 				if(driving & (1<<PxD6Drive::eSWING))
 				{
-					PxVec3 err = delta.rotate(PxVec3(1,0,0));
+					PxVec3 err = delta.rotate(PxVec3(1.f,0,0));
 
 					if(!(locked & SWING1_FLAG))
 						g.angular(cB2w_m[1], v.y, err.z, drives[PxD6Drive::eSWING]);
@@ -144,7 +153,7 @@ namespace Ext
 				PxVec3 axis;
 				PxReal error;
 				if(coneHelper.getLimit(swing, axis, error))
-					g.angular(cA2w.rotate(axis),error,data.swingLimit);
+					g.angularLimit(cA2w.rotate(axis),error,data.swingLimit);
 			}
 			else
 			{
@@ -187,7 +196,6 @@ namespace Ext
 
 		if(limited & LINEAR_MASK)
 		{
-			// TODO: handle padding
 			PxVec3 limitDir = PxVec3(0);
 
 			for(PxU32 i = 0; i < 3; i++)
@@ -197,10 +205,8 @@ namespace Ext
 			}
 
 			PxReal distance = limitDir.magnitude();
-			PxReal error = distance - data.linearLimit.value;
-
-			if(error > -data.linearLimit.contactDistance && distance > data.linearMinDist)
-				g.linear(limitDir * (1.0f/distance), -error, data.linearLimit);
+			if(distance > data.linearMinDist)
+				g.linearLimit(limitDir * (1.0f/distance), distance, data.linearLimit.value, data.linearLimit);
 		}
 
 		// we handle specially the case of just one swing dof locked
@@ -209,13 +215,13 @@ namespace Ext
 
 		if(angularLocked == SWING1_FLAG)
 		{
-			g.angular(bX.cross(aZ), -bX.dot(aZ));
+			g.angularHard(bX.cross(aZ), -bX.dot(aZ));
 			locked &= ~SWING1_FLAG;
 		}
 		else if(angularLocked == SWING2_FLAG)
 		{
 			locked &= ~SWING2_FLAG;
-			g.angular(bX.cross(aY), -bX.dot(aY));
+			g.angularHard(bX.cross(aY), -bX.dot(aY));
 		}
 
 		g.prepareLockedAxes(cA2w.q, cB2w.q, cB2cA.p,locked&7, locked>>3);

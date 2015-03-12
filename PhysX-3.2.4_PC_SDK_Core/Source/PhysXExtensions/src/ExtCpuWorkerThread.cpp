@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,15 +34,7 @@
 #include "PxTask.h"
 #include "PsFPU.h"
 
-
-#if defined(PX_WINDOWS)
-#define PROFILE_TASKS 1
-#else
-#define PROFILE_TASKS 0
-#endif
-
 using namespace physx;
-
 
 Ext::CpuWorkerThread::CpuWorkerThread()
 :	mQueueEntryPool(EXT_TASK_QUEUE_ENTRY_POOL_SIZE),
@@ -62,7 +54,7 @@ void Ext::CpuWorkerThread::initialize(DefaultCpuDispatcher* ownerDispatcher)
 }
 
 
-bool Ext::CpuWorkerThread::tryAcceptJobToLocalQueue(pxtask::BaseTask& task, Ps::Thread::Id taskSubmitionThread)
+bool Ext::CpuWorkerThread::tryAcceptJobToLocalQueue(PxBaseTask& task, Ps::Thread::Id taskSubmitionThread)
 {
 	if(taskSubmitionThread == mThreadId)
 	{
@@ -80,7 +72,7 @@ bool Ext::CpuWorkerThread::tryAcceptJobToLocalQueue(pxtask::BaseTask& task, Ps::
 }
 
 
-pxtask::BaseTask* Ext::CpuWorkerThread::giveUpJob()
+PxBaseTask* Ext::CpuWorkerThread::giveUpJob()
 {
 	return TaskQueueHelper::fetchTask(mLocalJobList, mQueueEntryPool);
 }
@@ -88,29 +80,20 @@ pxtask::BaseTask* Ext::CpuWorkerThread::giveUpJob()
 
 void Ext::CpuWorkerThread::execute()
 {
-	PX_FPU_GUARD;
-
 	mThreadId = getId();
 
 	while (!quitIsSignalled())
     {
         mOwner->resetWakeSignal();
 
-		pxtask::BaseTask* task = TaskQueueHelper::fetchTask(mLocalJobList, mQueueEntryPool);
+		PxBaseTask* task = TaskQueueHelper::fetchTask(mLocalJobList, mQueueEntryPool);
 
 		if(!task)
-			task = mOwner->getJob();
-
-		if(!task)
-			task = mOwner->stealJob();
-
+			task = mOwner->fetchNextTask();
+		
 		if (task)
 		{
-#if PROFILE_TASKS
-			task->runProfiled();
-#else
-			task->run();
-#endif
+			mOwner->runTask(*task);
 			task->release();
 		}
 		else
@@ -120,4 +103,4 @@ void Ext::CpuWorkerThread::execute()
 	}
 
 	quit();
-};
+}

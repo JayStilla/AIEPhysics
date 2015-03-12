@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -41,9 +41,11 @@
 
 		virtual	void							onTickPreRender(float dtime);
 		virtual	void							onTickPostRender(float dtime);
+		virtual	void							customizeSceneDesc(PxSceneDesc&);
 
 		virtual	void							newMesh(const RAWMesh&);
 		virtual	void							onInit();
+        virtual	void						    onInit(bool restart) { onInit(); }
 
 		virtual void							collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents);
 		virtual void							helpRender(PxU32 x, PxU32 y, PxU8 textAlpha);

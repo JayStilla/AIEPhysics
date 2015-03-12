@@ -23,15 +23,16 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #include "SampleVehicle_CameraController.h"
 #include "PhysXSampleApplication.h"
 #include "PxRigidDynamic.h"
-#include "PxSceneQueryFiltering.h"
+#include "PxQueryFiltering.h"
 #include "PxScene.h"
+#include "PxSceneLock.h"
 #include "vehicle/PxVehicleWheels.h"
 
 using namespace SampleRenderer;
@@ -53,7 +54,7 @@ SampleVehicle_CameraController::SampleVehicle_CameraController()
 	mLastCarVelocity			(PxVec3(0,0,0)),
 	mCameraInit					(false),
 	mLockOnFocusVehTransform	(true),
-	mLastFocusVehTransform		(PxTransform::createIdentity())
+	mLastFocusVehTransform		(PxTransform(PxIdentity))
 {
 }
 
@@ -70,6 +71,7 @@ static void dampVec3(const PxVec3& oldPosition, PxVec3& newPosition, PxF32 times
 
 void SampleVehicle_CameraController::update(const PxReal dtime, const PxRigidDynamic* actor, PxScene& scene)
 {
+	PxSceneReadLock scopedLock(scene);
 	PxTransform carChassisTransfm;
 	if(mLockOnFocusVehTransform)
 	{
@@ -127,12 +129,12 @@ void SampleVehicle_CameraController::update(const PxReal dtime, const PxRigidDyn
 	PxVec3 target = carChassisTransfm.p;
 	target.y+=0.5f;
 
-	PxRaycastHit hit;
+	PxRaycastBuffer hit;
 	PxSceneQueryFilterData filterData(PxSceneQueryFilterFlag::eSTATIC);
-	scene.raycastSingle(target, -direction, camDist, PxSceneQueryFlag::eDISTANCE, hit, filterData, NULL, NULL);
-	if (hit.shape != NULL)
+	scene.raycast(target, -direction, camDist, hit, PxHitFlag::eDISTANCE, filterData);
+	if (hit.hasBlock && hit.block.shape != NULL)
 	{
-		camDist = hit.distance-0.25f;
+		camDist = hit.block.distance-0.25f;
 	}
 
 	camDist = PxMax(5.0f, PxMin(camDist, 50.0f));

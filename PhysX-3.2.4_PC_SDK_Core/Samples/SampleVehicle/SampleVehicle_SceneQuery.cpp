@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,6 +34,7 @@
 #include "PsUtilities.h"
 
 #define CHECK_MSG(exp, msg) (!!(exp) || (physx::shdfnd::getFoundation().error(physx::PxErrorCode::eINVALID_PARAMETER, __FILE__, __LINE__, msg), 0) )
+#define SIZEALIGN16(size) (((unsigned)(size)+15)&((unsigned)(~15)));
 
 void SampleVehicleSetupDrivableShapeQueryFilterData(PxFilterData* qryFilterData)
 {
@@ -55,15 +56,19 @@ void SampleVehicleSetupVehicleShapeQueryFilterData(PxFilterData* qryFilterData)
 
 SampleVehicleSceneQueryData* SampleVehicleSceneQueryData::allocate(const PxU32 maxNumWheels)
 {
-	const PxU32 size = sizeof(SampleVehicleSceneQueryData) + sizeof(PxRaycastQueryResult)*maxNumWheels + sizeof(PxRaycastHit)*maxNumWheels;
+	const PxU32 size0 = SIZEALIGN16(sizeof(SampleVehicleSceneQueryData));
+	const PxU32 size1 = SIZEALIGN16(sizeof(PxRaycastQueryResult)*maxNumWheels);
+	const PxU32 size2 = SIZEALIGN16(sizeof(PxRaycastHit)*maxNumWheels);
+	const PxU32 size = size0 + size1 + size2;
 	SampleVehicleSceneQueryData* sqData = (SampleVehicleSceneQueryData*)PX_ALLOC(size, PX_DEBUG_EXP("PxVehicleNWSceneQueryData"));
 	sqData->init();
 	PxU8* ptr = (PxU8*) sqData;
-	ptr += sizeof(SampleVehicleSceneQueryData);
+	ptr += size0;
 	sqData->mSqResults = (PxRaycastQueryResult*)ptr;
-	ptr +=  sizeof(PxRaycastQueryResult)*maxNumWheels;
+	sqData->mNbSqResults = maxNumWheels;
+	ptr += size1;
 	sqData->mSqHitBuffer = (PxRaycastHit*)ptr;
-	ptr += sizeof(PxRaycastHit)*maxNumWheels;
+	ptr += size2;
 	sqData->mNumQueries = maxNumWheels;
 	return sqData;
 }
@@ -75,10 +80,10 @@ void SampleVehicleSceneQueryData::free()
 
 PxBatchQuery* SampleVehicleSceneQueryData::setUpBatchedSceneQuery(PxScene* scene)
 {
-	PxBatchQueryDesc sqDesc;
-	sqDesc.userRaycastResultBuffer = mSqResults;
-	sqDesc.userRaycastHitBuffer = mSqHitBuffer;
-	sqDesc.raycastHitBufferSize = mNumQueries;
+	PxBatchQueryDesc sqDesc(mNbSqResults, 0, 0);
+	sqDesc.queryMemory.userRaycastResultBuffer = mSqResults;
+	sqDesc.queryMemory.userRaycastTouchBuffer = mSqHitBuffer;
+	sqDesc.queryMemory.raycastTouchBufferSize = mNumQueries;
 	sqDesc.preFilterShader = mPreFilterShader;
 	sqDesc.spuPreFilterShader = mSpuPreFilterShader;
 	sqDesc.spuPreFilterShaderSize = mSpuPreFilterShaderSize;

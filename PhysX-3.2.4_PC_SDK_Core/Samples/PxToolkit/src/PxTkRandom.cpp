@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,22 +35,44 @@ using namespace PxToolkit;
 
 static RandomR250 gRandomR250(0x95d6739b);
 
-void BasicRandom::unitRandomPt(PxVec3& v)
+PxVec3 BasicRandom::unitRandomPt()
 {
-	v.x = randomFloat();
-	v.y = randomFloat();
-	v.z = randomFloat();
-	v.normalize();
+	PxVec3 v;
+	do
+	{
+		v.x = randomFloat();
+		v.y = randomFloat();
+		v.z = randomFloat();
+	}
+	while(v.normalize()<1e-6f);
+	return v;
 }
 
+PxQuat BasicRandom::unitRandomQuat()
+{
+	PxQuat v;
+	do
+	{
+		v.x = randomFloat();
+		v.y = randomFloat();
+		v.z = randomFloat();
+		v.w = randomFloat();
+	}
+	while(v.normalize()<1e-6f);
+
+	return v;
+}
+
+
+void BasicRandom::unitRandomPt(PxVec3& v)
+{
+	v = unitRandomPt();
+}
 void BasicRandom::unitRandomQuat(PxQuat& v)
 {
-	v.x = randomFloat();
-	v.y = randomFloat();
-	v.z = randomFloat();
-	v.w = randomFloat();
-	v.normalize();
+	v = unitRandomQuat();
 }
+
 
 void PxToolkit::SetSeed(PxU32 seed)
 {

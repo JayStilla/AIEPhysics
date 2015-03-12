@@ -5,7 +5,7 @@
 struct VertexOut
 {
 	FragmentParameters params;
-#if defined(RENDERER_D3D11)
+#if defined(RENDERER_D3D11) && !defined(RENDERER_WIN8ARM)
 	// D3D11 Required input for geometry shader
 	float4             screenSpacePosition : SV_POSITION;
 #else
@@ -65,7 +65,9 @@ VertexOut  vmain(__in(float4,     localSpacePosition, POSITION)
 	vout.params.texcoord0   = vertexTexcoord0;
 	vout.params.texcoord1   = vertexTexcoord1;
 	vout.params.texcoord2   = vertexTexcoord2;
+#if !defined (RENDERER_WIN8ARM)		
 	vout.params.texcoord3   = vertexTexcoord3;
+#endif	
 	vout.params.color       = vertexColor;
 	
 	vout.pointSize          = (particleSize * particleSize) / (vout.screenSpacePosition.w * vout.screenSpacePosition.w);

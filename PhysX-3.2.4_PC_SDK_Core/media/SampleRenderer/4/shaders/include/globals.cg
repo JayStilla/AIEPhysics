@@ -35,8 +35,15 @@ BEGIN_CBUFFER(cbFrameInv)
 CONST_TYPE float4x4      g_invViewProjMatrix;
 END_CBUFFER(cbFrameInv)
 
+#if defined USE_VTF
+CONST_TYPE sampler2D g_boneTexture;	// Vertex texture to hold bone matrices
+#endif
+
 BEGIN_CBUFFER(cbBones)
 CONST_TYPE float4x4      g_boneMatrices[MAX_BONES]; // TODO: change this to a float4x3 (a transposed 3x4) so we can pack more bones in...
+#if defined USE_VTF
+CONST_TYPE int g_boneTextureHeight;	// Bone texture height
+#endif
 END_CBUFFER(cbBones)
 
 BEGIN_CBUFFER(cbFog)

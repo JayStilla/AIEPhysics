@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -51,10 +51,11 @@ public:
 	{
 		//const PxQuat oq = orientation.q;
 		//const PxF32 f[4] = {oq.x, oq.y, oq.z, oq.w};
-		q = QuatV_From_XYZW(orientation.q.x, orientation.q.y, orientation.q.z, orientation.q.w);
+		q = QuatVLoadXYZW(orientation.q.x, orientation.q.y, orientation.q.z, orientation.q.w);
 		//q = QuatV_From_F32Array(&oq.x);
-		p = Vec3V_From_PxVec3(orientation.p);
+		p = V3LoadU(orientation.p);
 	}
+
 
 	PX_FORCE_INLINE PsTransformV(const Vec3VArg p0 = V3Zero(), const QuatVArg q0 = QuatIdentity()): q(q0), p(p0) 
 	{
@@ -76,19 +77,17 @@ public:
 
 	PX_FORCE_INLINE void normalize()
 	{
-		using namespace Ps::aos;
 		p = V3Zero();
 		q = QuatIdentity();
 	}
 
 	PX_FORCE_INLINE void Invalidate()
 	{
-		using namespace Ps::aos;
 		p = V3Splat(FMax());
 		q = QuatIdentity();  
 	}
 
-	PX_FORCE_INLINE Ps::aos::Vec3V transform(const Vec3VArg input) const
+	PX_FORCE_INLINE Vec3V transform(const Vec3VArg input) const
 	{
 		PX_ASSERT(isFinite());
 		//return q.rotate(input) + p;
@@ -102,7 +101,7 @@ public:
 		return QuatRotateInv(q, V3Sub(input, p));
 	}
 
-	PX_FORCE_INLINE Ps::aos::Vec3V rotate(const Vec3VArg input) const
+	PX_FORCE_INLINE Vec3V rotate(const Vec3VArg input) const
 	{
 		PX_ASSERT(isFinite());
 		//return q.rotate(input);
@@ -176,6 +175,22 @@ public:
 	}
 };
 
+PX_FORCE_INLINE PsTransformV loadTransformA(const PxTransform& transform)
+{
+	const QuatV q0 = QuatVLoadA(&transform.q.x);
+	const Vec3V p0 = V3LoadA(&transform.p.x);
+
+	return PsTransformV(p0, q0);
+}
+
+PX_FORCE_INLINE PsTransformV loadTransformU(const PxTransform& transform)
+{
+	const QuatV q0 = QuatVLoadU(&transform.q.x);
+	const Vec3V p0 = V3LoadU(&transform.p.x);
+
+	return PsTransformV(p0, q0);
+}
+
 
 class PsMatTransformV
 {
@@ -201,7 +216,45 @@ public:
 		rot = QuatGetMat33V(other.q);
 	}
 
-	PX_FORCE_INLINE Ps::aos::Vec3V transform(const Vec3VArg input) const
+	PX_FORCE_INLINE PsMatTransformV(const Vec3VArg _p, const QuatV& quat)
+	{
+		p = _p;
+		rot = QuatGetMat33V(quat);
+	}
+
+	PX_FORCE_INLINE Vec3V getCol0()const
+	{
+		return rot.col0;
+	}
+
+	PX_FORCE_INLINE Vec3V getCol1()const
+	{
+		return rot.col1;
+	}
+
+	PX_FORCE_INLINE Vec3V getCol2()const
+	{
+		return rot.col2;
+	}
+
+	PX_FORCE_INLINE void setCol0(const Vec3VArg col0)
+	{
+		rot.col0 = col0;
+	}
+
+	PX_FORCE_INLINE void setCol1(const Vec3VArg col1)
+	{
+		rot.col1 = col1;
+	}
+
+	PX_FORCE_INLINE void setCol2(const Vec3VArg col2)
+	{
+		rot.col2 = col2;
+	}
+
+	
+
+	PX_FORCE_INLINE Vec3V transform(const Vec3VArg input) const
 	{
 		return V3Add(p, M33MulV3(rot, input));
 	}
@@ -211,7 +264,7 @@ public:
 		return M33TrnspsMulV3(rot, V3Sub(input, p));//QuatRotateInv(q, V3Sub(input, p));
 	}
 
-	PX_FORCE_INLINE Ps::aos::Vec3V rotate(const Vec3VArg input) const
+	PX_FORCE_INLINE Vec3V rotate(const Vec3VArg input) const
 	{
 		return M33MulV3(rot, input);
 	}
@@ -220,6 +273,15 @@ public:
 	{
 		return M33TrnspsMulV3(rot, input);
 	}
+
+	PX_FORCE_INLINE PsMatTransformV transformInv(const PsMatTransformV& src) const
+	{
+
+		const Vec3V v = M33TrnspsMulV3(rot, V3Sub(src.p, p));
+		const Mat33V mat = M33MulM33(M33Trnsps(rot), src.rot);
+		return PsMatTransformV(v, mat);
+	}
+
 
 };
 }

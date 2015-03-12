@@ -1,53 +1,45 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #include <SampleTextureAsset.h>
 
 #include <Renderer.h>
 #include <RendererTexture2D.h>
 #include <RendererTexture2DDesc.h>
 #include <RendererMemoryMacros.h>
-#include <PxTkBmpLoader.h>
+#include "PxTkBmpLoader.h"
 
 #include "nv_dds.h"
-
-#ifdef RENDERER_ENABLE_TGA_SUPPORT
-# include "targa.h"
+#include "PsFile.h"
+#ifdef PX_WIIU
+#include "wiiu/WiiUSampleTGAFileOperations.h"
 #endif
 
-#ifdef RENDERER_ENABLE_GXT_SUPPORT
-#include <gxt.h>
+#ifdef RENDERER_ENABLE_TGA_SUPPORT
+# include <targa.h>
 #endif
 
 #ifdef RENDERER_ENABLE_PVR_SUPPORT
@@ -56,7 +48,7 @@
 
 using namespace SampleFramework;
 
-SampleTextureAsset::SampleTextureAsset(SampleRenderer::Renderer &renderer, FILE &file, const char *path, Type texType) :
+SampleTextureAsset::SampleTextureAsset(SampleRenderer::Renderer &renderer, File &file, const char *path, Type texType) :
 	SampleAsset(ASSET_TEXTURE, path)
 {
 	m_texture = 0;
@@ -65,7 +57,7 @@ SampleTextureAsset::SampleTextureAsset(SampleRenderer::Renderer &renderer, FILE 
 	{
 	case DDS: loadDDS(renderer, file); break;
 	case TGA: loadTGA(renderer, file); break;
-	case GXT: loadGXT(renderer, file); break;
+	case PSP2: loadPSP2Texture(renderer, file); break;
 	case PVR: loadPVR(renderer, file); break;
 	case BMP: loadBMP(renderer, file); break;
 	default: PX_ASSERT(0 && "Invalid texture type requested"); break;
@@ -77,7 +69,7 @@ SampleTextureAsset::~SampleTextureAsset(void)
 	SAFE_RELEASE(m_texture);
 }
 
-void SampleTextureAsset::loadDDS(SampleRenderer::Renderer &renderer, FILE &file) 
+void SampleTextureAsset::loadDDS(SampleRenderer::Renderer &renderer, File &file) 
 {
 #ifdef RENDERER_PSP2
 	RENDERER_ASSERT(0, "DDS format currently unsupported on PSP2 convert dds to gxt please.");
@@ -157,72 +149,13 @@ void SampleTextureAsset::loadDDS(SampleRenderer::Renderer &renderer, FILE &file)
 	}
 }
 
-void SampleTextureAsset::loadGXT(SampleRenderer::Renderer &renderer, FILE &file)
+#ifndef RENDERER_PSP2	
+void SampleTextureAsset::loadPSP2Texture(SampleRenderer::Renderer &renderer, File &file)
 {
-#ifdef RENDERER_ENABLE_GXT_SUPPORT
-	char file2[512];
-
-	strcpy(file2, getPath());
-
-	char* endStr = strstr(file2,".dds");	
-	strcpy(endStr, ".gxt");
-
-	FILE *f = NULL;
-
-	if(strstr(file2, "savedata0"))
-	{
-		f =  fopen(file2, "rb");
-	}
-	else
-	{
-		// add path its in samples folder
-		char file3[512];
-		sprintf(file3, "app0:%s%s", ASSET_DIR, file2);
-
-
-		f = fopen(file3, "rb");
-	}
-
-	if(!f)
-	{
-		RENDERER_ASSERT(f, "Failed to load gxt.");	
-	}
-
-	fseek(f, 0, SEEK_END);
-	size_t size = ftell(f);
-	fseek(f, 0, SEEK_SET);
-	char *buffer = new char[size+1];
-	fread(buffer, 1, size, f);
-	fclose(f);
-	buffer[size] = '\0';
-
-	SceGxtErrorCode err = sceGxtCheckData(buffer);
-
-	RENDERER_ASSERT(err == SCE_OK, "GXT texture data not correct.");
-
-	const SceGxtHeader *hdr = (const SceGxtHeader*) buffer;
-
-	PxU32 textureIndex = 0;
-
-	const SceGxtTextureInfo* info = (const SceGxtTextureInfo*)(hdr + 1) + textureIndex;
-
-	SampleRenderer::RendererTexture2DDesc tdesc;
-	tdesc.format = SampleRenderer::RendererTexture2D::FORMAT_GXT;
-	tdesc.width     = info->width;
-	tdesc.height    = info->height;	
-	// temp just 1 
-	tdesc.numLevels = 1 ;//info->mipCount;
-	tdesc.data = buffer;
-
-	PX_ASSERT(tdesc.isValid());
-	m_texture = renderer.createTexture2D(tdesc);
-	PX_ASSERT(m_texture);
-	
-	delete buffer;
-#endif
 }
+#endif
 
-void SampleTextureAsset::loadPVR(SampleRenderer::Renderer& renderer, FILE& file)
+void SampleTextureAsset::loadPVR(SampleRenderer::Renderer& renderer, File& file)
 {
 #ifdef RENDERER_ENABLE_PVR_SUPPORT	
 	fseek(&file, 0, SEEK_END);
@@ -268,7 +201,7 @@ void SampleTextureAsset::loadPVR(SampleRenderer::Renderer& renderer, FILE& file)
 	{
 		PxU32 levelWidth = tdesc.width;
 		PxU32 levelHeight = tdesc.height;
-		const PxU32 levelSize = m_texture->computeImageByteSize(levelWidth, levelHeight, tdesc.format);
+		const PxU32 levelSize = m_texture->computeImageByteSize(levelWidth, levelHeight, 1, tdesc.format);
 		memcpy(levelDst, levelSrc, levelSize);
 		levelSrc += levelSize;
 	}
@@ -281,7 +214,7 @@ void SampleTextureAsset::loadPVR(SampleRenderer::Renderer& renderer, FILE& file)
 		{
 			const PxU32 levelWidth  = m_texture->getLevelDimension(tdesc.width, i);
 			const PxU32 levelHeight = m_texture->getLevelDimension(tdesc.height, i);
-			const PxU32 levelSize  = m_texture->computeImageByteSize(levelWidth, levelHeight, tdesc.format);
+			const PxU32 levelSize  = m_texture->computeImageByteSize(levelWidth, levelHeight, 1, tdesc.format);
 			memcpy(levelDst, levelSrc, levelSize);
 			levelSrc += levelSize;
 		}
@@ -293,12 +226,17 @@ void SampleTextureAsset::loadPVR(SampleRenderer::Renderer& renderer, FILE& file)
 #endif
 }
 
-void SampleTextureAsset::loadTGA(SampleRenderer::Renderer &renderer, FILE &file)
+void SampleTextureAsset::loadTGA(SampleRenderer::Renderer &renderer, File &file)
 {
 #ifdef RENDERER_ENABLE_TGA_SUPPORT
-
 	tga_image* image = new tga_image();
+
+#ifdef PX_WIIU
+	tgaFileOperations WiiUfops = GetTGAFileOperations();
+	bool ok = (TGA_NOERR == tga_read_from_FILE( image, &file, &WiiUfops ));
+#else
 	bool ok = (TGA_NOERR == tga_read_from_FILE( image, &file ));
+#endif
 
 	// flip it to make it look correct in the SampleFramework's renderer
 	tga_flip_vert( image );
@@ -350,7 +288,7 @@ void SampleTextureAsset::loadTGA(SampleRenderer::Renderer &renderer, FILE &file)
 						else
 						{
 							memcpy(levelDst, levelSrc, rowSrcSize);
-							levelDst += pitch;
+							levelDst += pitch == 0xFFFFFFFF ?  rowSrcSize : pitch;
 							levelSrc += rowSrcSize;
 						}
 					}
@@ -359,12 +297,13 @@ void SampleTextureAsset::loadTGA(SampleRenderer::Renderer &renderer, FILE &file)
 			}
 		}
 	}
+	tga_free_buffers(image);
 	delete image;
 
 #endif /* RENDERER_ENABLE_TGA_SUPPORT */
 }
 
-void SampleTextureAsset::loadBMP(SampleRenderer::Renderer &renderer, FILE &file)
+void SampleTextureAsset::loadBMP(SampleRenderer::Renderer &renderer, File &file)
 {
 	PxToolkit::BmpLoader loader;
 	bool ok = loader.loadBmp(&file);

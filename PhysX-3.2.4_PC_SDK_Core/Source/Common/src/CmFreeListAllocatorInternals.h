@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -73,10 +73,10 @@ namespace Cm
 		{
 			PxU32 high = val>>5, low = val & 31;
 			
-			PxU32 p = mMap[high] & -1<<low;		// check the word which includes the val'th bit
+			PxU32 p = mMap[high] & ((PxU32)-1)<<low;		// check the word which includes the val'th bit
 			if(!p)
 			{
-				PxU32 q = mHMap & -1<<(high+1);	// find the first non-empty word > high
+				PxU32 q = mHMap & ((PxU32)-1)<<(high+1);	// find the first non-empty word > high
 				if(q==0)
 					return NONE;
 			 
@@ -150,7 +150,7 @@ public:
 	PX_INLINE void unlink(Chunk *&head)				{	mLink.unlink(head);		}
 
 	PX_INLINE Chunk *getPrevInBlock()				{	return (mHeader&FIRST)?0:addAddr(this,-(int)getPrevChunkQWSize()*16);	}
-	PX_INLINE Chunk *getNextInBlock()				{	return (mHeader&LAST)?0:addAddr(this,getQWSize()*16);	}
+	PX_INLINE Chunk *getNextInBlock()				{	return (mHeader&LAST)?0:addAddr(this,(int)getQWSize()*16);	}
 
 	PX_INLINE void *memAddr()						{	return addAddr(this,4); 	}
 	PX_INLINE static Chunk *fromMemAddr(void *m)	{  	return reinterpret_cast<Chunk *>(addAddr(m,-4));}
@@ -166,7 +166,7 @@ public:
 	{
 		assert(!isUsed() && !nib.isUsed());
 		QWSize firstQWSize = getQWSize();
-		mHeader = (mHeader&(PREV_QWORD_SIZE_MASK|FIRST)) | (nib.mHeader&LAST) | getQWSize()+nib.getQWSize();
+		mHeader = ((mHeader&(PREV_QWORD_SIZE_MASK|FIRST)) | (nib.mHeader&LAST) | getQWSize() )+ nib.getQWSize();
 		
 		if(!(mHeader&LAST))
 			getNextInBlock()->mHeader += firstQWSize<<PREV_QWORD_SIZE_SHIFT;
@@ -180,7 +180,7 @@ public:
 		QWSize rmdrQWSize = getQWSize() - requiredQWSize;
 		assert(rmdrQWSize);
 
-		Chunk *rmdr = addAddr(this,requiredQWSize*16);
+		Chunk *rmdr = addAddr(this,(int)requiredQWSize*16);
 		rmdr->mHeader = rmdrQWSize | (mHeader&LAST) | (requiredQWSize<<PREV_QWORD_SIZE_SHIFT);
 		rmdr->mLink.init();
 		if(!(mHeader&LAST))

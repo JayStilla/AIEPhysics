@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -38,7 +38,7 @@
 #include "PsSortInternals.h"
 #include "PsAlloca.h"
 
-#ifdef _DEBUG
+#ifdef PX_DEBUG
 #define PX_SORT_PARANOIA
 #endif
 
@@ -50,9 +50,10 @@ that the predicate implements the < operator:
 */
 
 
-#if !defined(PX_GNUC)
+#if !defined(PX_GNUC) && !defined(PX_GHS)
 #pragma warning(push)
 #pragma warning(disable:4706) // disable the warning that we did an assignment within a conditional expression, as this was intentional.
+#pragma warning(disable:4127) // disable the conditional expression is constant warning for this header, it is used intentionally 
 #endif
 
 namespace physx
@@ -60,7 +61,7 @@ namespace physx
 namespace shdfnd
 {
 	template<class T, class Predicate, class Allocator>
-	void sort(T* elements, PxU32 count, const Predicate& compare, const Allocator& inAllocator )
+	void sort(T* elements, PxU32 count, const Predicate& compare, const Allocator& inAllocator)
 	{
 		static const int INITIAL_STACKSIZE = 32;
 		static const PxU32 SMALL_SORT_CUTOFF = 5; // must be >= 3 since we need 3 for median
@@ -68,7 +69,7 @@ namespace shdfnd
 		PX_ALLOCA(stackMem, PxI32, INITIAL_STACKSIZE);
 		internal::Stack<Allocator> stack(stackMem, INITIAL_STACKSIZE,inAllocator);
 
-		PxI32 first = 0, last = count-1;
+		PxI32 first = 0, last = PxI32(count-1);
 		if(last > first)
 		{
 			while(true)
@@ -113,7 +114,7 @@ namespace shdfnd
 	}
 
 	template<class T, class Predicate>
-	void sort(T* elements, PxU32 count, const Predicate& compare = Predicate() )
+	void sort(T* elements, PxU32 count, const Predicate& compare)
 	{
 		sort(elements, count, compare, typename shdfnd::AllocatorTraits<T>::Type());
 	}
@@ -129,7 +130,7 @@ namespace shdfnd
 } // namespace shdfnd
 } // namespace physx
 
-#if !defined(PX_GNUC)
+#if !defined(PX_GNUC) && !defined(PX_GHS)
 #pragma warning(pop)
 #endif
 

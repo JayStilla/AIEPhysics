@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -31,6 +31,7 @@
 #include "PxPreprocessor.h"
 PX_DUMMY_SYMBOL
 
+#include "PxVisualDebugger.h"
 #if PX_SUPPORT_VISUAL_DEBUGGER
 
 #include "PvdSceneVisualDebugger.h"
@@ -43,6 +44,7 @@ PX_DUMMY_SYMBOL
 #include "ScBodyCore.h"
 #include "ScBodySim.h"
 #include "ScConstraintSim.h"
+#include "ScParticleSystemSim.h"
 
 #include "NpRigidDynamic.h"
 #include "NpRigidStatic.h"
@@ -56,6 +58,9 @@ PX_DUMMY_SYMBOL
 
 #include "ScbCloth.h"
 #include "NpCloth.h"
+
+#include "NpAggregate.h"
+
 #include "PvdConnection.h"
 #include "PvdTypeNames.h"
 
@@ -177,7 +182,7 @@ PX_FORCE_INLINE static NpCloth* backptr(Scb::Cloth* cloth)
 
 PX_FORCE_INLINE static const PxActor* getPxActor(const Scb::Actor* scbActor)
 {
-	PxActorType::Enum type = scbActor->getActorCoreSLOW().getActorCoreType();
+	PxActorType::Enum type = scbActor->getActorCore().getActorCoreType();
 	if(type == PxActorType::eRIGID_DYNAMIC)
 	{
 		return getNpRigidDynamic(static_cast<const Scb::Body*>(scbActor));
@@ -210,6 +215,11 @@ PX_FORCE_INLINE static const PxActor* getPxActor(const Scb::Actor* scbActor)
 	return NULL;
 }
 
+PX_FORCE_INLINE static NpAggregate* getNpAggregate(Scb::Aggregate* aggregate) 
+{ 
+	size_t offset = reinterpret_cast<size_t>(&(reinterpret_cast<NpAggregate*>(0)->getScbAggregate()));
+	return reinterpret_cast<NpAggregate*>(reinterpret_cast<char*>(aggregate)-offset);
+}
 
 namespace {
 	struct PvdConstraintVisualizer : public PxConstraintVisualizer
@@ -244,36 +254,49 @@ namespace {
 		{
 			mRenderer.visualizeDoubleCone( t, static_cast<PxF32>( angle ), active );
 		}
+
+	private:
+		PvdConstraintVisualizer& operator=(const PvdConstraintVisualizer&);
 	};
 }
 
 
+
 SceneVisualDebugger::SceneVisualDebugger(Scb::Scene& s)
-: mPvdConnection(NULL)
+: mPvdDataStream(NULL)
 , mImmediateRenderer( NULL )
 , mScbScene(s)
 , mConnectionType( 0 )
 {
 }
 
+void SceneVisualDebugger::detach()
+{
+	setCreateContactReports(false);
+}
 
 SceneVisualDebugger::~SceneVisualDebugger()
 {
 	if(isConnected())
-	{
 		releasePvdInstance();
-		setCreateContactReports(false);
-	}
+
 	if (mImmediateRenderer)
 		mImmediateRenderer->release();
-	if(mPvdConnection)
-		mPvdConnection->release();
+	if(mPvdDataStream)
+		mPvdDataStream->release();
 }
 
-
-physx::debugger::comm::PvdDataStream* SceneVisualDebugger::getPvdConnection() const
+namespace 
 {
-	return mPvdConnection;
+	static Pvd::VisualDebugger &getSdkPvd()
+	{
+		return *static_cast<Pvd::VisualDebugger*>(NpPhysics::getInstance().getVisualDebugger());
+	}
+}
+
+physx::debugger::comm::PvdDataStream* SceneVisualDebugger::getPvdDataStream() const
+{
+	return mPvdDataStream;
 }
 
 
@@ -282,13 +305,13 @@ void SceneVisualDebugger::setPvdConnection(physx::debugger::comm::PvdDataStream*
 	if ( mImmediateRenderer )
 		mImmediateRenderer->release();
 	mImmediateRenderer = NULL;
-	if(mPvdConnection)
-		mPvdConnection->release();
+	if(mPvdDataStream)
+		mPvdDataStream->release();
 	mConnectionType = inConnectionType;
 
-	mPvdConnection = c;
+	mPvdDataStream = c;
 
-	if(mPvdConnection)
+	if(mPvdDataStream)
 		c->addRef();
 	else
 		mProfileZoneIdList.clear();		
@@ -299,16 +322,16 @@ void SceneVisualDebugger::setCreateContactReports(bool s)
 	mScbScene.getScScene().setCreateContactReports(s);
 }
 
-
-bool SceneVisualDebugger::isConnected() const
-{ 
-	return mPvdConnection && mPvdConnection->isConnected(); 
+bool SceneVisualDebugger::isConnected(bool useCachedStatus) const
+{
+	return useCachedStatus ? getSdkPvd().isConnected(true) 
+		:  (mPvdDataStream && mPvdDataStream->isConnected());
 }
 
 bool SceneVisualDebugger::isConnectedAndSendingDebugInformation()
 {
 	return isConnected()
-			&& ( mConnectionType & physx::debugger::PvdConnectionType::Debug );
+			&& ( mConnectionType & physx::debugger::PvdConnectionType::eDEBUG );
 }
 
 void SceneVisualDebugger::sendEntireScene()
@@ -316,12 +339,16 @@ void SceneVisualDebugger::sendEntireScene()
 	if(!isConnected())
 		return;
 
+	NpScene* npScene = getNpScene(&mScbScene);
+
+	if( npScene->getFlagsFast() & PxSceneFlag::eREQUIRE_RW_LOCK )
+			npScene->lockRead(__FILE__, __LINE__);
+
 	createPvdInstance();
 	
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 	// materials:
 	{
-//		NpScene* npScene = getNpScene(&mScbScene);
 		PxsMaterialManager* manager = mScbScene.getScScene().getMaterialManager();
 		PxsMaterialManagerIterator iter(*manager);
 		while(iter.hasNextMaterial())
@@ -330,36 +357,25 @@ void SceneVisualDebugger::sendEntireScene()
 			const PxMaterial* theMaterial = mat->getNxMaterial();
 			sdkPvd.increaseReference(theMaterial);
 		};
-	/*	PxU32 numMaterials = mScbScene.getSceneMaterialTable().size();
-		for(PxU32 i = 0; i < numMaterials; i++)
-		{
-			Scb::Material* scbMat( mScbScene.getSceneMaterialTable()[i] );
-			const PxMaterial* theMaterial( scbMat->getNxMaterial() );
-			sdkPvd.increaseReference( theMaterial );
-		}*/
 	}
 
 	if ( isConnectedAndSendingDebugInformation() )
-	{
-		NpScene* npScene = getNpScene(&mScbScene);
-		Ps::Array<PxActor*> actorArray;
-
-		if( npScene->getFlagsFast() & PxSceneFlag::eREQUIRE_RW_LOCK )
-			npScene->lockRead(__FILE__, __LINE__);
+	{		
+		Ps::Array<PxActor*> actorArray;		
 
 		// RBs
 		// static:
 		{
-			PxU32 numActors = npScene->getNbActors(PxActorTypeSelectionFlag::eRIGID_STATIC | PxActorTypeSelectionFlag::eRIGID_DYNAMIC );
+			PxU32 numActors = npScene->getNbActors(PxActorTypeFlag::eRIGID_STATIC | PxActorTypeFlag::eRIGID_DYNAMIC );
 			actorArray.resize(numActors);
-			npScene->getActors(PxActorTypeSelectionFlag::eRIGID_STATIC | PxActorTypeSelectionFlag::eRIGID_DYNAMIC, actorArray.begin(), actorArray.size());
+			npScene->getActors(PxActorTypeFlag::eRIGID_STATIC | PxActorTypeFlag::eRIGID_DYNAMIC, actorArray.begin(), actorArray.size());
 			for(PxU32 i = 0; i < numActors; i++)
 			{
 				PxActor* pxActor = actorArray[i];
 				if ( pxActor->is<PxRigidStatic>() )
-					mMetaDataBinding.createInstance( *mPvdConnection, *static_cast<PxRigidStatic*>(pxActor), *npScene, sdkPvd );
+					mMetaDataBinding.createInstance( *mPvdDataStream, *static_cast<PxRigidStatic*>(pxActor), *npScene, sdkPvd );
 				else
-					mMetaDataBinding.createInstance( *mPvdConnection, *static_cast<PxRigidDynamic*>(pxActor), *npScene, sdkPvd );
+					mMetaDataBinding.createInstance( *mPvdDataStream, *static_cast<PxRigidDynamic*>(pxActor), *npScene, sdkPvd );
 			}
 		}
 		// articulations & links
@@ -369,7 +385,7 @@ void SceneVisualDebugger::sendEntireScene()
 			articulations.resize(numArticulations);
 			npScene->getArticulations(articulations.begin(), articulations.size());
 			for(PxU32 i = 0; i < numArticulations; i++)
-				mMetaDataBinding.createInstance( *mPvdConnection, *articulations[i], *npScene, sdkPvd );
+				mMetaDataBinding.createInstance( *mPvdDataStream, *articulations[i], *npScene, sdkPvd );
 		}
 
 #if PX_USE_PARTICLE_SYSTEM_API
@@ -388,14 +404,13 @@ void SceneVisualDebugger::sendEntireScene()
 #if PX_USE_CLOTH_API
 		//cloth 
 		{
-			NpScene* npScene = getNpScene(&mScbScene);
-			Ps::Array<PxActor*> actorArray;
-			PxU32 numActors = npScene->getNbActors(PxActorTypeSelectionFlag::eCLOTH);
-			actorArray.resize(numActors);
-			npScene->getActors(PxActorTypeSelectionFlag::eCLOTH, actorArray.begin(), actorArray.size());
+			Ps::Array<PxActor*> cloths;
+			PxU32 numActors = npScene->getNbActors(PxActorTypeFlag::eCLOTH);
+			cloths.resize(numActors);
+			npScene->getActors(PxActorTypeFlag::eCLOTH, cloths.begin(), cloths.size());
 			for(PxU32 i = 0; i < numActors; i++)
 			{
-				Scb::Cloth* scbCloth = &static_cast<NpCloth*>(actorArray[i])->getScbCloth();
+				Scb::Cloth* scbCloth = &static_cast<NpCloth*>(cloths[i])->getScbCloth();
 				createPvdInstance(scbCloth);
 			}
 		}
@@ -403,22 +418,20 @@ void SceneVisualDebugger::sendEntireScene()
 
 		// joints
 		{
-			Sc::ConstraintIterator iterator;
-			mScbScene.getScScene().initConstraintsIterator(iterator);
-			Sc::ConstraintCore* constraint;
-			for(constraint = iterator.getNext(); constraint; constraint = iterator.getNext())
+			Sc::ConstraintCore** constraints = mScbScene.getScScene().getConstraints();
+			PxU32 nbConstraints = mScbScene.getScScene().getNbConstraints();
+			for(PxU32 i=0;i<nbConstraints;i++)
 			{
-				updateConstraint(*constraint, PxPvdUpdateType::CREATE_INSTANCE);
-				updateConstraint(*constraint, PxPvdUpdateType::UPDATE_ALL_PROPERTIES);
+				updateConstraint(*constraints[i], PxPvdUpdateType::CREATE_INSTANCE);
+				updateConstraint(*constraints[i], PxPvdUpdateType::UPDATE_ALL_PROPERTIES);
 			}
 		}
-
-		if( npScene->getFlagsFast() & PxSceneFlag::eREQUIRE_RW_LOCK )
-			npScene->unlockRead();
-
 	}
 
-	mPvdConnection->flush();
+	if( npScene->getFlagsFast() & PxSceneFlag::eREQUIRE_RW_LOCK )
+		npScene->unlockRead();
+
+	mPvdDataStream->flush();
 }
 
 
@@ -426,8 +439,8 @@ void SceneVisualDebugger::frameStart(PxReal simElapsedTime)
 {
 	if(!isConnected())
 		return;
-	mMetaDataBinding.sendBeginFrame( *mPvdConnection, mScbScene.getPxScene(), simElapsedTime );
-	mPvdConnection->flush();
+	mMetaDataBinding.sendBeginFrame( *mPvdDataStream, mScbScene.getPxScene(), simElapsedTime );
+	mPvdDataStream->flush();
 }
 
 
@@ -439,7 +452,32 @@ void SceneVisualDebugger::frameEnd()
 	const PxScene* theScene = mScbScene.getPxScene();
 
 	//Send the statistics for last frame.
-	mMetaDataBinding.sendStats( *mPvdConnection, theScene  );
+	mMetaDataBinding.sendStats( *mPvdDataStream, theScene  );
+
+	if(isConnectedAndSendingDebugInformation())
+	{
+#if PX_USE_PARTICLE_SYSTEM_API
+		// particle systems & fluids:
+		{
+			CM_PROFILE_ZONE_WITH_SUBSYSTEM( mScbScene,PVD,updatePariclesAndFluids );
+			PxU32 nbParticleSystems = mScbScene.getScScene().getNbParticleSystems();
+			Sc::ParticleSystemCore** particleSystems = mScbScene.getScScene().getParticleSystems();
+			for(PxU32 i = 0; i < nbParticleSystems; i++)
+			{
+				sendStateDatas(particleSystems[i]);
+			}
+		}
+#endif
+
+#if PX_USE_CLOTH_API
+		{
+			CM_PROFILE_ZONE_WITH_SUBSYSTEM( mScbScene,PVD,updateCloths);
+			mMetaDataBinding.updateCloths( *mPvdDataStream, *theScene );
+		}
+#endif
+	}
+
+
 	//Flush the outstanding memory events.  PVD in some situations tracks memory events
 	//and can display graphs of memory usage at certain points.  They have to get flushed
 	//at some point...
@@ -452,69 +490,60 @@ void SceneVisualDebugger::frameEnd()
 		connection->flush();
 	}
 	
+
 	//End the frame *before* we send the dynamic object current data.
 	//This ensures that contacts end up synced with the rest of the system.
 	//Note that contacts were sent much earler in NpScene::fetchResults.
-	mMetaDataBinding.sendEndFrame(*mPvdConnection, mScbScene.getPxScene() );
+	mMetaDataBinding.sendEndFrame(*mPvdDataStream, mScbScene.getPxScene() );
 	//flush our data to the main connection
-	mPvdConnection->flush(); 
+	mPvdDataStream->flush(); 
 
 
 	
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 
 
 	if(isConnectedAndSendingDebugInformation())
 	{
-		const bool visualizeJoints = sdkPvd.isVisualizingConstraints();
+		const bool visualizeJoints = ( sdkPvd.getVisualDebuggerFlags() & PxVisualDebuggerFlag::eTRANSMIT_CONSTRAINTS ) != 0;
+	
 		if ( visualizeJoints && mImmediateRenderer == NULL )
 		{
 			NpPhysics& physics( NpPhysics::getInstance() );
 			physx::debugger::comm::PvdConnectionManager& mgr( *physics.getPvdConnectionManager() );
-			physx::debugger::comm::PvdConnection* connection( mgr.getAndAddRefCurrentConnection() );
-			if ( connection )
+			physx::debugger::comm::PvdConnection* connection1( mgr.getAndAddRefCurrentConnection() );
+			if ( connection1 )
 			{
-				mImmediateRenderer = &connection->createRenderer();
+				mImmediateRenderer = &connection1->createRenderer();
 				mImmediateRenderer->addRef();
-				connection->release();
+				connection1->release();
 			}
 		}
 		{
 			PvdVisualizer* vizualizer = NULL;
 			if ( visualizeJoints ) vizualizer = this;
 			CM_PROFILE_ZONE_WITH_SUBSYSTEM( mScbScene,PVD,sceneUpdate );
-			mMetaDataBinding.updateDynamicActorsAndArticulations( *mPvdConnection, theScene, vizualizer );
+			mMetaDataBinding.updateDynamicActorsAndArticulations( *mPvdDataStream, theScene, vizualizer );
 		}
 
-#if PX_USE_PARTICLE_SYSTEM_API
-		// particle systems & fluids:
-		{
-			CM_PROFILE_ZONE_WITH_SUBSYSTEM( mScbScene,PVD,updatePariclesAndFluids );
-			PxU32 nbParticleSystems = mScbScene.getScScene().getNbParticleSystems();
-			Sc::ParticleSystemCore** particleSystems = mScbScene.getScScene().getParticleSystems();
-			for(PxU32 i = 0; i < nbParticleSystems; i++)
-			{
-				Scb::ParticleSystem* scbParticleSystem = getScbParticleSystem(particleSystems[i]);
-				if(scbParticleSystem->getFlags() & PxParticleBaseFlag::eENABLED)
-					sendArrays(scbParticleSystem);
-			}
-		}
-#endif
-
-#if PX_USE_CLOTH_API
-		{
-			CM_PROFILE_ZONE_WITH_SUBSYSTEM( mScbScene,PVD,updateCloths);
-			mMetaDataBinding.updateCloths( *mPvdConnection, *theScene );
-		}
-#endif
 		// frame end moved to update contacts to have them in the previous frame.
 	}
 }
 
+void SceneVisualDebugger::originShift(PxVec3 shift)
+{
+	if(!isConnected())
+		return;
+	
+	const PxScene* theScene = mScbScene.getPxScene();
+	mMetaDataBinding.originShift(*mPvdDataStream, theScene, shift);	
+	mPvdDataStream->flush();
+
+}
 
 void SceneVisualDebugger::createPvdInstance()
 {
-	mPvdConnection->createInstance( mScbScene.getPxScene() );
+	mPvdDataStream->createInstance( mScbScene.getPxScene() );
 	updatePvdProperties();
 }
 
@@ -522,13 +551,13 @@ void SceneVisualDebugger::createPvdInstance()
 void SceneVisualDebugger::updatePvdProperties()
 {
 	PxScene* theScene = mScbScene.getPxScene();
-	mMetaDataBinding.sendAllProperties( *mPvdConnection, *theScene  );
+	mMetaDataBinding.sendAllProperties( *mPvdDataStream, *theScene  );
 }
 
 
 void SceneVisualDebugger::releasePvdInstance()
 {
-	mPvdConnection->destroyInstance(mScbScene.getPxScene());
+	mPvdDataStream->destroyInstance(mScbScene.getPxScene());
 }
 
 template<typename TOperator>
@@ -546,6 +575,8 @@ inline void ActorTypeOperation( const PxActor* actor, TOperator op )
 #if PX_USE_CLOTH_API
 	case PxActorType::eCLOTH: op( *static_cast<const PxCloth*>( actor ) ); break;
 #endif
+	case PxActorType::eACTOR_COUNT:
+	case PxActorType::eACTOR_FORCE_DWORD:
 	default:
 		PX_ASSERT( false );
 		break;
@@ -563,7 +594,7 @@ struct CreateOp
 		: mStream( str ), mBinding( bind ), mRegistrar(reg), mScene( scene ) {}
 	template<typename TDataType>
 	void operator()( const TDataType& dtype ) {	mBinding.createInstance( mStream, dtype, mScene, mRegistrar ); }
-	void operator()( const PxArticulationLink& link ) {}
+	void operator()( const PxArticulationLink&) {}
 #if PX_USE_PARTICLE_SYSTEM_API
 	void operator()( const PxParticleSystem& dtype ) { mBinding.createInstance( mStream, dtype, mScene ); }
 	void operator()( const PxParticleFluid& dtype ) { mBinding.createInstance( mStream, dtype, mScene ); }
@@ -579,6 +610,8 @@ struct UpdateOp
 		: mStream( str ), mBinding( bind ) {}
 	template<typename TDataType>
 	void operator()( const TDataType& dtype ) {	mBinding.sendAllProperties( mStream, dtype ); }
+private:
+	UpdateOp& operator=(const UpdateOp&);
 };
 
 struct DestroyOp
@@ -596,33 +629,40 @@ struct DestroyOp
 	void operator()( const PxParticleSystem& dtype ) { mBinding.destroyInstance( mStream, dtype, mScene ); }
 	void operator()( const PxParticleFluid& dtype ) { mBinding.destroyInstance( mStream, dtype, mScene ); }
 #endif
+
+private:
+	DestroyOp& operator=(const DestroyOp&);
 };
+
+bool SceneVisualDebugger::isInstanceValid(void* instance)
+{
+	if ( isConnectedAndSendingDebugInformation() == false ) return false;
+	return mPvdDataStream->isInstanceValid(instance);
+}
 
 void SceneVisualDebugger::createPvdInstanceIfInvalid(const PxActor* actor)
 {
 	if ( isConnectedAndSendingDebugInformation() == false ) return;
 	if(actor->getType() == PxActorType::eARTICULATION_LINK)
 	{
-		VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
-		if(mPvdConnection->isInstanceValid(actor) == false)
-			mMetaDataBinding.createInstance(*mPvdConnection, *(const PxArticulationLink* )actor, sdkPvd );
+		VisualDebugger& sdkPvd = getSdkPvd();
+		if(mPvdDataStream->isInstanceValid(actor) == false)
+			mMetaDataBinding.createInstance(*mPvdDataStream, *(const PxArticulationLink* )actor, sdkPvd );
 	}
 }
 
 void SceneVisualDebugger::createPvdInstance(const PxActor* scbActor)
 {
 	if ( isConnectedAndSendingDebugInformation() == false ) return;
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 	PxScene* theScene = mScbScene.getPxScene();
-	ActorTypeOperation( scbActor, CreateOp( *mPvdConnection, mMetaDataBinding, sdkPvd, *theScene ) );
+	ActorTypeOperation( scbActor, CreateOp( *mPvdDataStream, mMetaDataBinding, sdkPvd, *theScene ) );
 }
 
 void SceneVisualDebugger::updatePvdProperties(const PxActor* scbActor)
 {
 	if ( isConnectedAndSendingDebugInformation() == false ) return;
-	//VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
-	//PxScene* theScene = mScbScene.getPxScene();
-	ActorTypeOperation( scbActor, UpdateOp( *mPvdConnection, mMetaDataBinding ) );
+	ActorTypeOperation( scbActor, UpdateOp( *mPvdDataStream, mMetaDataBinding ) );
 }
 
 void SceneVisualDebugger::releasePvdInstance(const PxActor* scbActor)
@@ -630,7 +670,7 @@ void SceneVisualDebugger::releasePvdInstance(const PxActor* scbActor)
 	if ( isConnectedAndSendingDebugInformation() == false ) return;
 	//VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
 	PxScene* theScene = mScbScene.getPxScene();
-	ActorTypeOperation( scbActor, DestroyOp( *mPvdConnection, mMetaDataBinding, *theScene ) );
+	ActorTypeOperation( scbActor, DestroyOp( *mPvdDataStream, mMetaDataBinding, *theScene ) );
 	//The flush is here because when memory allocation systems have aggressive reuse policies
 	//then we have issues.  The one case that reproduces some of those issues reliably is
 	//SdkUnitTests --gtest_filter="*.createRandomConvex"
@@ -639,7 +679,7 @@ void SceneVisualDebugger::releasePvdInstance(const PxActor* scbActor)
 	//trying to remove shapes from a newly created convex mesh.
 	//These considerations are extremely important where people are streaming information
 	//into and out of a running simulation and they are very very difficult to keep correct.
-	mPvdConnection->flush();
+	mPvdDataStream->flush();
 }
 
 
@@ -650,7 +690,7 @@ void SceneVisualDebugger::releasePvdInstance(Scb::Actor* scbActor) { releasePvdI
 template<typename TOperator>
 inline void BodyTypeOperation( Scb::Body* scbBody, TOperator op )
 {
-	bool isArticulationLink = scbBody->getActorTypeSLOW() == PxActorType::eARTICULATION_LINK;
+	bool isArticulationLink = scbBody->getActorType() == PxActorType::eARTICULATION_LINK;
 	if(isArticulationLink)
 	{
 		NpArticulationLink* link( getNpArticulationLink( scbBody ) );
@@ -666,33 +706,33 @@ inline void BodyTypeOperation( Scb::Body* scbBody, TOperator op )
 void SceneVisualDebugger::createPvdInstance(Scb::Body* scbBody)
 {
 	if ( isConnectedAndSendingDebugInformation() == false ) return;
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 	PxScene* theScene = mScbScene.getPxScene();
-	bool isArticulationLink = scbBody->getActorTypeSLOW() == PxActorType::eARTICULATION_LINK;
+	bool isArticulationLink = scbBody->getActorType() == PxActorType::eARTICULATION_LINK;
 	if ( !isArticulationLink )
-		BodyTypeOperation( scbBody, CreateOp( *mPvdConnection, mMetaDataBinding, sdkPvd, *theScene ) );
+		BodyTypeOperation( scbBody, CreateOp( *mPvdDataStream, mMetaDataBinding, sdkPvd, *theScene ) );
 }
 
 void SceneVisualDebugger::updatePvdProperties(Scb::Body* scbBody)
 {
 	if ( isConnectedAndSendingDebugInformation() == false ) return;
-	BodyTypeOperation( scbBody, UpdateOp( *mPvdConnection, mMetaDataBinding ) );
+	BodyTypeOperation( scbBody, UpdateOp( *mPvdDataStream, mMetaDataBinding ) );
 }
 
 void SceneVisualDebugger::updateKinematicTarget( Scb::Body* scbBody, const PxTransform& target )
 {
 	if ( isConnectedAndSendingDebugInformation() == false ) return;
 	NpRigidDynamic* npRigidDynamic = getNpRigidDynamic(scbBody);
-	mPvdConnection->setPropertyValue( npRigidDynamic, "KinematicTarget", target );
+	mPvdDataStream->setPropertyValue( npRigidDynamic, "KinematicTarget", target );
 }
 
 void SceneVisualDebugger::createPvdInstance(Scb::RigidStatic* scbRigidStatic)
 {
 	if ( isConnectedAndSendingDebugInformation() == false ) return;
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 	PxScene* theScene = mScbScene.getPxScene();
 	PxRigidStatic* npRigidStatic = getNpRigidStatic(scbRigidStatic);
-	mMetaDataBinding.createInstance( *mPvdConnection, *npRigidStatic, *theScene, sdkPvd );
+	mMetaDataBinding.createInstance( *mPvdDataStream, *npRigidStatic, *theScene, sdkPvd );
 }
 
 
@@ -700,7 +740,7 @@ void SceneVisualDebugger::updatePvdProperties(Scb::RigidStatic* scbRigidStatic)
 {	
 	UPDATE_PVD_PROPERTIES_CHECK();
 	PxRigidStatic& rs( *getNpRigidStatic( scbRigidStatic ) );
-	mMetaDataBinding.sendAllProperties( *mPvdConnection, rs );
+	mMetaDataBinding.sendAllProperties( *mPvdDataStream, rs );
 }
 
 void SceneVisualDebugger::releasePvdInstance(Scb::RigidObject* scbRigidObject) 
@@ -708,82 +748,78 @@ void SceneVisualDebugger::releasePvdInstance(Scb::RigidObject* scbRigidObject)
 	releasePvdInstance( getPxActor( scbRigidObject ) ); 
 }
 
-void SceneVisualDebugger::createPvdInstance(const Scb::Shape* scbShape)
+void SceneVisualDebugger::createPvdInstance(const Scb::Shape* scbShape, PxActor& pxActor)
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
 	PxShape* npShape = getNpShape(scbShape);
-	PxActor& pxActor = getNpShape( scbShape)->getActorFast();
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
-	mMetaDataBinding.createInstance( *mPvdConnection, *npShape,  static_cast<PxRigidActor&>( pxActor ), sdkPvd );
+	VisualDebugger& sdkPvd = getSdkPvd();
+	mMetaDataBinding.createInstance( *mPvdDataStream, *npShape,  static_cast<PxRigidActor&>( pxActor ), sdkPvd );
 }
 
 void SceneVisualDebugger::updatePvdProperties(const Scb::Shape* scbShape)
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
-	mMetaDataBinding.sendAllProperties( *mPvdConnection, *getNpShape( const_cast<Scb::Shape*>( scbShape ) ) );
+	mMetaDataBinding.sendAllProperties( *mPvdDataStream, *getNpShape( const_cast<Scb::Shape*>( scbShape ) ) );
 }
 
 
 void SceneVisualDebugger::releaseAndRecreateGeometry( const Scb::Shape* scbShape )
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
-	mMetaDataBinding.releaseAndRecreateGeometry( *mPvdConnection, *getNpShape( const_cast<Scb::Shape*>( scbShape ) ), NpPhysics::getInstance(), sdkPvd );
+	VisualDebugger& sdkPvd = getSdkPvd();
+	mMetaDataBinding.releaseAndRecreateGeometry( *mPvdDataStream, *getNpShape( const_cast<Scb::Shape*>( scbShape ) ), NpPhysics::getInstance(), sdkPvd );
 }
 
 void SceneVisualDebugger::updateMaterials(const Scb::Shape* scbShape)
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
-	mMetaDataBinding.updateMaterials( *mPvdConnection, *getNpShape( const_cast<Scb::Shape*>( scbShape ) ), sdkPvd );
+	VisualDebugger& sdkPvd = getSdkPvd();
+	mMetaDataBinding.updateMaterials( *mPvdDataStream, *getNpShape( const_cast<Scb::Shape*>( scbShape ) ), sdkPvd );
 }
-void SceneVisualDebugger::releasePvdInstance(const Scb::Shape* scbShape)
+void SceneVisualDebugger::releasePvdInstance(const Scb::Shape* scbShape, PxActor& pxActor)
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
 	PxShape* npShape = getNpShape(scbShape);
-	PxActor& pxActor = getNpShape( scbShape)->getActorFast();
-	mMetaDataBinding.destroyInstance( *mPvdConnection, *npShape,  static_cast<PxRigidActor&>( pxActor ) );
+	mMetaDataBinding.destroyInstance( *mPvdDataStream, *npShape,  static_cast<PxRigidActor&>( pxActor ) );
+
+	PxU32 numMaterials = npShape->getNbMaterials();
+	PX_ALLOCA(materialPtr, PxMaterial*, numMaterials);
+	npShape->getMaterials( materialPtr, numMaterials );
+
+	for ( PxU32 idx = 0; idx < numMaterials; ++idx )
+	{
+		releasePvdInstance(&(static_cast<NpMaterial*>( materialPtr[idx] )->getScMaterial()));
+	}
 }
 void  SceneVisualDebugger::createPvdInstance(const Sc::MaterialCore* mat)//(const Scb::Material* scbMat)
 {
-	/*UPDATE_PVD_PROPERTIES_CHECK();
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
-	const PxMaterial* theMaterial( scbMat->getNxMaterial() );
-	sdkPvd.increaseReference( theMaterial );*/
-
 	UPDATE_PVD_PROPERTIES_CHECK();
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 	const PxMaterial* theMaterial( mat->getNxMaterial() );
 	sdkPvd.increaseReference( theMaterial );
 }
 
 void SceneVisualDebugger::updatePvdProperties(const Sc::MaterialCore* mat)//( const Scb::Material* material )
 {
-	/*UPDATE_PVD_PROPERTIES_CHECK();
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
-	sdkPvd.updatePvdProperties( material->getNxMaterial() );*/
 	UPDATE_PVD_PROPERTIES_CHECK();
-	mMetaDataBinding.sendAllProperties( *mPvdConnection, *mat->getNxMaterial() );
+	mMetaDataBinding.sendAllProperties( *mPvdDataStream, *mat->getNxMaterial() );
 }
 
 
 void SceneVisualDebugger::releasePvdInstance(const Sc::MaterialCore* mat)//(const Scb::Material* scbMat)
 {
-	/*UPDATE_PVD_PROPERTIES_CHECK();
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
-	sdkPvd.decreaseReference( scbMat->getNxMaterial() );*/
 	UPDATE_PVD_PROPERTIES_CHECK();
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 	sdkPvd.decreaseReference( mat->getNxMaterial() );
 }
 
 void SceneVisualDebugger::createPvdInstance(Scb::Articulation* articulation)
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 	PxScene* theScene = mScbScene.getPxScene();
 	NpArticulation* npArticulation = getNpArticulation(articulation);
-	mMetaDataBinding.createInstance( *mPvdConnection, *npArticulation, *theScene, sdkPvd );
+	mMetaDataBinding.createInstance( *mPvdDataStream, *npArticulation, *theScene, sdkPvd );
 }
 
 
@@ -791,7 +827,7 @@ void SceneVisualDebugger::updatePvdProperties(Scb::Articulation* articulation)
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
 	NpArticulation* npArticulation = getNpArticulation(articulation);
-	mMetaDataBinding.sendAllProperties( *mPvdConnection, *npArticulation );
+	mMetaDataBinding.sendAllProperties( *mPvdDataStream, *npArticulation );
 }
 
 
@@ -800,14 +836,14 @@ void SceneVisualDebugger::releasePvdInstance(Scb::Articulation* articulation)
 	UPDATE_PVD_PROPERTIES_CHECK();
 	PxScene* theScene = mScbScene.getPxScene();
 	NpArticulation* npArticulation = getNpArticulation(articulation);
-	mMetaDataBinding.destroyInstance( *mPvdConnection, *npArticulation, *theScene );
+	mMetaDataBinding.destroyInstance( *mPvdDataStream, *npArticulation, *theScene );
 }
 
 void SceneVisualDebugger::updatePvdProperties(Scb::ArticulationJoint* articulationJoint)
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
 	NpArticulationJoint* joint = getNpArticulationJoint( articulationJoint );
-	mMetaDataBinding.sendAllProperties( *mPvdConnection, *joint );
+	mMetaDataBinding.sendAllProperties( *mPvdDataStream, *joint );
 }
 
 #if PX_USE_PARTICLE_SYSTEM_API
@@ -817,26 +853,84 @@ void SceneVisualDebugger::createPvdInstance(Scb::ParticleSystem* scbParticleSys)
 	createPvdInstance(getPxActor(scbParticleSys)); 
 }
 
-void SceneVisualDebugger::sendArrays(Scb::ParticleSystem* scbParticleSys)
+template<typename TPropertyType>
+void SceneVisualDebugger::sendArray(const void* instance, const char* propName, const Cm::BitMap* bitMap, PxU32 nbValidParticles, PxStrideIterator<const TPropertyType>& iterator)
+{			
+		PX_ASSERT( nbValidParticles > 0);
+		if(!iterator.ptr() )
+			return;
+		
+		// setup the pvd array  PxParticleFlags
+		debugger::DataRef<const PxU8> propData;		
+		Array<PxU8> mTempU8Array;
+		mTempU8Array.resize(nbValidParticles * sizeof(TPropertyType));
+		TPropertyType* tmpArray  = reinterpret_cast<TPropertyType*>(mTempU8Array.begin());
+		propData = debugger::DataRef<const PxU8>( mTempU8Array.begin(), mTempU8Array.size() );
+	
+		PxU32 tIdx = 0;
+		Cm::BitMap::Iterator it(*bitMap);
+		for(PxU32 index = it.getNext(); index != Cm::BitMap::Iterator::DONE; index = it.getNext())
+		{
+			tmpArray[tIdx++] = iterator[index];	
+		}	
+		PX_ASSERT(tIdx == nbValidParticles);
+	
+		mPvdDataStream->setPropertyValue( instance, propName, propData, debugger::getPvdNamespacedNameForType<TPropertyType>() );
+
+}
+
+void SceneVisualDebugger::sendStateDatas(Sc::ParticleSystemCore* psCore)
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
-
-	bool doProcess = scbParticleSys->getFlags() & PxParticleBaseFlag::eENABLED;
+	
+	Scb::ParticleSystem* scbParticleSystem = getScbParticleSystem(psCore);
+	bool doProcess = scbParticleSystem->getFlags() & PxParticleBaseFlag::eENABLED;
 #if PX_SUPPORT_GPU_PHYSX
-	doProcess &= !scbParticleSys->isInDeviceExclusiveModeGpu();
+	doProcess &= (scbParticleSystem->getDeviceExclusiveAccessGpu() == NULL); 
 #endif
-	if (doProcess)
-	{
-		NpParticleFluidReadData readData;
-		PxU32 rdFlags = scbParticleSys->getParticleReadDataFlags();
-		scbParticleSys->getScParticleSystem().getParticleReadData(readData);
-		const PxActor* pxActor = getPxActor(scbParticleSys);
-		PxActorType::Enum type = pxActor->getType();
-		if ( type == PxActorType::ePARTICLE_SYSTEM )
-			mMetaDataBinding.sendArrays( *mPvdConnection, *static_cast<const PxParticleSystem*>( pxActor ), readData, rdFlags );
-		else if ( type == PxActorType::ePARTICLE_FLUID )
-			mMetaDataBinding.sendArrays( *mPvdConnection, *static_cast<const PxParticleFluid*>( pxActor ), readData, rdFlags );
-	}
+	if(doProcess)
+	{		
+		Sc::ParticleSystemSim* particleSystem = psCore->getSim();
+		PxvParticleSystemStateDataDesc stateData;
+		particleSystem->getParticleState().getParticlesV(stateData, true, false);
+		PxvParticleSystemSimDataDesc simParticleData;
+		particleSystem->getSimParticleData(simParticleData, false);
+	
+		const PxActor* pxActor = getPxActor(scbParticleSystem);
+
+		//mPvdDataStream->setPropertyValue( pxActor, "WorldBounds", psCore->getWorldBounds());
+		mPvdDataStream->setPropertyValue( pxActor, "NbParticles", stateData.numParticles);
+		mPvdDataStream->setPropertyValue( pxActor, "ValidParticleRange", stateData.validParticleRange);
+		
+		if(stateData.validParticleRange > 0)
+		{
+			mPvdDataStream->setPropertyValue( pxActor, "ValidParticleBitmap", stateData.bitMap->getWords(),  (stateData.validParticleRange >> 5)+1 );
+			sendArray<PxVec3>(pxActor, "Positions", stateData.bitMap, stateData.numParticles, stateData.positions);
+			sendArray<PxVec3>(pxActor, "Velocities", stateData.bitMap, stateData.numParticles, stateData.velocities);
+			sendArray<PxF32>(pxActor, "RestOffsets", stateData.bitMap, stateData.numParticles, stateData.restOffsets);
+			sendArray<PxVec3>(pxActor, "CollisionNormals", stateData.bitMap, stateData.numParticles, simParticleData.collisionNormals);
+			sendArray<PxF32>(pxActor, "Densities", stateData.bitMap, stateData.numParticles, simParticleData.densities);
+			//todo: twoway data if need more particle retrieval
+
+			{//send PxParticleFlags, we have PxvParticleFlags here
+				debugger::DataRef<const PxU8> propData;		
+				Array<PxU8> mTempU8Array;
+				mTempU8Array.resize(stateData.numParticles * sizeof(PxU16));
+				PxU16* tmpArray  = reinterpret_cast<PxU16*>(mTempU8Array.begin());
+				propData = debugger::DataRef<const PxU8>( mTempU8Array.begin(), mTempU8Array.size() );
+	
+				PxU32 tIdx = 0;
+				PxStrideIterator<const PxvParticleFlags>& iterator = stateData.flags;
+				Cm::BitMap::Iterator it(*stateData.bitMap);
+				for(PxU32 index = it.getNext(); index != Cm::BitMap::Iterator::DONE; index = it.getNext())
+				{
+					tmpArray[tIdx++] = iterator[index].api;	
+				}
+					
+				mPvdDataStream->setPropertyValue( pxActor, "Flags", propData, debugger::getPvdNamespacedNameForType<PxU16>() );
+			}
+		}					
+	}	
 }
 
 void SceneVisualDebugger::updatePvdProperties(Scb::ParticleSystem* scbParticleSys)
@@ -854,51 +948,77 @@ void SceneVisualDebugger::releasePvdInstance(Scb::ParticleSystem* scbParticleSys
 static inline PxCloth* toPx( Scb::Cloth* cloth )
 {
 	NpCloth* realCloth( backptr( cloth ) );
-	PxActor* pxActor = &realCloth->getPxActorSLOW();
-	return static_cast<PxCloth*>( pxActor );
+	return static_cast<PxCloth*>( realCloth );
 }
 
 void SceneVisualDebugger::createPvdInstance(Scb::Cloth* scbCloth)
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
 	NpCloth* realCloth( backptr( scbCloth ) );
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 	PxScene* theScene = mScbScene.getPxScene();
-	mMetaDataBinding.createInstance( *mPvdConnection, *realCloth, *theScene, sdkPvd );
-	mPvdConnection->flush();
+	mMetaDataBinding.createInstance( *mPvdDataStream, *realCloth, *theScene, sdkPvd );
+	mPvdDataStream->flush();
 }
 
 void SceneVisualDebugger::sendSimpleProperties( Scb::Cloth* cloth )
 {
 	if ( isConnectedAndSendingDebugInformation() )
-		mMetaDataBinding.sendSimpleProperties( *mPvdConnection, *toPx( cloth ) );
+		mMetaDataBinding.sendSimpleProperties( *mPvdDataStream, *toPx( cloth ) );
 }
 void SceneVisualDebugger::sendMotionConstraints( Scb::Cloth* cloth )
 {
 	if ( isConnectedAndSendingDebugInformation() )
-		mMetaDataBinding.sendMotionConstraints( *mPvdConnection, *toPx( cloth ) );
+		mMetaDataBinding.sendMotionConstraints( *mPvdDataStream, *toPx( cloth ) );
+}
+void SceneVisualDebugger::sendSelfCollisionIndices( Scb::Cloth* cloth)
+{
+	if ( isConnectedAndSendingDebugInformation() )
+		mMetaDataBinding.sendSelfCollisionIndices( *mPvdDataStream, *toPx( cloth ) );
+}
+void SceneVisualDebugger::sendRestPositions( Scb::Cloth* cloth )
+{
+	if ( isConnectedAndSendingDebugInformation() )
+		mMetaDataBinding.sendRestPositions( *mPvdDataStream, *toPx( cloth ) );
 }
 void SceneVisualDebugger::sendSeparationConstraints( Scb::Cloth* cloth )
 {
 	if ( isConnectedAndSendingDebugInformation() )
-		mMetaDataBinding.sendSeparationConstraints( *mPvdConnection, *toPx( cloth ) );
+		mMetaDataBinding.sendSeparationConstraints( *mPvdDataStream, *toPx( cloth ) );
 }
 void SceneVisualDebugger::sendCollisionSpheres( Scb::Cloth* cloth )
 {
 	if ( isConnectedAndSendingDebugInformation() )
-		mMetaDataBinding.sendCollisionSpheres( *mPvdConnection, *toPx( cloth ) );
+		mMetaDataBinding.sendCollisionSpheres( *mPvdDataStream, *toPx( cloth ) );
+}
+
+void SceneVisualDebugger::sendCollisionCapsules( Scb::Cloth* cloth )
+{
+	if ( isConnectedAndSendingDebugInformation() )
+		mMetaDataBinding.sendCollisionSpheres( *mPvdDataStream, *toPx( cloth ), true );
+}
+
+void SceneVisualDebugger::sendCollisionTriangles( Scb::Cloth* cloth )
+{
+	if (isConnectedAndSendingDebugInformation() )
+		mMetaDataBinding.sendCollisionTriangles( *mPvdDataStream, *toPx( cloth ) );
+}
+void SceneVisualDebugger::sendParticleAccelerations( Scb::Cloth* cloth )
+{
+	if (isConnectedAndSendingDebugInformation() )
+		mMetaDataBinding.sendParticleAccelerations( *mPvdDataStream, *toPx( cloth ) );
 }
 void SceneVisualDebugger::sendVirtualParticles( Scb::Cloth* cloth )
 {
 	if ( isConnectedAndSendingDebugInformation() )
-		mMetaDataBinding.sendVirtualParticles( *mPvdConnection, *toPx( cloth ) );
+		mMetaDataBinding.sendVirtualParticles( *mPvdDataStream, *toPx( cloth ) );
 }
 
 void SceneVisualDebugger::releasePvdInstance(Scb::Cloth* cloth)
 {
 	UPDATE_PVD_PROPERTIES_CHECK();
-	mMetaDataBinding.destroyInstance( *mPvdConnection, *toPx(cloth), *mScbScene.getPxScene() );
-	mPvdConnection->flush();
+	mMetaDataBinding.destroyInstance( *mPvdDataStream, *toPx(cloth), *mScbScene.getPxScene() );
+	mPvdDataStream->flush();
 }
 #endif // PX_USE_CLOTH_API
 
@@ -910,7 +1030,7 @@ bool SceneVisualDebugger::updateConstraint(const Sc::ConstraintCore& scConstrain
 	if( (conn = scConstraint.getPxConnector()) != NULL
 		&& isConnectedAndSendingDebugInformation() )
 	{
-		success = conn->updatePvdProperties(*mPvdConnection, scConstraint.getPxConstraint(), PxPvdUpdateType::Enum(updateType));
+		success = conn->updatePvdProperties(*mPvdDataStream, scConstraint.getPxConstraint(), PxPvdUpdateType::Enum(updateType));
 	}
 	return success;
 }
@@ -935,10 +1055,49 @@ void SceneVisualDebugger::releasePvdInstance(Scb::Constraint* constraint)
 	UPDATE_PVD_PROPERTIES_CHECK();
 	PxConstraintConnector* conn;
 	Sc::ConstraintCore& scConstraint = constraint->getScConstraint();
-	if( (conn = scConstraint.getPxConnector()) )
+	if( (conn = scConstraint.getPxConnector()) != NULL )
 	{
-		conn->updatePvdProperties(*mPvdConnection, scConstraint.getPxConstraint(), PxPvdUpdateType::RELEASE_INSTANCE);
+		conn->updatePvdProperties(*mPvdDataStream, scConstraint.getPxConstraint(), PxPvdUpdateType::RELEASE_INSTANCE);
 	}
+}
+
+void SceneVisualDebugger::createPvdInstance(Scb::Aggregate* aggregate)
+{	
+	UPDATE_PVD_PROPERTIES_CHECK();
+	NpAggregate* npAggregate = getNpAggregate( aggregate );
+	VisualDebugger& sdkPvd = getSdkPvd();
+	PxScene* theScene = mScbScene.getPxScene();
+	mMetaDataBinding.createInstance( *mPvdDataStream, *npAggregate, *theScene, sdkPvd );
+	mPvdDataStream->flush();
+}
+
+void SceneVisualDebugger::updatePvdProperties(Scb::Aggregate* aggregate)
+{
+	UPDATE_PVD_PROPERTIES_CHECK();
+	NpAggregate* npAggregate = getNpAggregate( aggregate );
+	mMetaDataBinding.sendAllProperties( *mPvdDataStream, *npAggregate );
+}
+
+void SceneVisualDebugger::attachAggregateActor(Scb::Aggregate* aggregate, Scb::Actor* actor)
+{
+	UPDATE_PVD_PROPERTIES_CHECK();
+	NpAggregate* npAggregate = getNpAggregate( aggregate );
+	mMetaDataBinding.attachAggregateActor( *mPvdDataStream, *npAggregate, *getPxActor(actor) );
+}
+
+void SceneVisualDebugger::detachAggregateActor(Scb::Aggregate* aggregate, Scb::Actor* actor)
+{
+	UPDATE_PVD_PROPERTIES_CHECK();
+	NpAggregate* npAggregate = getNpAggregate( aggregate );
+	mMetaDataBinding.detachAggregateActor( *mPvdDataStream, *npAggregate, *getPxActor(actor) );
+}
+
+void SceneVisualDebugger::releasePvdInstance(Scb::Aggregate* aggregate)
+{
+	UPDATE_PVD_PROPERTIES_CHECK();
+	NpAggregate* npAggregate = getNpAggregate( aggregate );
+	mMetaDataBinding.destroyInstance( *mPvdDataStream, *npAggregate, *mScbScene.getPxScene() );
+	mPvdDataStream->flush();
 }
 
 void SceneVisualDebugger::updateContacts()
@@ -947,18 +1106,18 @@ void SceneVisualDebugger::updateContacts()
 		return;
 
 	// if contacts are disabled, send empty array and return
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 	const PxScene* theScene( mScbScene.getPxScene() );
 	if(!sdkPvd.getTransmitContactsFlag())
 	{
-		mMetaDataBinding.sendContacts( *mPvdConnection, *theScene );
+		mMetaDataBinding.sendContacts( *mPvdDataStream, *theScene );
 		return;
 	}
 
 	CM_PROFILE_ZONE_WITH_SUBSYSTEM( mScbScene,PVD,updateContacts );
 	Sc::ContactIterator contactIter;
 	mScbScene.getScScene().initContactsIterator(contactIter);
-	mMetaDataBinding.sendContacts( *mPvdConnection, *theScene, contactIter );
+	mMetaDataBinding.sendContacts( *mPvdDataStream, *theScene, contactIter );
 }
 
 
@@ -968,10 +1127,10 @@ void SceneVisualDebugger::updateSceneQueries()
 		return;
 
 	// if contacts are disabled, send empty array and return
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 	const PxScene* theScene( mScbScene.getPxScene() );
 
-	mMetaDataBinding.sendSceneQueries( *mPvdConnection, *theScene, sdkPvd.getTransmitSceneQueriesFlag() );
+	mMetaDataBinding.sendSceneQueries( *mPvdDataStream, *theScene, sdkPvd.getTransmitSceneQueriesFlag() );
 }
 
 
@@ -993,7 +1152,7 @@ void SceneVisualDebugger::updateJoints()
 	if(!isConnected())
 		return;
 	
-	VisualDebugger& sdkPvd = NpPhysics::getInstance().getPhysics()->getVisualDebugger();
+	VisualDebugger& sdkPvd = getSdkPvd();
 
 	if(isConnectedAndSendingDebugInformation())
 	{
@@ -1011,16 +1170,16 @@ void SceneVisualDebugger::updateJoints()
 			}
 		}
 
-		// joints
+			// joints
 		{
 			CM_PROFILE_ZONE_WITH_SUBSYSTEM( mScbScene,PVD,updateJoints );
-			Sc::ConstraintIterator iterator;
-			mScbScene.getScScene().initConstraintsIterator(iterator);
-			Sc::ConstraintCore* constraint;
+			Sc::ConstraintCore** constraints = mScbScene.getScScene().getConstraints();
+			PxU32 nbConstraints = mScbScene.getScScene().getNbConstraints();
 			PxI64 constraintCount = 0;
 
-			for(constraint = iterator.getNext(); constraint; constraint = iterator.getNext())
+			for(PxU32 i = 0; i<nbConstraints; i++)
 			{
+				Sc::ConstraintCore* constraint = constraints[i];
 				PxPvdUpdateType::Enum updateType = getNpConstraint(constraint)->isDirty() ? PxPvdUpdateType::UPDATE_ALL_PROPERTIES : PxPvdUpdateType::UPDATE_SIM_PROPERTIES;
 				updateConstraint(*constraint, updateType);
 				PxConstraintConnector* conn = constraint->getPxConnector();
@@ -1041,8 +1200,8 @@ void SceneVisualDebugger::updateJoints()
 					{
 						Sc::BodySim* b0 = sim->getBody(0);
 						Sc::BodySim* b1 = sim->getBody(1);
-						PxTransform t0 = b0 ? b0->getBody2World() : PxTransform::createIdentity();
-						PxTransform t1 = b1 ? b1->getBody2World() : PxTransform::createIdentity();
+						PxTransform t0 = b0 ? b0->getBody2World() : PxTransform(PxIdentity);
+						PxTransform t1 = b1 ? b1->getBody2World() : PxTransform(PxIdentity);
 						PvdConstraintVisualizer viz( joint, *mImmediateRenderer );
 						(*constraint->getVisualize())(viz, sim->getConstantsLL(), t0, t1, 0xffffFFFF);
 					}
@@ -1056,6 +1215,15 @@ void SceneVisualDebugger::updateJoints()
 	}
 }
 
+void SceneVisualDebugger::flushPendingCommands()
+{
+	if(!isConnectedAndSendingDebugInformation())
+		return;
+
+	PX_ASSERT(mPvdDataStream);
+
+	mPvdDataStream->flushPvdCommand();
+}
 } // namespace Pvd
 
 }

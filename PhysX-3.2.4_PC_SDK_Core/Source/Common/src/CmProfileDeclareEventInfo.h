@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 // no include guard on purpose!
 #define CM_PROFILE_DECLARE_EVENT_INFO_H
@@ -51,6 +51,8 @@ namespace physx { namespace profile {
 //Event id enumeration
 #define PX_PROFILE_BEGIN_SUBSYSTEM( subsys ) 
 #define PX_PROFILE_EVENT( subsystem, name, priority ) subsystem##name,
+#define PX_PROFILE_EVENT_DETAIL( subsystem, name, priority ) PX_PROFILE_EVENT(subsystem, name, priority )
+#define PX_PROFILE_EVENT_NO_COMMA( subsystem, name, priority ) subsystem##name
 #define PX_PROFILE_END_SUBSYSTEM( subsys )
 struct EventIds
 {
@@ -60,7 +62,9 @@ struct EventIds
 	};
 };
 #undef PX_PROFILE_BEGIN_SUBSYSTEM
+#undef PX_PROFILE_EVENT_NO_COMMA 
 #undef PX_PROFILE_EVENT
+#undef PX_PROFILE_EVENT_DETAIL
 #undef PX_PROFILE_END_SUBSYSTEM
 
 
@@ -68,10 +72,12 @@ struct EventIds
 #define PX_PROFILE_BEGIN_SUBSYSTEM( subsys )
 #define PX_PROFILE_EVENT( subsys, name, priority ) \
 	template<> struct EventPriority<EventIds::subsys##name> { static const PxU32 val = EventPriorities::priority; };
+#define PX_PROFILE_EVENT_DETAIL( subsys, name, priority ) PX_PROFILE_EVENT( subsys, name, priority )
 #define PX_PROFILE_END_SUBSYSTEM( subsys )
 #include PX_PROFILE_EVENT_DEFINITION_HEADER
 #undef PX_PROFILE_BEGIN_SUBSYSTEM
 #undef PX_PROFILE_EVENT
+#undef PX_PROFILE_EVENT_DETAIL
 #undef PX_PROFILE_END_SUBSYSTEM
 
 } }

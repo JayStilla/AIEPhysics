@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,17 +35,27 @@
 #include "foundation/PxFoundation.h"
 #include "Ps.h"
 
-#if (defined(PX_WINDOWS) || defined (PX_WINMODERN) || defined(PX_X360))
+#if (defined(PX_WINDOWS) || defined (PX_WINMODERN) || defined(PX_X360) || defined(PX_XBOXONE))
+#include <exception>
 #include <typeinfo.h>
 #endif
 #if (defined(PX_APPLE))
 #include <typeinfo>
 #endif
 
+
+#ifdef PX_WIIU
+#pragma ghs nowarning 193 //warning #193-D: zero used for undefined preprocessing identifier
+#endif
+
 #include <new>
 
+#ifdef PX_WIIU
+#pragma ghs endnowarning
+#endif
+
 // Allocation macros going through user allocator 
-#ifdef _DEBUG
+#ifdef PX_DEBUG
 #define PX_ALLOC(n, name)		 physx::shdfnd::NamedAllocator(name).allocate(n, __FILE__, __LINE__)
 #else
 #define PX_ALLOC(n, name)        physx::shdfnd::Allocator().allocate(n, __FILE__, __LINE__)
@@ -89,10 +99,18 @@
 #elif defined(PX_X360)
     #include <malloc.h>
     #define PxAlloca(x) _alloca(x)
-#elif defined(PX_WII)
+#elif defined(PX_WIIU)
     #include <alloca.h>
     #define PxAlloca(x) alloca(x)
+#elif defined(PX_PS4)
+    #include <memory.h>
+    #define PxAlloca(x) alloca(x)
+#elif defined(PX_XBOXONE)
+	#include <malloc.h>
+	#define PxAlloca(x) alloca(x)
 #endif
+
+#define PxAllocaAligned(x, alignment) ((size_t(PxAlloca(x + alignment)) + (alignment - 1)) & ~size_t(alignment - 1))
 
 namespace physx
 {
@@ -154,11 +172,11 @@ namespace shdfnd
 	/**
 	Allocator used to access the global PxAllocatorCallback instance using a dynamic name.
 	*/
-#if defined(_DEBUG) || defined(PX_CHECKED) // see comment in cpp
+#if defined(PX_DEBUG) || defined(PX_CHECKED) // see comment in cpp
 	class PX_FOUNDATION_API NamedAllocator
 	{
 	public:
-		NamedAllocator(const PxEmpty&);
+		NamedAllocator(const PxEMPTY&);
 		NamedAllocator(const char* name = 0); // todo: should not have default argument!
 		NamedAllocator(const NamedAllocator&);
 		~NamedAllocator();
@@ -168,7 +186,7 @@ namespace shdfnd
 	};
 #else
 	class NamedAllocator;
-#endif // _DEBUG
+#endif // PX_DEBUG
 
 	/**
     Allocator used to access the global PxAllocatorCallback instance using a static name derived from T.
@@ -180,16 +198,15 @@ namespace shdfnd
 		{
 			if(!PxGetFoundation().getReportAllocationNames())
 				return "<allocation names disabled>";
-#if defined PX_GNUC
+#if defined(PX_GNUC) || defined(PX_GHS)
 			return __PRETTY_FUNCTION__;
 #else
 			// name() calls malloc(), raw_name() wouldn't
-			static const char* name = typeid(T).name();
-			return name;
+			return typeid(T).name();
 #endif
 		}
 	public:
-		ReflectionAllocator(const PxEmpty&)	{}
+		ReflectionAllocator(const PxEMPTY&)	{}
 		ReflectionAllocator(const char* =0) {}
 		inline ReflectionAllocator(const ReflectionAllocator& ) { }
 		void* allocate(size_t size, const char* filename, int line)
@@ -251,6 +268,8 @@ PX_INLINE void* operator new[](size_t size, physx::shdfnd::ReflectionAllocator<T
 template <typename T>
 PX_INLINE void  operator delete(void* ptr, physx::shdfnd::ReflectionAllocator<T> alloc, const char* fileName, typename physx::shdfnd::EnableIfPod<T, int>::Type line)
 {
+	PX_UNUSED(fileName);
+	PX_UNUSED(line);
 	alloc.deallocate(ptr);
 }
 
@@ -258,6 +277,8 @@ PX_INLINE void  operator delete(void* ptr, physx::shdfnd::ReflectionAllocator<T>
 template <typename T>
 PX_INLINE void  operator delete[](void* ptr, physx::shdfnd::ReflectionAllocator<T> alloc, const char* fileName, typename physx::shdfnd::EnableIfPod<T, int>::Type line)
 {
+	PX_UNUSED(fileName);
+	PX_UNUSED(line);
 	alloc.deallocate(ptr);
 }
 

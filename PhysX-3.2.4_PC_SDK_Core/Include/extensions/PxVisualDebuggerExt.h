@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -33,20 +33,22 @@
 /** \addtogroup extensions
   @{
 */
-
+#include "pvd/PxVisualDebugger.h"
 #include "foundation/Px.h"
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 #include "foundation/PxFlags.h"
+#include "physxvisualdebuggersdk/PvdConnectionManager.h"
+#include "physxvisualdebuggersdk/PvdConnection.h"
 
+
+#ifndef PX_DOXYGEN
 namespace physx { namespace debugger { namespace comm {
+#endif
 	class PvdConnectionManager;
 	class PvdConnection;
+#ifndef PX_DOXYGEN
 }}}
-
-namespace PVD {
-	using namespace physx::debugger;
-	using namespace physx::debugger::comm;
-}
+#endif
 
 #ifndef PX_DOXYGEN
 namespace physx
@@ -62,7 +64,6 @@ struct PxVisualDebuggerConnectionFlag
 {
 	enum Enum
 	{
-		Unknown = 0,
 		/**
 			\brief Send debugging information to PVD.  
 			
@@ -71,7 +72,7 @@ struct PxVisualDebuggerConnectionFlag
 			a noticeable impact on performance and thus this flag should not be set
 			if you want an accurate performance profile.
 		*/
-		Debug = 1, 
+		eDEBUG = 1 << 0, 
 		/**
 			\brief Send profile information to PVD.
 
@@ -83,7 +84,7 @@ struct PxVisualDebuggerConnectionFlag
 			profileZoneManager.  Using both of them together allows SDK to send profile
 			events to PVD.  
 		*/
-		Profile = 1 << 1,
+		ePROFILE = 1 << 1,
 		/**
 			\brief Send memory information to PVD.
 
@@ -94,7 +95,7 @@ struct PxVisualDebuggerConnectionFlag
 			impact and thus is also highly recommended.
 
 			This flag works together with a PxCreatePhysics parameter,
-			trackOustandingAllocations.  Using both of them together allows users to have
+			trackOutstandingAllocations.  Using both of them together allows users to have
 			an accurate view of the overall memory usage of the simulation at the cost of
 			a hashtable lookup per allocation/deallocation.  Again, PhysX makes a best effort
 			attempt not to allocate or deallocate during simulation so this hashtable lookup
@@ -104,12 +105,12 @@ struct PxVisualDebuggerConnectionFlag
 			PVD will accurate information about the state of the memory system before the 
 			actual connection happened.
 		*/
-		Memory = 1 << 2,
+		eMEMORY = 1 << 2
 	};
 };
 
 typedef physx::PxFlags<PxVisualDebuggerConnectionFlag::Enum, PxU32> PxVisualDebuggerConnectionFlags;
-PX_FLAGS_OPERATORS( PxVisualDebuggerConnectionFlag::Enum, PxU32 );
+PX_FLAGS_OPERATORS( PxVisualDebuggerConnectionFlag::Enum, PxU32 )
 
 /**
 class that contains all the data relevant for updating and visualizing extensions like joints in PVD
@@ -122,6 +123,9 @@ public:
 		Connect to pvd using a network socket.  This blocks for at most inTimeoutInMilliseconds
 		before returning a new connection (or nothing).  PVD needs to be started before this call
 		is made.
+
+		\note Since this call increment the reference count of PvdConnection,
+		please call PvdConnection::release() after this funtion is called. 
 		
 		\param inMgr The manager to use to host the connection.
 		\param inHost Host in x.x.x.x network notation
@@ -129,7 +133,7 @@ public:
 		\param inTimeoutInMilliseconds How long to block waiting for a new connection
 		\param inConnectionType The type information you want sent over the connection.
 	*/
-	static PVD::PvdConnection* createConnection( physx::debugger::comm::PvdConnectionManager* inMgr
+	static PxVisualDebuggerConnection* createConnection( PxVisualDebuggerConnectionManager* inMgr
 													, const char* inHost
 													, int inPort //defaults to 5425
 													, unsigned int inTimeoutInMilliseconds
@@ -139,26 +143,31 @@ public:
 	/**
 		Connect to pvd, writing out the connection data to a file stream.  You can then parse this data later
 		with PVDUI.
+
+		\note Since this call increment the reference count of PvdConnection,
+		please call PvdConnection::release() after this funtion is called. 
+
 		\param inMgr The manager to use to host the connection.
 		\param filename The filename to write connection data.
 		\param inConnectionType The type information you want sent over the connection.
 	*/
-	static PVD::PvdConnection* createConnection( physx::debugger::comm::PvdConnectionManager* inMgr
+	static PxVisualDebuggerConnection* createConnection( PxVisualDebuggerConnectionManager* inMgr
 													, const char* filename
 													, PxVisualDebuggerConnectionFlags inConnectionType = getDefaultConnectionFlags() );
+
 
 	/**	get the default connection flags
 
 	\return the default connection flags: debug data and profiling
 	*/
 
-	static PX_FORCE_INLINE PxVisualDebuggerConnectionFlags getDefaultConnectionFlags() { return PxVisualDebuggerConnectionFlags( PxVisualDebuggerConnectionFlag::Debug | PxVisualDebuggerConnectionFlag::Profile); }
+	static PX_FORCE_INLINE PxVisualDebuggerConnectionFlags getDefaultConnectionFlags() { return PxVisualDebuggerConnectionFlags( PxVisualDebuggerConnectionFlag::eDEBUG | PxVisualDebuggerConnectionFlag::ePROFILE); }
 	
 	/**	get all connection flags
 
 	\return all visual debugger connection flags: debug data, profiling and memory
 	*/
-	static PX_FORCE_INLINE PxVisualDebuggerConnectionFlags getAllConnectionFlags() { return PxVisualDebuggerConnectionFlags( PxVisualDebuggerConnectionFlag::Debug | PxVisualDebuggerConnectionFlag::Profile| PxVisualDebuggerConnectionFlag::Memory ); }
+	static PX_FORCE_INLINE PxVisualDebuggerConnectionFlags getAllConnectionFlags() { return PxVisualDebuggerConnectionFlags( PxVisualDebuggerConnectionFlag::eDEBUG | PxVisualDebuggerConnectionFlag::ePROFILE| PxVisualDebuggerConnectionFlag::eMEMORY ); }
 
 };
 

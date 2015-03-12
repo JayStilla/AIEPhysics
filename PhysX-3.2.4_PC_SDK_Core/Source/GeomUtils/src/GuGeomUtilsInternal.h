@@ -23,103 +23,48 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-
-#ifndef PX_PHYSICS_GEOMUTILS_PX_UTILITIES_INTERNAL
-#define PX_PHYSICS_GEOMUTILS_PX_UTILITIES_INTERNAL
+#ifndef GU_GEOM_UTILS_INTERNAL_H
+#define GU_GEOM_UTILS_INTERNAL_H
 
 #include "CmPhysXCommon.h"
-#include "PsFPU.h"
-#include "GuSphere.h"
-#include "PxTriangle.h"
 #include "PxBounds3.h"
-
-#include "PxPhysXGeomUtils.h"
-#include "PsVecMath.h"
-
-#include "PxTransform.h"
 #include "GuCapsule.h"
-#include "GuGeometryUnion.h"
-#include "PsVecTransform.h"
+#include "GuBox.h"
+#include "PxCapsuleGeometry.h"
+#include "PxBoxGeometry.h"
+#include "PsMathUtils.h"
+#include "PsUtilities.h"
+
+#define GU_EPSILON_SAME_DISTANCE 1e-3f
+#define GU_SAFE_DISTANCE_FOR_NORMAL_COMPUTATION 0.1f
 
 namespace physx
 {
-
-class PxCapsuleGeometry;
-class PxTriangleMeshGeometry;
-
-namespace Cm
-{
-	class Matrix34;
-}
-
 namespace Gu
 {
 	class Plane;
-	class PlaneV;
 	class Capsule;
-	class CapsuleV;
 	class Box;
-	class BoxV;
 	class Segment;
-	class SegmentV;      
 
-	PX_PHYSX_COMMON_API const PxF32*	getBoxVertexNormals();
-	PX_PHYSX_COMMON_API const PxU8*		getBoxTriangles();
-	PX_PHYSX_COMMON_API const PxVec3*	getBoxLocalEdgeNormals();
 	PX_PHYSX_COMMON_API const PxU8*		getBoxEdges();
 
 	PX_PHYSX_COMMON_API void			computeBoxPoints(const PxBounds3& bounds, PxVec3* PX_RESTRICT pts);
 	PX_PHYSX_COMMON_API void			computeBoundsAroundVertices(PxBounds3& bounds, PxU32 nbVerts, const PxVec3* PX_RESTRICT verts);
 
-	PX_PHYSX_COMMON_API void			computeBoxWorldEdgeNormal(const Box& box, PxU32 edge_index, PxVec3& world_normal);
-	PX_PHYSX_COMMON_API void			computeBoxAroundCapsule(const Capsule& capsule, Box& box);  //TODO: Refactor this one out in the future
-	PX_PHYSX_COMMON_API void			computeBoxAroundCapsule(const CapsuleV& capsule, BoxV& box);  //TODO: Refactor this one out in the future
-	PX_PHYSX_COMMON_API void			computeBoxAroundCapsule(const PxCapsuleGeometry& capsuleGeom, const PxTransform& capsulePose, Box& box);
+	PX_PHYSX_COMMON_API void			computeBoxAroundCapsule(const Capsule& capsule, Box& box);
+	PX_FORCE_INLINE		void			computePxBoxAroundCapsule(const PxCapsuleGeometry& capsuleGeom, PxBoxGeometry& box)
+	{
+		box.halfExtents = PxVec3(capsuleGeom.radius + (capsuleGeom.halfHeight), capsuleGeom.radius, capsuleGeom.radius);
+	}
 
-	PX_PHYSX_COMMON_API void			getSegment(Gu::Segment& segment, const PxCapsuleGeometry& capsuleGeom, const PxTransform& pose);
-	PX_PHYSX_COMMON_API void			getSegment(Gu::SegmentV& segment, const PxCapsuleGeometry& capsuleGeom, const PxTransform& pose);
-	PX_PHYSX_COMMON_API void			getCapsule(Gu::Capsule& capsule, const PxCapsuleGeometry& capsuleGeom, const PxTransform& pose);
 	PX_PHYSX_COMMON_API PxPlane			getPlane(const PxTransform& pose);
-	PX_PHYSX_COMMON_API Gu::PlaneV      getPlaneV(const PxTransform& pose);
 	PX_PHYSX_COMMON_API PxTransform		getCapsuleTransform(const Gu::Capsule& capsule, PxReal& halfHeight);
 
-	PX_INLINE void computeBasis(const PxVec3& dir, PxVec3& right, PxVec3& up)
-	{
-		// Derive two remaining vectors
-		if(dir.y>0.9999f)
-		{
-			right = PxVec3(1.0f, 0.0f, 0.0f);
-		}
-		else
-		{
-			right = (PxVec3(0.0f, 1.0f, 0.0f).cross(dir));
-			right.normalize();
-		}
-
-		up = dir.cross(right);
-	}
-
-	PX_INLINE void computeBasis(const PxVec3& p0, const PxVec3& p1, PxVec3& dir, PxVec3& right, PxVec3& up)
-	{
-		// Compute the new direction vector
-		dir = p1 - p0;
-		dir.normalize();
-
-		// Derive two remaining vectors
-		computeBasis(dir, right, up);
-	}
-
-	PX_FORCE_INLINE bool isAlmostZero(const PxVec3& v)
-	{
-		if(PxAbs(v.x)>1e-6 || PxAbs(v.y)>1e-6 || PxAbs(v.z)>1e-6) return false;
-		return true;
-	}
-
-	// TODO: This should move to a capsule shape specific class if we ever introduce that in the LL
 	PX_FORCE_INLINE void getCapsuleSegment(const PxTransform& transform, const PxCapsuleGeometry& capsuleGeom, Gu::Segment& segment)
 	{
 		const PxVec3 tmp = transform.q.getBasisVector0() * capsuleGeom.halfHeight;
@@ -127,41 +72,57 @@ namespace Gu
 		segment.p1 = transform.p - tmp;
 	}
 
-	PX_FORCE_INLINE void basisExtent(PxBounds3& dest, const PxVec3& center, const PxMat33& basis, const PxVec3& extent)
+	PX_FORCE_INLINE	void getCapsule(Gu::Capsule& capsule, const PxCapsuleGeometry& capsuleGeom, const PxTransform& pose)
 	{
-		// extended basis vectors
-		const PxVec3 c0 = basis.column0 * extent.x;
-		const PxVec3 c1 = basis.column1 * extent.y;
-		const PxVec3 c2 = basis.column2 * extent.z;
-
-		// find combination of base vectors that produces max. distance for each component = sum of abs()
-		const PxVec3 w(
-			PxAbs(c0.x) + PxAbs(c1.x) + PxAbs(c2.x),
-			PxAbs(c0.y) + PxAbs(c1.y) + PxAbs(c2.y),
-			PxAbs(c0.z) + PxAbs(c1.z) + PxAbs(c2.z));
-
-		dest = PxBounds3(center - w, center + w);
+		getCapsuleSegment(pose, capsuleGeom, capsule);
+		capsule.radius = capsuleGeom.radius;
 	}
 
-	PX_FORCE_INLINE void transformNoEmptyTest(PxBounds3& dest, const PxMat33& matrix, const PxBounds3& bounds)
+	// AP: common api prefix is needed for use in PxcSweepConvexMesh
+	PX_PHYSX_COMMON_API void computeSweptBox(
+		Gu::Box& box, const PxVec3& extents, const PxVec3& center, const PxMat33& rot, const PxVec3& unitDir, const PxReal distance);
+
+	/**
+	*	PT: computes "alignment value" used to select the "best" triangle in case of identical impact distances (for sweeps).
+	*	This simply computes how much a triangle is aligned with a given sweep direction.
+	*	Captured in a function to make sure it is always computed correctly, i.e. working for double-sided triangles.
+	*
+	*	\param		triNormal	[in] triangle's normal
+	*	\param		unitDir		[in] sweep direction (normalized)
+	*	\return		alignment value in [-1.0f, 0.0f]. -1.0f for fully aligned, 0.0f for fully orthogonal.
+	*/
+	PX_FORCE_INLINE PxReal computeAlignmentValue(const PxVec3& triNormal, const PxVec3& unitDir)
 	{
-		Gu::basisExtent(dest, matrix * bounds.getCenter(), matrix, bounds.getExtents());
+		// PT: initial dot product gives the angle between the two, with "best" triangles getting a +1 or -1 score
+		// depending on their winding. We take the absolute value to ignore the impact of winding. We negate the result
+		// to make the function compatible with the initial code, which assumed single-sided triangles and expected -1
+		// for best triangles.
+		return -PxAbs(triNormal.dot(unitDir));
 	}
 
-	PX_INLINE void computeBasis(const Ps::aos::Vec3VArg p0, const Ps::aos::Vec3VArg p1, Ps::aos::Vec3V& dir, Ps::aos::Vec3V& right, Ps::aos::Vec3V& up)
+	/**
+	*	PT: sweeps: determines if a newly touched triangle is "better" than best one so far.
+	*	In this context "better" means either clearly smaller impact distance, or a similar impact
+	*	distance but a normal more aligned with the sweep direction.
+	*
+	*	\param		triImpactDistance	[in] new triangle's impact distance
+	*	\param		triAlignmentValue	[in] new triangle's alignment value (as computed by computeAlignmentValue)
+	*	\param		bestImpactDistance	[in] current best triangle's impact distance
+	*	\param		bestAlignmentValue	[in] current best triangle's alignment value (as computed by computeAlignmentValue)
+	*	\param		distEpsilon			[in] tris have "similar" impact distances if the difference is smaller than 2*distEpsilon
+	*	\return		true if new triangle is better
+	*/
+	PX_FORCE_INLINE bool keepTriangle(	float triImpactDistance, float triAlignmentValue,
+										float bestImpactDistance, float bestAlignmentValue,
+										float distEpsilon)
 	{
-		//Need to test
-		using namespace Ps::aos;
-		// Compute the new direction vector
-		const FloatV eps = FloatV_From_F32(0.9999f);
-		const Vec3V v = V3Sub(p1, p0);
-		dir = V3Normalize(v);
-		const BoolV con = FIsGrtr(V3GetY(dir), eps);
-		const Vec3V w = V3Normalize(V3Cross(V3UnitY(), dir));
-		right = V3Sel(con, V3UnitX(), w);
-		up = V3Cross(dir, right);
-	}
+		// PT: make it a relative epsilon to make sure it still works with large distances
+		distEpsilon *= PxMax(1.0f, PxMax(triImpactDistance, bestImpactDistance));
 
+		// AP: if new distance is more than epsilon closer than old distance
+		// or if new distance is no more than epsilon farther than oldDistance and "face is more opposing than previous"
+		return (triImpactDistance < bestImpactDistance-distEpsilon || (triImpactDistance < bestImpactDistance+distEpsilon && triAlignmentValue < bestAlignmentValue));
+	}
 
 }  // namespace Gu
 

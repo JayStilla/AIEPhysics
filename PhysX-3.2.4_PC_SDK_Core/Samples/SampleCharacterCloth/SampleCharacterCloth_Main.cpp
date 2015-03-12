@@ -23,11 +23,11 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 
 #if PX_USE_CLOTH_API
 
@@ -36,6 +36,7 @@
 #include "SampleAllocatorSDKClasses.h"
 #include "SampleCharacterClothCameraController.h"
 #include "SampleCharacterClothInputEventIds.h"
+#include "SampleCharacterClothSettings.h"
 #include "SampleCharacterClothFlag.h"
 #include "SamplePlatform.h"
 
@@ -46,6 +47,10 @@
 #include "characterkinematic/PxControllerManager.h"
 #include "PxPhysicsAPI.h"
 
+#include "SampleCharacterClothInputEventIds.h"
+#include <SampleUserInputIds.h>
+#include <SampleUserInput.h>
+#include <SampleUserInputDefines.h>
 
 REGISTER_SAMPLE(SampleCharacterCloth, "SampleCharacterCloth")
 
@@ -55,21 +60,21 @@ using namespace PxToolkit;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-SampleCharacterCloth::SampleCharacterCloth(PhysXSampleApplication& app) :
-	PhysXSample				(app, 2),
+SampleCharacterCloth::SampleCharacterCloth(PhysXSampleApplication& app)
+	: PhysXSample				(app, 2)
+	, mCCTCamera				(NULL)
+	, mController				(NULL)
+	, mControllerManager		(NULL)
+	, mCCTDisplacement			(0.0f)
+	, mCCTDisplacementPrevStep	(0.0f)
+	, mCCTTimeStep				(0.0f)
+	, mCape                   	(NULL)
 #if PX_SUPPORT_GPU_PHYSX
-	mUseGPU                 (true),
+	, mUseGPU               	(true)
 #endif
-	mCCTCamera				(NULL),
-	mController             (NULL),
-	mControllerManager		(NULL),
-	mCCTDisplacement		(0.0f),
-	mCCTDisplacementPrevStep(0.0f),
-	mCCTTimeStep			(0.0f),
-	mCape                   (NULL)
 {
 	mCreateGroundPlane  = false;
-	mUseFixedStepper	= true;
+	//mStepperType = FIXED_STEPPER;
 	mControllerInitialPosition = PxVec3(0.0, 3.0f, 0.0);
 
 	mCCTActive = false;
@@ -88,9 +93,11 @@ SampleCharacterCloth::~SampleCharacterCloth()
 	SAMPLE_FREE(mTris);
 	SAMPLE_FREE(mVerts);
 
-	const size_t nbFlags = mFlags.size();
-	for(PxU32 i = 0;i < nbFlags;i++)
-		mFlags[i]->release();
+	const size_t nbPlatforms = mPlatforms.size();
+	for(PxU32 i = 0;i < nbPlatforms;i++)
+		mPlatforms[i]->release();
+
+//	releaseFlags();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -104,6 +111,7 @@ void SampleCharacterCloth::createRenderMaterials()
 	mSnowMaterial = SAMPLE_NEW(RenderMaterial)(*getRenderer(), PxVec3(0.70f, 0.70f, 0.8f), 1.0f, false, 0, NULL);
 	mRenderMaterials.push_back(mSnowMaterial);
 
+	mFlagMaterial = createRenderMaterialFromTextureFile("nvidia_flag_d.bmp");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -111,6 +119,52 @@ void SampleCharacterCloth::createRenderMaterials()
 void SampleCharacterCloth::customizeSample(SampleSetup& setup)
 {
 	setup.mName	= "SampleCharacterCloth";
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void SampleCharacterCloth::collectInputEvents(std::vector<const InputEvent*>& inputEvents)
+{
+	PhysXSample::collectInputEvents(inputEvents);
+	getApplication().getPlatform()->getSampleUserInput()->unregisterInputEvent(SPAWN_DEBUG_OBJECT);
+
+	//digital keyboard events
+	DIGITAL_INPUT_EVENT_DEF(RESET_SCENE,			WKEY_R,		XKEY_R,		X1KEY_R,	PS3KEY_R,	PS4KEY_R,	AKEY_UNKNOWN,	OSXKEY_R,	GAMEPAD_DIGI_LEFT,	IKEY_UNKNOWN,	LINUXKEY_R,	WIIUKEY_UNKNOWN);
+	DIGITAL_INPUT_EVENT_DEF(CHANGE_CLOTH_CONTENT,	WKEY_M,		XKEY_M,		X1KEY_M,	PS3KEY_M,	PS4KEY_M,	AKEY_UNKNOWN,	OSXKEY_M,	PSP2KEY_UNKNOWN,	IKEY_UNKNOWN,	LINUXKEY_M,	WIIUKEY_UNKNOWN);
+
+	//digital mouse events
+
+    //touch events
+    TOUCH_INPUT_EVENT_DEF(RESET_SCENE,		"Reset",			ABUTTON_5,		IBUTTON_5, TOUCH_BUTTON_5);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void SampleCharacterCloth::onDigitalInputEvent(const InputEvent& ie, bool val)
+{
+	if(val)
+	{
+		switch (ie.m_Id)
+		{
+		case RESET_SCENE:
+			{
+				resetScene();
+			}
+			break;
+		case CHANGE_CLOTH_CONTENT:
+			mClothFlagCountIndex = (mClothFlagCountIndex+1)% (mClothFlagCountIndexMax+1);
+			releaseFlags();
+			createFlags();
+			break;
+
+#if PX_SUPPORT_GPU_PHYSX
+		case TOGGLE_CPU_GPU:
+			toggleGPU();
+			return;
+			break;
+#endif
+		}
+	}
+
+	PhysXSample::onDigitalInputEvent(ie,val);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -149,6 +203,10 @@ void SampleCharacterCloth::helpRender(PxU32 x, PxU32 y, PxU8 textAlpha)
 		renderer->print(x, y += yInc, msg,scale, shadowOffset, textColor);
 
 	msg = mApplication.inputInfoMsg("Press "," to reset scene", RESET_SCENE, -1);
+	if(msg)
+		renderer->print(x, y += yInc, msg,scale, shadowOffset, textColor);
+
+	msg = mApplication.inputInfoMsg("Press "," to change flag count", CHANGE_CLOTH_CONTENT,-1);
 	if(msg)
 		renderer->print(x, y += yInc, msg,scale, shadowOffset, textColor);
 
@@ -203,41 +261,62 @@ void SampleCharacterCloth::customizeRender()
 #if PX_SUPPORT_GPU_PHYSX
 	SampleRenderer::Renderer* renderer = getRenderer();
 
-	const PxU32 yInc = 18;
+	const PxU32 yInc = 20;
 	const PxReal scale = 0.5f;
 	const PxReal shadowOffset = 6.0f;
 	PxU32 width, height;
 	renderer->getWindowSize(width, height);
 
 	PxU32 y = height-2*yInc;
-	PxU32 x = width - 240;
+	PxU32 x = width - 360;
 
 	{
 		const RendererColor textColor(255, 0, 0, 255);
-		renderer->print(x, y, mUseGPU ? "Running on GPU" : "Running on CPU", scale, shadowOffset, textColor);
+		const char* message[4] = { "Flag count: Moderate", "Flag count: Medium", "Flag count: High", "Flag count: Very High" };
+		renderer->print(x, y, message[mClothFlagCountIndex], scale, shadowOffset, textColor);
 	}
-#endif
 
+	{
+		y -= yInc;
+		const RendererColor textColor(255, 0, 0, 255);
+
+		const char* deviceName = (mUseGPU)?getActiveScene().getTaskManager()->getGpuDispatcher()->getCudaContextManager()->getDeviceName():"";
+		char buf[2048];
+		sprintf(buf, (mUseGPU)?"Running on GPU (%s)":"Running on CPU %s", deviceName);
+
+		renderer->print(x, y, buf, scale, shadowOffset, textColor);
+	}
+
+	{
+		y -= yInc;
+
+		char fpsText[512];
+		sprintf(fpsText, "Average PhysX time: %3.3f ms", 1000.0f * mAverageSimulationTime);
+	
+		const RendererColor textColor(255, 255, 255, 255);
+		renderer->print(x, y, fpsText, scale, shadowOffset, textColor);	
+	}
+
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 void SampleCharacterCloth::onInit()
 {
-#if defined(PX_PS3)
-	mNbThreads = 1;
-#elif defined(PX_APPLE_IOS)
-	mNbThreads = 2;
-#else
-	mNbThreads = 3;
-#endif
-	
+	mNbThreads = PxMax(PxI32(shdfnd::Thread::getNbPhysicalCores())-1, 0);
+
 	// try to get gpu support
 	mCreateCudaCtxManager = true;
 
 	PhysXSample::onInit();
 
+	PxSceneWriteLock scopedLock(*mScene);
+
 	mApplication.setMouseCursorHiding(true);
 	mApplication.setMouseCursorRecentering(true);
+
+	mClothFlagCountIndex = 0;
+	mClothFlagCountIndexMax = 3;
 
 	// create materials and render setup
 	createRenderMaterials();
@@ -259,11 +338,16 @@ void SampleCharacterCloth::onInit()
 	
 	// reset scene
 	resetScene();
+
+	// apply global physx settings
+	getActiveScene().setGravity(PxVec3(0,-10.0f,0));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 void SampleCharacterCloth::resetScene()
 {	
+	PxSceneWriteLock scopedLock(*mScene);
+
 	// reset cct 
 	PxVec3 pos = mControllerInitialPosition;
 	mController->setPosition(PxExtendedVec3(pos.x, pos.y, pos.z));
@@ -278,15 +362,28 @@ void SampleCharacterCloth::resetScene()
 	resetCharacter();
 	resetCape();
 
+	// reset platforms
+	const size_t nbPlatforms = mPlatforms.size();
+	for(PxU32 i = 0;i < nbPlatforms;i++)
+		mPlatforms[i]->reset();
+
 	// reset camera
 	mCCTCamera->setView(0.0f, 0.0f);
+
+	// reset stats
+	mFrameCount = 0;
+	mAccumulatedSimulationTime = 0.0f;
+	mAverageSimulationTime = 0.0f;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 void SampleCharacterCloth::onShutdown()
 {
-	DELETESINGLE(mCCTCamera);
-	SAFE_RELEASE(mControllerManager);
+	{
+		PxSceneWriteLock scopedLock(*mScene);
+		DELETESINGLE(mCCTCamera);
+		SAFE_RELEASE(mControllerManager);
+	}
 	PhysXSample::onShutdown();
 }
 
@@ -300,6 +397,9 @@ void SampleCharacterCloth::onTickPreRender(float dtime)
 // called after each substep is done (can be called more than once per frame)
 void SampleCharacterCloth::onSubstep(float dtime)
 {
+	PxSceneWriteLock scopedLock(*mScene);
+
+	updatePlatforms(dtime);
 	updateCCT(dtime);
 	updateCharacter(dtime);
 	updateCape(dtime);
@@ -315,32 +415,23 @@ void SampleCharacterCloth::onSubstep(float dtime)
 void SampleCharacterCloth::onTickPostRender(float dtime)
 {
 	PhysXSample::onTickPostRender(dtime);
+
+	mFrameCount++;
+	mAccumulatedSimulationTime += getSimulationTime();
+	PxReal delta = PxReal(mTimer.peekElapsedSeconds());
+	if (delta > 1.0f)
+	{
+		mAverageSimulationTime = mAccumulatedSimulationTime / PxReal(mFrameCount);
+		mFrameCount = 0;
+		mAccumulatedSimulationTime = 0.0f;
+		mTimer.getElapsedSeconds();
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 void SampleCharacterCloth::onPointerInputEvent(const SampleFramework::InputEvent& ie, physx::PxU32 x, physx::PxU32 y, physx::PxReal dx, physx::PxReal dy, bool val)
 {
 	PhysXSample::onPointerInputEvent(ie,x,y,dx,dy,val);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-static PxFilterFlags filter(PxFilterObjectAttributes attributes0,
-							PxFilterData filterData0, 
-							PxFilterObjectAttributes attributes1,
-							PxFilterData filterData1,
-							PxPairFlags& pairFlags,
-							const void* constantBlock,
-							PxU32 constantBlockSize)
-{
-	pairFlags |= PxPairFlag::eCONTACT_DEFAULT;
-	return PxFilterFlags();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-void SampleCharacterCloth::customizeSceneDesc(PxSceneDesc& sceneDesc)
-{
-	sceneDesc.gravity		= PxVec3(0,-9.81,0);
-	sceneDesc.filterShader	= filter;
 }
 
 #endif // PX_USE_CLOTH_API

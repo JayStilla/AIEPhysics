@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -31,9 +31,10 @@
 #define RENDER_BASE_ACTOR_H
 
 #include "RendererMeshContext.h"
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "RenderBaseObject.h"
 #include "geometry/PxMeshScale.h"
+#include "foundation/PxBounds3.h"
 
 namespace SampleRenderer
 {
@@ -45,6 +46,7 @@ namespace SampleRenderer
 namespace physx
 {
 	class PxShape;
+	class PxRigidActor;
 	class PxRigidDynamic;
 	class PxArticulationLink;
 	class PxMeshScale;
@@ -65,17 +67,19 @@ namespace physx
 
 		PX_FORCE_INLINE	void									setTransform(const PxTransform& tr)		{ mTransform = tr; updateScale(); }
 		PX_FORCE_INLINE	void									setMeshScale(const PxMeshScale& scaling){ mScaling = scaling; updateScale(); }
-						void									setPhysicsShape(PxShape*);
+						void									setPhysicsShape(PxShape* shape, PxRigidActor* actor);
 						void									setRenderMaterial(RenderMaterial*);
 
 		PX_FORCE_INLINE	const PxTransform&						getTransform()		const	{ return mTransform;		}
 		PX_FORCE_INLINE	PxShape*								getPhysicsShape()	const	{ return mPhysicsShape;		}
+		PX_FORCE_INLINE	PxRigidActor*							getPhysicsActor()	const	{ return mPhysicsActor;		}
 		PX_FORCE_INLINE	SampleRenderer::RendererShape*			getRenderShape()			{ return mRendererShape;	}
 		PX_FORCE_INLINE	SampleRenderer::RendererShape*			getRenderShape()	const	{ return mRendererShape;	}
 		PX_FORCE_INLINE	RenderMaterial*							getRenderMaterial()			{ return mMaterial;			}
 		PX_FORCE_INLINE	RenderMaterial*							getRenderMaterial()	const	{ return mMaterial;			}
 
 						PxBounds3								getWorldBounds()	const;
+						void									setWorldBounds(const PxBounds3& bounds);
 
 		PX_FORCE_INLINE	void									setRaycastCCD(bool flag)					{ mEnableCCD = flag;			}
 		PX_FORCE_INLINE	void									setCCDWitnessOffset(const PxVec3& offset)	{ mCCDWitnessOffset = offset;	}
@@ -85,19 +89,23 @@ namespace physx
 		PX_FORCE_INLINE	void									setEnableDebugRender(bool flag)				{ mEnableDebugRender = flag;	}
 		PX_FORCE_INLINE bool                                    getEnableDebugRender()				const	{ return mEnableDebugRender;	}
 
+		PX_FORCE_INLINE	void									setEnableCameraCull(bool flag)				{ mEnableCameraCull = flag;	}
+		PX_FORCE_INLINE bool                                    getEnableCameraCull()				const	{ return mEnableCameraCull;	}
 
 		private:
 						SampleRenderer::RendererShape*			mRendererShape;
 						PxMeshScale								mScaling;
 						PxTransform								mTransform;
+						PxBounds3								mWorldBounds;
 
 		protected:
 
 						SampleRenderer::RendererMeshContext		mRendererMeshContext;
 						PxMat44									mScaledTransform;
 						PxQuat									mPhysicsToGraphicsRot;
-						
+
 						PxShape*								mPhysicsShape;
+						PxRigidActor*							mPhysicsActor;
 						PxRigidDynamic*							mDynamicActor;
 						PxArticulationLink*						mArticulationLink;
 						RenderMaterial*							mMaterial;
@@ -107,6 +115,7 @@ namespace physx
 						bool									mEnableCCD;
 						bool									mEnableRender;
 						bool                                    mEnableDebugRender;
+						bool									mEnableCameraCull;
 		protected:
 						void									setRenderShape(SampleRenderer::RendererShape*);
 						void									deleteRenderShape();

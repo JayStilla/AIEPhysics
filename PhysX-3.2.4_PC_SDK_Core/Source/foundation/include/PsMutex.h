@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,7 +32,6 @@
 #define PX_FOUNDATION_PSMUTEX_H
 
 #include "PsAllocator.h"
-#include "PsNoCopy.h"
 
 /*
  * This <new> inclusion is a best known fix for gcc 4.4.1 error:
@@ -69,7 +68,7 @@ namespace shdfnd
         by another thread, this method blocks until the mutex is
         unlocked.
         */
-        bool lock();
+        void lock();
 
         /**
         Acquire (lock) the mutex. If the mutex is already locked
@@ -80,7 +79,7 @@ namespace shdfnd
         /**
         Release (unlock) the mutex.
         */
-        bool unlock();
+        void unlock();
 
         /**
         Size of this class.
@@ -91,11 +90,13 @@ namespace shdfnd
 	template <typename Alloc = ReflectionAllocator<MutexImpl> >
 	class MutexT : protected Alloc
 	{
+		PX_NOCOPY(MutexT)
 	public:
 
-		class ScopedLock : private NoCopy
+		class ScopedLock
 		{
 			MutexT<Alloc>& mMutex;
+			PX_NOCOPY(ScopedLock)
 		public:
 			PX_INLINE	ScopedLock(MutexT<Alloc> &mutex): mMutex(mutex) { mMutex.lock(); }
 			PX_INLINE	~ScopedLock() { mMutex.unlock(); }
@@ -125,27 +126,31 @@ namespace shdfnd
 		by another thread, this method blocks until the mutex is
 		unlocked.
 		*/
-		bool lock()		const	{ return mImpl->lock(); }
+		void lock()		const	{ mImpl->lock(); }
 
 		/**
 		Acquire (lock) the mutex. If the mutex is already locked
-		by another thread, this method returns false without blocking.
+		by another thread, this method returns false without blocking,
+		returns true if lock is successfully acquired
 		*/
 		bool trylock()	const	{ return mImpl->trylock(); }
 
 		/**
-		Release (unlock) the mutex.
+		Release (unlock) the mutex, the calling thread must have 
+		previously called lock() or method will error
 		*/
-		bool unlock()	const	{ return mImpl->unlock(); }
+		void unlock()	const	{ mImpl->unlock(); }
 
 	private:
 		MutexImpl* mImpl;
 	};
 
-    class PX_FOUNDATION_API ReadWriteLock : private NoCopy
+    class PX_FOUNDATION_API ReadWriteLock
     {
+		PX_NOCOPY(ReadWriteLock)
     public:
-        ReadWriteLock();
+
+		ReadWriteLock();
         ~ReadWriteLock();
 
         void lockReader();
@@ -158,8 +163,9 @@ namespace shdfnd
         class ReadWriteLockImpl*    mImpl;
     };
 
-	class ScopedReadLock : private NoCopy
+	class ScopedReadLock
 	{
+		PX_NOCOPY(ScopedReadLock)
 	public:
 		PX_INLINE	ScopedReadLock(ReadWriteLock& lock): mLock(lock)	{			mLock.lockReader(); 	}
 		PX_INLINE	~ScopedReadLock()									{			mLock.unlockReader();	}
@@ -168,8 +174,9 @@ namespace shdfnd
 		ReadWriteLock& mLock;
 	};
 
-	class ScopedWriteLock : private NoCopy
+	class ScopedWriteLock
 	{
+		PX_NOCOPY(ScopedWriteLock)
 	public:
 		PX_INLINE	ScopedWriteLock(ReadWriteLock& lock): mLock(lock)	{		mLock.lockWriter(); 	}
 		PX_INLINE	~ScopedWriteLock()									{		mLock.unlockWriter();	}
@@ -185,9 +192,10 @@ namespace shdfnd
 	 * On non-PS3 platforms, it is implemented using Mutex
 	 */
 #ifndef PX_PS3
-	class AtomicLock : private NoCopy
+	class AtomicLock
 	{
 		Mutex mMutex;
+		PX_NOCOPY(AtomicLock)
 
 	public:
 		AtomicLock()
@@ -196,7 +204,8 @@ namespace shdfnd
 
 		bool lock()
 		{
-			return mMutex.lock();
+			mMutex.lock();
+			return true;
 		}
 
 		bool trylock()
@@ -206,7 +215,8 @@ namespace shdfnd
 
 		bool unlock()
 		{
-			return mMutex.unlock();
+			mMutex.unlock();
+			return true;
 		}
 	};
 
@@ -250,7 +260,7 @@ namespace shdfnd
 
 		AtomicLockImpl();
 	};
-	class AtomicLock //: private NoCopy
+	class AtomicLock
 	{
 		friend class AtomicLockCopy;
 		AtomicLockImpl* m_pImpl;
@@ -305,9 +315,10 @@ public:
 
 #ifndef PX_PS3
 
-	class AtomicRwLock : private NoCopy
+	class AtomicRwLock
 	{
 		ReadWriteLock m_Lock;
+		PX_NOCOPY(AtomicRwLock)
 
 	public:
 
@@ -352,8 +363,9 @@ public:
 		AtomicRwLockImpl();
 	};
 
-	class AtomicRwLock : private NoCopy
+	class AtomicRwLock
 	{
+		PX_NOCOPY(AtomicRwLock)
 		AtomicRwLockImpl* m_pImpl;
 	public:
 
@@ -374,11 +386,12 @@ public:
 
 #endif
 
-	class ScopedAtomicLock : private NoCopy
+	class ScopedAtomicLock
 	{
 		PX_INLINE	ScopedAtomicLock(AtomicLock& lock): mLock(lock)	{			mLock.lock(); 	}
 		PX_INLINE	~ScopedAtomicLock()								{			mLock.unlock();	}
 
+		PX_NOCOPY(ScopedAtomicLock)
 	private:
 		AtomicLock& mLock;
 	};

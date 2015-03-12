@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 #ifndef __ODBLOCK_H__
@@ -83,8 +83,9 @@ SHIPFILE
 		}
 	}
 */
-#include "SampleArray.h"
 #include <stdio.h>
+#include "FrameworkFoundation.h"
+#include "SampleArray.h"
 
 #define OD_MAXID 30								//max identifier length
 class ODBlock; 
@@ -106,7 +107,7 @@ class ODBlock
 		private:
 		Error err;
 		public:
-		ODSyntaxError(Error e) {err = e;};
+		ODSyntaxError(Error e) {err = e;}
 		const char * asString();
 		};
 	enum State {WAIT_IDENT,IDENT,WAIT_BLOCK,BLOCK};
@@ -120,8 +121,8 @@ class ODBlock
 	public:
 	ODBlock();									//create a new one
 	~ODBlock();
-	bool loadScript(FILE * fp);
-	bool saveScript(FILE * writeP, bool bQuote);//saves this block to scipt file.  set bQuote == true if you want to machine parse output.
+	bool loadScript(SampleFramework::File* fp);
+	bool saveScript(SampleFramework::File* writeP, bool bQuote);//saves this block to scipt file.  set bQuote == true if you want to machine parse output.
 
 	//reading:
 	const char * ident();
@@ -146,15 +147,17 @@ class ODBlock
 	ODBlock * nextSubBlock();					//returns a pointer to the next sub block.  
 
 	// hig level macro functs, return true on success: (call for obj containing:)
-	bool getBlockInt(const char * ident, int * p = 0);		//reads blocks of form:		ident{ 123;}
-	bool getBlockU32(const char * ident, physx::PxU32 * p = 0);		//reads blocks of form:		ident{ 123;}
-	bool getBlockString(const char * ident, const char **);		//of form:				ident{abcdef;}
-	bool getBlockStrings(const char * ident, const char **, unsigned  numStrings);		//of form:				ident{abcdef; abcdef; ...}
-	bool getBlockFloat(const char * ident, float * p = 0);		//of form:				ident{123.456;}
-	bool getBlockFloats(const char * ident, float *, unsigned  numfloats);//form:		ident{12.3; 12.3; 12.3; ... };
+	bool getBlockInt(const char * ident, int* p = 0, unsigned count = 1);	//reads blocks of form:		ident{ 123;}
+	bool getBlockU32(const char * ident, physx::PxU32* p = 0, unsigned count = 1);		//reads blocks of form:		ident{ 123;}
 
-	bool addBlockFloats(const char * ident, float *, unsigned  numfloats);
-	bool addBlockInts(const char * ident, int *, unsigned  numInts);
+	bool getBlockString(const char * ident, const char **);		//of form:				ident{abcdef;}
+	bool getBlockStrings(const char * ident, const char **, unsigned  count);		//of form:				ident{abcdef; abcdef; ...}
+
+	bool getBlockFloat(const char * ident, float * p = 0);		//of form:				ident{123.456;}
+	bool getBlockFloats(const char * ident, float *, unsigned  count);//form:		ident{12.3; 12.3; 12.3; ... };
+
+	bool addBlockFloats(const char * ident, float *, unsigned  count);
+	bool addBlockInts(const char * ident, int *, unsigned  count);
 
 	//errors
 	static const char * lastError;

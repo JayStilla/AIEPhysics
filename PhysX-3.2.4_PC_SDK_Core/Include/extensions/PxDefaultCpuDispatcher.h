@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,7 @@
   @{
 */
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "pxtask/PxCpuDispatcher.h"
 
 #ifndef PX_DOXYGEN
@@ -45,10 +45,9 @@ namespace physx
 /**
 \brief A default implementation for a CPU task dispatcher.
 
-@see physx::pxtask::CpuDispatcher
+@see PxDefaultCpuDispatcherCreate() PxCpuDispatcher
 */
-
-class PxDefaultCpuDispatcher: public physx::pxtask::CpuDispatcher
+class PxDefaultCpuDispatcher: public physx::PxCpuDispatcher
 {
 public:
 	/**
@@ -59,6 +58,22 @@ public:
 	@see PxDefaultCpuDispatcherCreate()
 	*/
 	virtual void release() = 0;
+
+	/**
+	\brief Enables profiling at task level.
+
+	\note By default enabled only in profiling builds.
+	
+	\param[in] runProfiled True if tasks should be profiled.
+	*/
+	virtual void setRunProfiled(bool runProfiled) = 0;
+
+	/**
+	\brief Checks if profiling is enabled at task level.
+
+	\return True if tasks should be profiled.
+	*/
+	virtual bool getRunProfiled() const = 0;
 };
 
 
@@ -67,6 +82,9 @@ public:
 
 \param[in] numThreads Number of worker threads the dispatcher should use.
 \param[in] affinityMasks Array with affinity mask for each thread. If not defined, default masks will be used.
+
+\note numThreads may be zero in which case no worker thread are initialized and
+simulation tasks will be executed on the thread that calls PxScene::simulate()
 
 @see PxDefaultCpuDispatcher
 */

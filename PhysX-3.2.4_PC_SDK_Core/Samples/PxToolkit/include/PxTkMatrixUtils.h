@@ -23,22 +23,26 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #ifndef PX_TOOLKIT_MATRIX_UTILS_H
 #define PX_TOOLKIT_MATRIX_UTILS_H
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "foundation/PxMat33.h"
 
 namespace PxToolkit
 {
 	using namespace physx;
-	void setRotX(PxMat33& m, PxReal angle);
-	void setRotY(PxMat33& m, PxReal angle);
-	void setRotZ(PxMat33& m, PxReal angle);
+	void	setRotX(PxMat33& m, PxReal angle);
+	void	setRotY(PxMat33& m, PxReal angle);
+	void	setRotZ(PxMat33& m, PxReal angle);
+
+	PxQuat	getRotXQuat(float angle);
+	PxQuat	getRotYQuat(float angle);
+	PxQuat	getRotZQuat(float angle);
 }
 
 #endif

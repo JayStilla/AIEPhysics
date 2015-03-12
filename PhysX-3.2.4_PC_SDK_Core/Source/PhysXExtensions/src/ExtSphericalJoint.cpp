@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -33,10 +33,11 @@
 #include "CmConeLimitHelper.h"
 #include "CmRenderOutput.h"
 #include "CmVisualization.h"
-#include "CmSerialAlignment.h"
+
 #ifdef PX_PS3
 #include "PS3/ExtSphericalJointSpu.h"
 #endif
+#include "common/PxSerialFramework.h"
 
 using namespace physx;
 using namespace Ext;
@@ -55,9 +56,10 @@ PxSphericalJoint* physx::PxSphericalJointCreate(PxPhysics& physics,
 	PX_CHECK_AND_RETURN_NULL(localFrame0.isSane(), "PxSphericalJointCreate: local frame 0 is not a valid transform"); 
 	PX_CHECK_AND_RETURN_NULL(localFrame1.isSane(), "PxSphericalJointCreate: local frame 1 is not a valid transform"); 
 	PX_CHECK_AND_RETURN_NULL(actor0 != actor1, "PxSphericalJointCreate: actors must be different");
-	PX_CHECK_AND_RETURN_NULL(actor0 && actor0->is<PxRigidBody>() || actor1 && actor1->is<PxRigidBody>(), "PxSphericalJointCreate: at least one actor must be dynamic");
+	PX_CHECK_AND_RETURN_NULL((actor0 && actor0->is<PxRigidBody>()) || (actor1 && actor1->is<PxRigidBody>()), "PxSphericalJointCreate: at least one actor must be dynamic");
 
-	SphericalJoint* j = PX_NEW(SphericalJoint)(physics.getTolerancesScale(), actor0, localFrame0, actor1, localFrame1);
+	SphericalJoint* j;
+	PX_NEW_SERIALIZED(j,SphericalJoint)(physics.getTolerancesScale(), actor0, localFrame0, actor1, localFrame1);
 
 	if(j->attach(physics, actor0, actor1))
 		return j;
@@ -68,7 +70,7 @@ PxSphericalJoint* physx::PxSphericalJointCreate(PxPhysics& physics,
 
 void SphericalJoint::setProjectionLinearTolerance(PxReal tolerance)
 {	
-	PX_CHECK_AND_RETURN(PxIsFinite(tolerance), "PxSphericalJoint::setProjectionLinearTolerance: invalid parameter");
+	PX_CHECK_AND_RETURN(PxIsFinite(tolerance) && tolerance >=0, "PxSphericalJoint::setProjectionLinearTolerance: invalid parameter");
 	data().projectionLinearTolerance = tolerance;
 	markDirty(); 
 }
@@ -82,6 +84,7 @@ void SphericalJoint::setLimitCone(const PxJointLimitCone &limit)
 {	
 	PX_CHECK_AND_RETURN(limit.isValid(), "PxSphericalJoint::setLimit: invalid parameter");
 	data().limit = limit; 
+	markDirty();
 }
 
 PxJointLimitCone SphericalJoint::getLimitCone() const
@@ -128,7 +131,7 @@ void SphericalJointVisualize(PxConstraintVisualizer& viz,
 							 const void* constantBlock,
 							 const PxTransform& body0Transform,
 							 const PxTransform& body1Transform,
-							 PxU32 flags)
+							 PxU32 /*flags*/)
 {
 	using namespace joint;
 	const SphericalJointData& data = *reinterpret_cast<const SphericalJointData*>(constantBlock);
@@ -150,7 +153,7 @@ void SphericalJointVisualize(PxConstraintVisualizer& viz,
 
 		PxVec3 tanQSwing = PxVec3(0, Ps::tanHalf(swing.z,swing.w), -Ps::tanHalf(swing.y,swing.w));
 		Cm::ConeLimitHelper coneHelper(data.tanQZLimit, data.tanQYLimit, data.tanQPad);
-		viz.visualizeLimitCone(cA2w, data.tanQZLimit, data.tanQYLimit, 
+		viz.visualizeLimitCone(cB2w, data.tanQZLimit, data.tanQYLimit, 
 			!coneHelper.contains(tanQSwing));
 	}
 }
@@ -187,39 +190,36 @@ bool Ext::SphericalJoint::attach(PxPhysics &physics, PxRigidActor* actor0, PxRig
 	return mPxConstraint!=NULL;
 }
 
-
-// PX_SERIALIZATION
-BEGIN_FIELDS(SphericalJoint)
-//	DEFINE_STATIC_ARRAY(SphericalJoint, mData, PxField::eBYTE, sizeof(SphericalJointData), Ps::F_SERIALIZE),
-END_FIELDS(SphericalJoint)
-
-void SphericalJoint::exportExtraData(PxSerialStream& stream)
+void SphericalJoint::exportExtraData(PxSerializationContext& stream)
 {
 	if(mData)
 	{
-		Cm::alignStream(stream, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-		stream.storeBuffer(mData, sizeof(SphericalJointData));
+		stream.alignData(PX_SERIAL_ALIGN);
+		stream.writeData(mData, sizeof(SphericalJointData));
 	}
+	stream.writeName(mName);
 }
 
-char* SphericalJoint::importExtraData(char* address, PxU32& totalPadding)
+void SphericalJoint::importExtraData(PxDeserializationContext& context)
 {
 	if(mData)
-	{
-		address = Cm::alignStream(address, totalPadding, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-		mData = reinterpret_cast<SphericalJointData*>(address);
-		address += sizeof(SphericalJointData);
-	}
-	return address;
+		mData = context.readExtraData<SphericalJointData, PX_SERIAL_ALIGN>();
+	context.readName(mName);
 }
 
-bool SphericalJoint::resolvePointers(PxRefResolver& v, void* context)
+void SphericalJoint::resolveReferences(PxDeserializationContext& context)
 {
-	SphericalJointT::resolvePointers(v, context);
-	setPxConstraint(resolveConstraintPtr(v, getPxConstraint(), getConnector(), sShaders));
-	return true;
+	setPxConstraint(resolveConstraintPtr(context, getPxConstraint(), getConnector(), sShaders));	
 }
 
+SphericalJoint* SphericalJoint::createObject(PxU8*& address, PxDeserializationContext& context)
+{
+	SphericalJoint* obj = new (address) SphericalJoint(PxBaseFlag::eIS_RELEASABLE);
+	address += sizeof(SphericalJoint);	
+	obj->importExtraData(context);
+	obj->resolveReferences(context);
+	return obj;
+}
 //~PX_SERIALIZATION
 
 #ifdef PX_PS3

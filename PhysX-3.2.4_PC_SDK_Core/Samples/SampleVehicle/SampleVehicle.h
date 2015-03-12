@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -38,6 +38,9 @@
 #include "SampleVehicle_VehicleManager.h"
 #include "SampleVehicle_GameLogic.h"
 #include "vehicle/PxVehicleTireFriction.h"
+
+//#define SERIALIZE_VEHICLE_RPEX		
+#define SERIALIZE_VEHICLE_BINARY	
 
 class SampleVehicle : public PhysXSample
 {
@@ -57,12 +60,13 @@ public:
 
 	// Implements SampleApplication
 	virtual	void							onInit();
+    virtual	void						    onInit(bool restart) { onInit(); }
 	virtual	void							onShutdown();
 
 	virtual	void							onTickPreRender(PxF32 dtime);
 	virtual	void							onTickPostRender(PxF32 dtime);
 
-	virtual bool							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);
+	virtual void							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);
 	virtual void							onAnalogInputEvent(const SampleFramework::InputEvent& , float val);
 
 	///////////////////////////////////////////////////////////////////////////////
@@ -101,7 +105,8 @@ private:
 
 	PxVehicleDrivableSurfaceType	mVehicleDrivableSurfaceTypes[MAX_NUM_INDEX_BUFFERS];
 	PxMaterial*						mStandardMaterials[MAX_NUM_INDEX_BUFFERS];
-	PxMaterial*						mChassisMaterial;
+	PxMaterial*						mChassisMaterialDrivable;
+	PxMaterial*						mChassisMaterialNonDrivable;
 
 
 	RenderMaterial*					mTerrainMaterial;
@@ -111,13 +116,24 @@ private:
 
 	void							createStandardMaterials();
 
+	enum eFocusVehicleType
+	{
+		ePLAYER_VEHICLE_TYPE_VEHICLE4W=0,
+		ePLAYER_VEHICLE_TYPE_VEHICLE6W,
+		ePLAYER_VEHICLE_TYPE_TANK4W,
+		ePLAYER_VEHICLE_TYPE_TANK6W,
+		eMAX_NUM_FOCUS_VEHICLE_TYPES
+	};
+
 	// Vehicles
 	SampleVehicle_VehicleManager	mVehicleManager;
 	std::vector<RenderMeshActor*>	mVehicleGraphics;
 	PxU32							mPlayerVehicle;
+	eFocusVehicleType				mPlayerVehicleType;
+	PxVehicleDriveTankControlModel::Enum mTankDriveModel;
 
+	const char*						getFocusVehicleName();
 	void							createVehicles();
-
 
 	PxU32							mTerrainSize;
 	PxF32							mTerrainWidth;
@@ -146,6 +162,7 @@ private:
 	PxU32							mDebugRenderActiveGraphChannelWheel;
 	PxU32							mDebugRenderActiveGraphChannelEngine;
 	PxVehicleTelemetryData*			mTelemetryData4W;
+	PxVehicleTelemetryData*			mTelemetryData6W;
 #endif
 	void							setupTelemetryData();
 	void							clearTelemetryData();
@@ -153,7 +170,7 @@ private:
 	void							drawWheels();
 	void							drawVehicleDebug();
 	void							drawHud();
-	void							drawGraphsAndPrintTireSurfaceTypes(const PxVehicleWheels& focusVehicle);
+	void							drawGraphsAndPrintTireSurfaceTypes(const PxVehicleWheels& focusVehicle, const PxVehicleWheelQueryResult& focusVehicleWheelQueryResults);
 	void							drawFocusVehicleGraphsAndPrintTireSurfaces();
 
 	//Waypoints
@@ -161,7 +178,15 @@ private:
 	bool							mFixCar;
 	bool							mBackToStart;
 
-	PxF32							mForwardSpeedHud;
+	//3W and 4W modes
+	bool							m3WModeIncremented;
+	PxU32							m3WMode;
+
+	PxF32							mForwardSpeedHud;	
+
+#if defined(SERIALIZE_VEHICLE_BINARY)
+	void*							mMemory;
+#endif
 
 	void							updateCameraController(const PxF32 dtime, PxScene& scene);
 	void							updateVehicleController(const PxF32 dtime);
@@ -170,6 +195,7 @@ private:
 	void							resetFocusVehicleAtWaypoint();
 	PxRigidDynamic*					getFocusVehicleRigidDynamicActor();
 	bool							getFocusVehicleUsesAutoGears();
+	char							mVehicleFilePath[256];
 };
 
 #endif

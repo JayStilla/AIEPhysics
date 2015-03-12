@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -42,6 +42,7 @@ namespace shdfnd
 		TempAllocatorChunk() : mNext(0) {}
 		TempAllocatorChunk* mNext; // while chunk is free
 		PxU32 mIndex; // while chunk is allocated
+		PxU8 mPad[16]; // 16 byte aligned allocations
 	};
 
 	class PX_FOUNDATION_API TempAllocator : public Allocator

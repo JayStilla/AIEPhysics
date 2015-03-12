@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -33,6 +33,7 @@
 #include "SampleAllocatorSDKClasses.h"
 #include "RendererMemoryMacros.h"
 #include "RenderMaterial.h"
+#include "RenderMeshActor.h"
 #include "cooking/PxTriangleMeshDesc.h"
 #include "geometry/PxHeightFieldGeometry.h"
 #include "geometry/PxHeightFieldSample.h"
@@ -370,8 +371,8 @@ void SampleVehicle::addMesh(PxRigidActor* actor, float* verts, PxU32 nVerts, PxU
 	bool ok = false;
 	if(!gRecook)
 	{
-		FILE* fp = NULL;
-		physx::fopen_s(&fp, filenameCooked, "rb");
+		SampleFramework::File* fp = NULL;
+		physx::shdfnd::fopen_s(&fp, filenameCooked, "rb");
 		if(fp)
 		{
 			fseek(fp, 0, SEEK_END);
@@ -396,14 +397,14 @@ void SampleVehicle::addMesh(PxRigidActor* actor, float* verts, PxU32 nVerts, PxU
 		meshDesc.flags = PxMeshFlags(0);
 
 		//
-		printf("Cooking object... %s", filenameCooked);
-		FileOutputStream stream(filenameCooked);
+		shdfnd::printFormatted("Cooking object... %s", filenameCooked);
+		PxDefaultFileOutputStream stream(filenameCooked);
 		ok = getCooking().cookTriangleMesh(meshDesc, stream);
-		printf(" - Done\n");
+		shdfnd::printFormatted(" - Done\n");
 	}
 
 	{
-		FileInputData stream(filenameCooked);
+		PxDefaultFileInputData stream(filenameCooked);
 		PxTriangleMesh* triangleMesh = getPhysics().createTriangleMesh(stream);
 
 		if(triangleMesh)
@@ -424,6 +425,7 @@ void SampleVehicle::addRenderMesh(float* verts, PxU32 nVerts, PxU32* indices, Px
 	// PT: the VB uses interleaved data so we need a temp buffer
 	PxVec3Alloc* v = SAMPLE_NEW(PxVec3Alloc)[nVerts];
 	float* curVerts = verts;
+	PxBounds3 meshBound = PxBounds3::empty();
 	for(PxU32 i=0;i<nVerts;i++)
 	{
 		v[i].x = curVerts[0];
@@ -434,6 +436,8 @@ void SampleVehicle::addRenderMesh(float* verts, PxU32 nVerts, PxU32* indices, Px
 		if (v[i].x > maxX) { maxX = v[i].x; }
 		if (v[i].z > maxZ) { maxZ = v[i].z; }
 		curVerts += 3*3;
+
+		meshBound.include(v[i]);
 	}
 
 	PxReal* uv = (PxReal*)SAMPLE_ALLOC(sizeof(PxReal)*nVerts*2);
@@ -454,7 +458,12 @@ void SampleVehicle::addRenderMesh(float* verts, PxU32 nVerts, PxU32* indices, Px
 	data.mVerts			= v;
 	data.mUVs			= uv;
 	data.mIndices		= indices;
-	createRenderMeshFromRawMesh(data);
+	RenderMeshActor* renderActor = createRenderMeshFromRawMesh(data);
+	if( renderActor != NULL )
+	{
+		renderActor->setWorldBounds(meshBound);
+		renderActor->setEnableCameraCull(true);
+	}
 
 	SAMPLE_FREE(uv);
 	DELETEARRAY(v);
@@ -494,7 +503,7 @@ void SampleVehicle::createLandscapeMesh()
 	mRenderMaterials.push_back(mRoadGravelMaterial);
 
 	PxTransform pose;
-	pose = PxTransform::createIdentity();
+	pose = PxTransform(PxIdentity);
 //	pose.p.y -= 10.0f;
 	mHFActor = getPhysics().createRigidStatic(pose);
 
@@ -518,7 +527,8 @@ void SampleVehicle::createLandscapeMesh()
 		}
 	}
 
-	getActiveScene().addActor(*mHFActor);
+	PxSceneWriteLock scopedLock(*mScene);
+	mScene->addActor(*mHFActor);
 
 	PxShape* shapeBuffer[MAX_NUM_INDEX_BUFFERS];
 	mHFActor->getShapes(shapeBuffer, MAX_NUM_INDEX_BUFFERS);

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #ifndef PX_PROFILE_ZONE_H
 #define PX_PROFILE_ZONE_H
@@ -99,7 +99,7 @@ namespace physx {
 			\brief Specifies an optional user custom profiler interface for this profile zone.
 			\param up Specifies the PxUserCustomProfiler interface for this zone.  A NULL disables event notification.
 		 */
-		virtual void setUserCustomProfiler(PxUserCustomProfiler *up) = 0;
+		virtual void setUserCustomProfiler(PxUserCustomProfiler* up) = 0;
 		/**
 			\brief Create a new profile zone.  
 

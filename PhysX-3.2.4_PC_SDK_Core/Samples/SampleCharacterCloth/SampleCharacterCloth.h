@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,9 +34,11 @@
 #include "PxSimulationEventCallback.h"
 #include "characterkinematic/PxController.h"
 #include "characterkinematic/PxControllerBehavior.h"
+#include "PxShape.h"
 
 #include "SampleCharacterHelpers.h"
 #include "SampleCharacterClothJump.h"
+#include "SampleCharacterClothPlatform.h"
 
 namespace physx
 {
@@ -58,12 +60,13 @@ namespace physx
 
 		// Implements SampleApplication
 		virtual	void							onInit();
+        virtual	void						    onInit(bool restart) { onInit(); }
 		virtual	void							onShutdown();
 		virtual void                            onSubstep(float dtime);
 		virtual	void							onTickPreRender(float dtime);
 		virtual	void							onTickPostRender(float dtime);
 		virtual void							onPointerInputEvent(const SampleFramework::InputEvent& ie, physx::PxU32 x, physx::PxU32 y, physx::PxReal dx, physx::PxReal dy, bool val);
-		virtual bool							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);
+		virtual void							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);
 		
 		///////////////////////////////////////////////////////////////////////////////
 
@@ -83,9 +86,9 @@ namespace physx
 		virtual void							onObstacleHit(const PxControllerObstacleHit& hit);
 
 		// Implements PxControllerBehaviorCallback
-		virtual PxU32							getBehaviorFlags(const PxShape&);
-		virtual PxU32							getBehaviorFlags(const PxController&);
-		virtual PxU32							getBehaviorFlags(const PxObstacle&);
+		virtual PxControllerBehaviorFlags		getBehaviorFlags(const PxShape&, const PxActor&);
+		virtual PxControllerBehaviorFlags		getBehaviorFlags(const PxController&);
+		virtual PxControllerBehaviorFlags		getBehaviorFlags(const PxObstacle&);
 
 		///////////////////////////////////////////////////////////////////////////////
 	protected:
@@ -93,6 +96,9 @@ namespace physx
 				PxRigidStatic*					buildHeightField();
 				void							createLandscape(PxReal* heightmap, PxU32 size, PxReal scale, PxReal* outVerts, PxReal* outNorms, PxU32* outTris);
 				PxRigidStatic*					createHeightField(PxReal* heightmap, PxReal scale, PxU32 size);
+				SampleCharacterClothPlatform*	createPlatform(const PxTransform &pose, const PxGeometry &geom, PxReal travelTime, const PxVec3 &offset, RenderMaterial *renderMaterial);
+				void							createPlatforms();
+				void                            updatePlatforms(float dtime);
 
 		// cct control
 				void                            bufferCCTMotion(const PxVec3& disp, PxReal dtime);
@@ -103,6 +109,7 @@ namespace physx
 				void                            createCharacter();
 				void                            createCape();
 				void                            createFlags();
+				void							releaseFlags();
 
 				void                            resetCape();
 				void                            resetCharacter();
@@ -141,6 +148,10 @@ namespace physx
 		///////////////////////////////////////////////////////////////////////////////
 		// rendering
 				RenderMaterial*					mSnowMaterial;
+				RenderMaterial*					mPlatformMaterial;
+				RenderMaterial*					mRockMaterial;
+				RenderMaterial*					mWoodMaterial;
+				RenderMaterial*					mFlagMaterial;
 
 		///////////////////////////////////////////////////////////////////////////////
 		// cloth
@@ -149,15 +160,30 @@ namespace physx
 #if PX_SUPPORT_GPU_PHYSX
 				bool                            mUseGPU;
 #endif
+				PxU32							mClothFlagCountIndex;
+				PxU32							mClothFlagCountIndexMax;
 
 		///////////////////////////////////////////////////////////////////////////////
 		// character motion
 				Character						mCharacter;
 				Skin							mSkin;
 				int								mMotionHandleWalk;
+				int								mMotionHandleRun;
 				int								mMotionHandleJump;
 
+		///////////////////////////////////////////////////////////////////////////////
+		// simulation stats
+				shdfnd::Time					mTimer;
+				PxReal							mAccumulatedSimulationTime;
+				PxReal							mAverageSimulationTime;
+				PxU32							mFrameCount;								
+
+		///////////////////////////////////////////////////////////////////////////////
+		// platform levels
+		SampleArray<SampleCharacterClothPlatform*>		mPlatforms;
+
 		friend class SampleCharacterClothCameraController;
+		friend class SampleCharacterClothFlag;
 	};
 
 #endif

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -32,16 +32,18 @@
 
 #include "foundation/PxPreprocessor.h"
 
-#if defined PX_WINDOWS
+#if defined PX_WINDOWS && !defined PX_ARM_NEON
 	#include "windows/PsWindowsAoS.h"
 #elif defined PX_X360
 	#include "xbox360/PsXbox360AoS.h"
-#elif (defined PX_LINUX || defined PX_ANDROID || defined PX_APPLE)
-	#include "linux/PsLinuxAoS.h"
+#elif (defined PX_LINUX || defined PX_ANDROID || defined PX_APPLE || defined PX_PS4 || (defined PX_WINMODERN && defined PX_ARM_NEON))
+	#include "unix/PsUnixAoS.h"
 #elif defined PX_PS3
 	#include "ps3/PsPS3AoS.h"
 #elif defined PX_PSP2
 	#include "psp2/PsPSP2AoS.h"
+#elif defined PX_XBOXONE
+#include "XboxOne/PsXboxOneAoS.h"
 #else
 	#error "Platform not supported!"
 #endif

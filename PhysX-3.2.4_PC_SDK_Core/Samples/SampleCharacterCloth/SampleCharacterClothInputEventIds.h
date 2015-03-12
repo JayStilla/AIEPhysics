@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #ifndef _SAMPLE_CCT_INPUT_EVENT_IDS_H
 #define _SAMPLE_CCT_INPUT_EVENT_IDS_H
 
@@ -37,7 +37,8 @@ enum SampleCharacterControllerInputEventIds
 	CROUCH ,
 	RESET_SCENE,
 	JUMP,
-	DEBUG_RENDER,
+	CHANGE_CLOTH_CONTENT,
+
 	NUM_SAMPLE_CCT_INPUT_EVENT_IDS,
 };
 

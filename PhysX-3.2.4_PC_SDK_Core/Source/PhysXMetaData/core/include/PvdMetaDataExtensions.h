@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -84,21 +84,35 @@ struct PxPvdOnlyProperties
 		DEFINE_ENUM_RANGE( PxArticulationJoint_TwistLimit, 2 ),
 		DEFINE_ENUM_RANGE( PxConvexMeshGeometry_Scale, PxPropertyInfoName::PxMeshScale_PropertiesStop - PxPropertyInfoName::PxMeshScale_PropertiesStart ),
 		DEFINE_ENUM_RANGE( PxTriangleMeshGeometry_Scale, PxPropertyInfoName::PxMeshScale_PropertiesStop - PxPropertyInfoName::PxMeshScale_PropertiesStart ),
+#if PX_USE_CLOTH_API
 		DEFINE_ENUM_RANGE( PxCloth_MotionConstraintScaleBias, 2 ),
+#endif
+		
+
+#if PX_USE_PARTICLE_SYSTEM_API
 		PxParticleSystem_Positions,
 		PxParticleSystem_Velocities,
 		PxParticleSystem_RestOffsets,
 		PxParticleSystem_CollisionNormals,
 		PxParticleSystem_Flags,
 		PxParticleFluid_Densities,
+#endif
+#if PX_USE_CLOTH_API
 		PxCloth_ParticleBuffer,
+		PxCloth_ParticleAccelerations,
 		PxCloth_MotionConstraints,
 		PxCloth_CollisionSpheres,
 		PxCloth_CollisionSpherePairs,
-		PxCloth_VirtualParticleTriangleAndWeightIndexes,
+		PxCloth_CollisionPlanes,
+		PxCloth_CollisionConvexMasks,
+		PxCloth_CollisionTriangles,
+		PxCloth_VirtualParticles,
 		PxCloth_VirtualParticleWeights,
 		PxCloth_SeparationConstraints,
-		LastPxPvdOnlyProperty,
+		PxCloth_SelfCollisionIndices,
+		PxCloth_RestPositions,
+#endif
+		LastPxPvdOnlyProperty
 	};
 };
 
@@ -124,13 +138,12 @@ struct baseType##propName##Property : T##objectType##propName##Base													
 };
 
 #if PX_USE_PARTICLE_SYSTEM_API
-DECLARE_BUFFER_PROPERTY( PxParticleReadData,		PxParticleSystem, PxStrideIterator<const PxVec3>,			Positions, positionBuffer, PxParticleReadDataFlag::ePOSITION_BUFFER );
-DECLARE_BUFFER_PROPERTY( PxParticleReadData,		PxParticleSystem, PxStrideIterator<const PxVec3>,			Velocities, velocityBuffer, PxParticleReadDataFlag::eVELOCITY_BUFFER );
-DECLARE_BUFFER_PROPERTY( PxParticleReadData,		PxParticleSystem, PxStrideIterator<const PxF32>,			RestOffsets, restOffsetBuffer, PxParticleReadDataFlag::eREST_OFFSET_BUFFER );
-DECLARE_BUFFER_PROPERTY( PxParticleReadData,		PxParticleSystem, PxStrideIterator<const PxVec3>,			CollisionNormals, collisionNormalBuffer, PxParticleReadDataFlag::eCOLLISION_NORMAL_BUFFER );
-DECLARE_BUFFER_PROPERTY( PxParticleReadData,		PxParticleSystem, PxStrideIterator<const PxParticleFlags>,	Flags, flagsBuffer, PxParticleReadDataFlag::eFLAGS_BUFFER );
-DECLARE_BUFFER_PROPERTY( PxParticleFluidReadData,	PxParticleFluid,  PxStrideIterator<const PxF32>,			Densities, densityBuffer, PxParticleReadDataFlag::eDENSITY_BUFFER );
-
+DECLARE_BUFFER_PROPERTY( PxParticleReadData,		PxParticleSystem, PxStrideIterator<const PxVec3>,			Positions, positionBuffer, PxParticleReadDataFlag::ePOSITION_BUFFER )
+DECLARE_BUFFER_PROPERTY( PxParticleReadData,		PxParticleSystem, PxStrideIterator<const PxVec3>,			Velocities, velocityBuffer, PxParticleReadDataFlag::eVELOCITY_BUFFER )
+DECLARE_BUFFER_PROPERTY( PxParticleReadData,		PxParticleSystem, PxStrideIterator<const PxF32>,			RestOffsets, restOffsetBuffer, PxParticleReadDataFlag::eREST_OFFSET_BUFFER )
+DECLARE_BUFFER_PROPERTY( PxParticleReadData,		PxParticleSystem, PxStrideIterator<const PxVec3>,			CollisionNormals, collisionNormalBuffer, PxParticleReadDataFlag::eCOLLISION_NORMAL_BUFFER )
+DECLARE_BUFFER_PROPERTY( PxParticleReadData,		PxParticleSystem, PxStrideIterator<const PxParticleFlags>,	Flags, flagsBuffer, PxParticleReadDataFlag::eFLAGS_BUFFER )
+DECLARE_BUFFER_PROPERTY( PxParticleFluidReadData,	PxParticleFluid,  PxStrideIterator<const PxF32>,			Densities, densityBuffer, PxParticleReadDataFlag::eDENSITY_BUFFER )
 
 template<typename TOperator>
 inline void visitParticleSystemBufferProperties( TOperator inOperator )
@@ -180,6 +193,29 @@ struct PxPvdReadOnlyPropertyAccessor : public ValueStructOffsetRecord
 	{
 	}
 	prop_type get( const TObjectType* inObj ) const { return mProperty.get( inObj ); }
+
+private:
+	PxPvdReadOnlyPropertyAccessor& operator=(const PxPvdReadOnlyPropertyAccessor&);
+};
+
+template<PxU32 TKey, typename TObjectType, typename TPropertyType>
+struct PxBufferCollectionPropertyAccessor : public ValueStructOffsetRecord
+{
+	typedef PxBufferCollectionPropertyInfo< TKey, TObjectType, TPropertyType > TPropertyInfoType;
+	typedef TPropertyType prop_type;
+	const TPropertyInfoType& mProperty;
+	const char* mName;
+	
+	PxBufferCollectionPropertyAccessor( const TPropertyInfoType& inProp, const char* inName )
+		: mProperty( inProp )
+		, mName( inName )
+	{
+	}
+	
+	const char* name() const { return mName; }
+	PxU32 size( const TObjectType* inObj ) const { return mProperty.size( inObj ); }
+	PxU32 get( const TObjectType* inObj, prop_type* buffer, PxU32 inNumItems) const { return mProperty.get( inObj, buffer, inNumItems); }
+	void set( TObjectType* inObj, prop_type* inBuffer, PxU32 inNumItems ) const { mProperty.set( inObj, inBuffer, inNumItems ); }
 };
 
 template<PxU32 TKey, typename TObjectType, typename TIndexType, typename TPropertyType>
@@ -200,6 +236,48 @@ struct PxPvdIndexedPropertyAccessor : public ValueStructOffsetRecord
 	void operator = (PxPvdIndexedPropertyAccessor&) {}
 };
 
+template<PxU32 TKey, typename TObjectType, typename TIndexType, typename TPropertyType>
+struct PxPvdExtendedIndexedPropertyAccessor : public ValueStructOffsetRecord
+{
+	typedef PxExtendedIndexedPropertyInfo< TKey, TObjectType, TIndexType, TPropertyType > TPropertyInfoType;
+	typedef TPropertyType prop_type;
+	TIndexType mIndex;
+	const TPropertyInfoType& mProperty;
+	PxPvdExtendedIndexedPropertyAccessor( const TPropertyInfoType& inProp, PxU32 inIndex )
+		: mIndex( static_cast<TIndexType>( inIndex ) )
+		, mProperty( inProp )
+	{
+	}
+
+	PxU32 size( const TObjectType* inObj ) const { return mProperty.size( inObj ); }
+	prop_type get( const TObjectType* inObj, TIndexType index ) const { return mProperty.get( inObj, index ); }
+	void set( TObjectType* inObj, TIndexType index, prop_type val ) const { mProperty.set( inObj, index, val ); }
+
+	void operator = (PxPvdExtendedIndexedPropertyAccessor&) {}
+};
+
+template<PxU32 TKey, typename TObjectType, typename TIndexType, typename TPropertyType>
+struct PxPvdFixedSizeLookupTablePropertyAccessor : public ValueStructOffsetRecord
+{
+	typedef PxFixedSizeLookupTablePropertyInfo< TKey, TObjectType, TIndexType, TPropertyType > TPropertyInfoType;
+	typedef TPropertyType prop_type;
+	TIndexType	mIndex;
+	
+	const TPropertyInfoType& mProperty;
+	PxPvdFixedSizeLookupTablePropertyAccessor( const TPropertyInfoType& inProp, const PxU32 inIndex3 )
+		: mIndex( static_cast<TIndexType>( inIndex3 ) )
+		, mProperty( inProp )
+	{
+	}
+
+	PxU32 size( const TObjectType* inObj ) const { return mProperty.size( inObj ); }
+	prop_type getX( const TObjectType* inObj, const TIndexType index ) const { return mProperty.getX( inObj, index ); }
+	prop_type getY( const TObjectType* inObj, const TIndexType index ) const { return mProperty.getY( inObj, index ); }
+	void addPair(  TObjectType* inObj, const PxReal x, const PxReal y ) { const_cast<TPropertyInfoType&>(mProperty).addPair( inObj, x, y );  }
+	void clear( TObjectType* inObj ) { const_cast<TPropertyInfoType&>(mProperty).clear( inObj );  }
+	void operator = (PxPvdFixedSizeLookupTablePropertyAccessor&) {}
+};
+
 template<PxU32 TKey, typename TObjectType, typename TIdx0Type, typename TIdx1Type, typename TPropertyType>
 struct PxPvdDualIndexedPropertyAccessor : public ValueStructOffsetRecord
 {
@@ -217,8 +295,32 @@ struct PxPvdDualIndexedPropertyAccessor : public ValueStructOffsetRecord
 	}
 	prop_type get( const TObjectType* inObj ) const { return mProperty.get( inObj, mIdx0, mIdx1 ); }
 	void set( TObjectType* inObj, prop_type val ) const { mProperty.set( inObj, mIdx0, mIdx1, val ); }
+
+private:
+	PxPvdDualIndexedPropertyAccessor& operator = (const PxPvdDualIndexedPropertyAccessor&);
 };
 
+template<PxU32 TKey, typename TObjectType, typename TIdx0Type, typename TIdx1Type, typename TPropertyType>
+struct PxPvdExtendedDualIndexedPropertyAccessor : public ValueStructOffsetRecord
+{
+	typedef PxExtendedDualIndexedPropertyInfo< TKey, TObjectType, TIdx0Type, TIdx1Type, TPropertyType > TPropertyInfoType;
+	typedef TPropertyType prop_type;
+	TIdx0Type mIdx0;
+	TIdx1Type mIdx1;
+	const TPropertyInfoType& mProperty;
+	
+	PxPvdExtendedDualIndexedPropertyAccessor( const TPropertyInfoType& inProp, PxU32 idx0, PxU32 idx1 )
+		: mIdx0( static_cast<TIdx0Type>( idx0 ) )
+		, mIdx1( static_cast<TIdx1Type>( idx1 ) )
+		, mProperty( inProp )
+	{
+	}
+	prop_type get( const TObjectType* inObj ) const { return mProperty.get( inObj, mIdx0, mIdx1 ); }
+	void set( TObjectType* inObj, prop_type val ) const { mProperty.set( inObj, mIdx0, mIdx1, val ); }
+
+private:
+	PxPvdExtendedDualIndexedPropertyAccessor& operator = (const PxPvdExtendedDualIndexedPropertyAccessor&);
+};
 
 template<PxU32 TKey, typename TObjType, typename TPropertyType>
 struct PxPvdRangePropertyAccessor : public ValueStructOffsetRecord
@@ -247,7 +349,7 @@ struct PxPvdRangePropertyAccessor : public ValueStructOffsetRecord
 		else mProperty.set( inObj, first, val );
 	}
 
-	void operator = (PxPvdRangePropertyAccessor&) {};
+	void operator = (PxPvdRangePropertyAccessor&) {}
 };
 
 

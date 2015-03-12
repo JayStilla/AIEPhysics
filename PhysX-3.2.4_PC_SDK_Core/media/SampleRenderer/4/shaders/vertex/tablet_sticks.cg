@@ -14,14 +14,15 @@ struct VertexOut
 	float4             screenSpacePosition : POSITION;
 };
 
-VertexOut  vmain(float4      localSpacePosition : POSITION,
-                 float4      texcoord0          : TEXCOORD0)
+VertexOut  vmain(__in(float4,     localSpacePosition, POSITION)
+                 __in_opt(half4,  vertexColor,        COLOR)
+                 __in_opt(float4, texcoord0,    TEXCOORD0))
 {
 	VertexOut vout;
 	
 	vout.screenSpacePosition		= localSpacePosition + g_modelMatrix[0];
 	vout.params.worldSpacePosition	= localSpacePosition;
 	vout.params.texcoord0			= texcoord0.xy;
-	
+	vout.params.color			= vertexColor;
 	return vout;
 }

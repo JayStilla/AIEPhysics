@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,12 +35,19 @@
 #include "Ps.h"
 #include "PsIntrinsics.h"
 
+
 namespace physx
 {
 namespace shdfnd
 	{
+	PX_INLINE char	littleEndian()	{ int i = 1; return *((char*)&i);	}
 
 	// PT: checked casts
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxU32 to32(PxU64 value)
+	{
+		PX_ASSERT(value<=0xffffffff);
+		return PxU32(value);
+	}
 	PX_CUDA_CALLABLE PX_FORCE_INLINE PxU16 to16(PxU32 value)
 	{
 		PX_ASSERT(value<=0xffff);
@@ -56,20 +63,24 @@ namespace shdfnd
 		PX_ASSERT(value<=0xff);
 		return PxU8(value);
 	}
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxU8 to8(PxI32 value)
+	{
+		PX_ASSERT(value<=0xff);
+		PX_ASSERT(value>=0);
+		return PxU8(value);
+	}
+	PX_CUDA_CALLABLE PX_FORCE_INLINE PxI8 toI8(PxU32 value)
+	{
+		PX_ASSERT(value<=0x7f);
+		return PxI8(value);
+	}
 
 	template<class T>
 	PX_CUDA_CALLABLE PX_INLINE void swap(T& x, T& y)
 	{
-		// crash with optimizations enabled, ticket in Sony
-#ifdef PX_PSP2
-		#pragma control %push O=0
-#endif
-		T tmp = x;
+		const T tmp = x;
 		x = y;
 		y = tmp;
-#ifdef PX_PSP2
-#pragma control %pop O
-#endif
 	}
 
 
@@ -122,11 +133,13 @@ PX_CUDA_CALLABLE PX_FORCE_INLINE void order(PxReal& x, PxReal& y)
 
 	PX_INLINE void debugBreak()
 	{
-#if defined PX_WINDOWS
-			__debugbreak();
-#elif defined PX_LINUX || defined PX_ANDROID
-			asm ("int $3");
-#elif defined PX_GNUC
+#if defined PX_WINDOWS || defined PX_XBOXONE || defined PX_WINMODERN
+		__debugbreak();
+#elif defined PX_LINUX
+		asm ("int $3");
+#elif defined PX_ANDROID
+		raise(SIGTRAP); // works better than __builtin_trap. Proper call stack and can be continued.
+#elif defined PX_GNUC || defined PX_GHS
 		__builtin_trap();
 #else
 		PX_ASSERT(false);
@@ -142,9 +155,9 @@ PX_CUDA_CALLABLE PX_FORCE_INLINE void order(PxReal& x, PxReal& y)
 
 	PX_CUDA_CALLABLE PX_INLINE PxI32 getPadding2(size_t value, PxU32 alignment)
 	{
-		const PxI32 mask = alignment-1;
+		const PxI32 mask = (PxI32)alignment-1;
 		const PxI32 overhead = PxI32(value) & mask;
-		return (alignment - overhead) & mask;
+		return PxI32((alignment - overhead) & mask);
 	}
 
 	// PT: "After doing a dcbz128, there is a delay of about 140 cycles before writes to that cache line can proceed without stalling.
@@ -159,11 +172,11 @@ PX_CUDA_CALLABLE PX_FORCE_INLINE void order(PxReal& x, PxReal& y)
 		if(sizeToCover>=128)
 		{
 			PxU8* ptr128 = ptr + padding;
-			PxU32 nb128 = sizeToCover/128;
+			PxU32 nb128 = PxU32(sizeToCover/128);
 			while(nb128--)
 			{
-//				Ps::memZero128(ptr128);
-				physx::shdfnd::memZero128(ptr128);
+//				intrinsics::memZero128(ptr128);
+				physx::intrinsics::memZero128(ptr128);
 				ptr128 += 128;
 			}
 		}

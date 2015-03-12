@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,13 +35,6 @@
 #include "CmPhysXCommon.h"
 #include "PsArray.h"
 
-// PX_SERIALIZATION
-/*
-#include "CmSerialFramework.h"
-#include "CmSerialAlignment.h"
-*/
-//~PX_SERIALIZATION
-
 namespace physx
 {
 namespace Cm
@@ -51,21 +44,7 @@ namespace Cm
 		PxU32				currentID;
 		Ps::Array<PxU32>	freeIDs;
 	public:
-// PX_SERIALIZATION
-/*		IDPool(PxRefResolver& v)	{}
-		void	exportExtraData(PxSerialStream& stream)
-		{
-			Cm::alignStream(stream, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA);
-			freeIDs.exportArray(stream, false);
-		}
-		char*	importExtraData(char* address, PxU32& totalPadding)
-		{
-			address = Cm::alignStream(address, totalPadding, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA);
-			address = freeIDs.importArray(address);
-			return address;
-		}*/
-//~PX_SERIALIZATION
-		IDPool() : currentID(0), freeIDs(PX_DEBUG_EXP("IDPoolFreeIDs"))	{}
+        IDPool() : currentID(0), freeIDs(PX_DEBUG_EXP("IDPoolFreeIDs"))	{}
 
 		void	freeID(PxU32 id)
 		{

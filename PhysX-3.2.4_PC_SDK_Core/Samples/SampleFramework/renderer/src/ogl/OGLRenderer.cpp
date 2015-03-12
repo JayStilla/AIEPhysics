@@ -1,37 +1,29 @@
-/*
- * Copyright 2008-2012 NVIDIA Corporation.  All rights reserved.
- *
- * NOTICE TO USER:
- *
- * This source code is subject to NVIDIA ownership rights under U.S. and
- * international Copyright laws.  Users and possessors of this source code
- * are hereby granted a nonexclusive, royalty-free license to use this code
- * in individual and commercial software.
- *
- * NVIDIA MAKES NO REPRESENTATION ABOUT THE SUITABILITY OF THIS SOURCE
- * CODE FOR ANY PURPOSE.  IT IS PROVIDED "AS IS" WITHOUT EXPRESS OR
- * IMPLIED WARRANTY OF ANY KIND.  NVIDIA DISCLAIMS ALL WARRANTIES WITH
- * REGARD TO THIS SOURCE CODE, INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE.
- * IN NO EVENT SHALL NVIDIA BE LIABLE FOR ANY SPECIAL, INDIRECT, INCIDENTAL,
- * OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS,  WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION,  ARISING OUT OF OR IN CONNECTION WITH THE USE
- * OR PERFORMANCE OF THIS SOURCE CODE.
- *
- * U.S. Government End Users.   This source code is a "commercial item" as
- * that term is defined at  48 C.F.R. 2.101 (OCT 1995), consisting  of
- * "commercial computer  software"  and "commercial computer software
- * documentation" as such terms are  used in 48 C.F.R. 12.212 (SEPT 1995)
- * and is provided to the U.S. Government only as a commercial end item.
- * Consistent with 48 C.F.R.12.212 and 48 C.F.R. 227.7202-1 through
- * 227.7202-4 (JUNE 1995), all U.S. Government End Users acquire the
- * source code with only those rights set forth herein.
- *
- * Any use of this source code in individual and commercial software must
- * include, in the user documentation and internal comments to the code,
- * the above Disclaimer and U.S. Government End Users Notice.
- */
+// This code contains NVIDIA Confidential Information and is disclosed to you
+// under a form of NVIDIA software license agreement provided separately to you.
+//
+// Notice
+// NVIDIA Corporation and its licensors retain all intellectual property and
+// proprietary rights in and to this software and related documentation and
+// any modifications thereto. Any use, reproduction, disclosure, or
+// distribution of this software and related documentation without an express
+// license agreement from NVIDIA Corporation is strictly prohibited.
+//
+// ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
+// NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+//
+// Information and code furnished is believed to be accurate and reliable.
+// However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
+// information or for any infringement of patents or other rights of third parties that may
+// result from its use. No license is granted by implication or otherwise under any patent
+// or patent rights of NVIDIA Corporation. Details are subject to change without notice.
+// This code supersedes and replaces all information previously supplied.
+// NVIDIA Corporation products are not authorized for use as critical
+// components in life support devices or systems without express written approval of
+// NVIDIA Corporation.
+//
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #include <RendererConfig.h>
 
@@ -155,17 +147,17 @@ using namespace SampleRenderer;
 	}
 
 	OGLRenderer::OGLRenderer(const RendererDesc &desc, const char* assetDir) :
-	Renderer(DRIVER_OPENGL, assetDir), m_platform(SampleFramework::SamplePlatform::platform())
+	Renderer(DRIVER_OPENGL, desc.errorCallback, assetDir), m_platform(SampleFramework::SamplePlatform::platform())
 	{
 		m_useShadersForTextRendering	= false;
 		m_displayWidth  = 0;
 		m_displayHeight = 0;
 		m_currMaterial  = 0;
-		m_viewMatrix	= PxMat44::createIdentity();
+		m_viewMatrix	= PxMat44(PxIdentity);
 
 		m_platform->initializeOGLDisplay(desc, m_displayWidth, m_displayHeight);
 		m_platform->postInitializeOGLDisplay();
-		
+
 		//added this to avoid garbage being displayed during initialization 
 		RendererColor savedColor = getClearColor();
 		setClearColor(RendererColor(0U));
@@ -221,6 +213,7 @@ using namespace SampleRenderer;
 		setClearColor(RendererColor(0U));
 		clearBuffers();
 		swapBuffers();
+		releaseAllMaterials();
 
 #if defined(RENDERER_ENABLE_CG)
 		if(m_cgContext)
@@ -228,6 +221,7 @@ using namespace SampleRenderer;
 			cgDestroyContext(m_cgContext);
 		}
 #endif
+
 		m_platform->freeDisplay();
 	}
 
@@ -256,6 +250,10 @@ using namespace SampleRenderer;
 				CASE(GL_STACK_OVERFLOW)
 				CASE(GL_STACK_UNDERFLOW)
 				CASE(GL_OUT_OF_MEMORY)
+#if !defined(RENDERER_PS3) && !defined(RENDERER_PSP2)
+				CASE(GL_INVALID_FRAMEBUFFER_OPERATION)
+#endif
+					
 			};
 
 #undef CASE
@@ -317,7 +315,6 @@ using namespace SampleRenderer;
 		height = m_displayHeight;
 	}
 
-
 	RendererVertexBuffer *OGLRenderer::createVertexBuffer(const RendererVertexBufferDesc &desc)
 	{
 		RENDERER_PERFZONE(OGLRenderer_createVertexBuffer);
@@ -325,7 +322,7 @@ using namespace SampleRenderer;
 		RENDERER_ASSERT(desc.isValid(), "Invalid Vertex Buffer Descriptor.");
 		if(desc.isValid())
 		{
-			vb = new OGLRendererVertexBuffer(desc, m_deferredVBUnlock);
+			vb = new OGLRendererVertexBuffer(desc);
 		}
 		return vb;
 	}
@@ -364,6 +361,12 @@ using namespace SampleRenderer;
 			texture = new OGLRendererTexture2D(desc);
 		}
 		return texture;
+	}
+
+	RendererTexture3D *OGLRenderer::createTexture3D(const RendererTexture3DDesc &desc)
+	{
+		// TODO: Implement
+		return 0;
 	}
 
 	RendererTarget *OGLRenderer::createTarget(const RendererTargetDesc &desc)
@@ -415,19 +418,24 @@ using namespace SampleRenderer;
 				light = new OGLRendererSpotLight(*static_cast<const RendererSpotLightDesc*>(&desc), *this);
 				break;
 			default:
+				RENDERER_ASSERT(0, "OGLRenderer does not support this light type");
 				break;
 			}
 		}
 		return light;
 	}
 
-	void OGLRenderer::bindViewProj(const physx::PxMat44 &eye, const PxMat44 &proj)
+	void OGLRenderer::setVsync(bool on)
+	{
+		m_platform->setOGLVsync(on);
+	}
+
+	void OGLRenderer::bindViewProj(const physx::PxMat44 &eye, const RendererProjection &proj)
 	{
 		PxMat44 inveye = eye.inverseRT();
 
 		// load the projection matrix...
-		GLfloat glproj[16];
-		PxToGL(glproj, proj);
+		const GLfloat* glproj = &proj.getPxMat44().column0.x;
 
 		// load the view matrix...
 		m_viewMatrix = inveye;
@@ -478,14 +486,18 @@ using namespace SampleRenderer;
 		physx::PxMat44 modelView;
 
 		if(context.transform) model = *context.transform;
-		else                  model = PxMat44::createIdentity();
+		else                  model = PxMat44(PxIdentity);
 		modelView = m_viewMatrix * model;
 
 		GLfloat glmodelview[16];
 		PxToGL(glmodelview, modelView);
 		glLoadMatrixf(glmodelview);
 
-		switch(context.cullMode)
+		RendererMeshContext::CullMode cullMode = context.cullMode;
+		if (!blendingCull() && NULL != context.material && context.material->getBlending())
+			cullMode = RendererMeshContext::NONE;
+
+		switch(cullMode)
 		{
 		case RendererMeshContext::CLOCKWISE: 
 			glFrontFace( GL_CW );
@@ -572,6 +584,23 @@ using namespace SampleRenderer;
 	{
 		glDisable(GL_BLEND);
 		glDepthFunc(GL_LESS);
+	}
+
+	void OGLRenderer::beginTransparentMultiPass(void)
+	{
+		setEnableBlendingOverride(true);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		glDepthFunc(GL_LEQUAL);
+		glDepthMask(false);
+	}
+
+	void OGLRenderer::endTransparentMultiPass(void)
+	{
+		setEnableBlendingOverride(false);
+		glDisable(GL_BLEND);
+		glDepthFunc(GL_LESS);
+		glDepthMask(true);
 	}
 
 	void OGLRenderer::renderDeferredLight(const RendererLight &/*light*/)
@@ -784,24 +813,35 @@ using namespace SampleRenderer;
 		unsigned int            bmiColors[1];
 	} PXT_BITMAPINFO;
 
-	bool OGLRenderer::captureScreen(const char* filename)
+	static inline PxU32 screenshotDataOffset()
 	{
-		if(!filename)
+		return sizeof(PXT_BITMAPFILEHEADER) + sizeof(PXT_BITMAPINFO);
+	}
+	static inline PxU32 screenshotSize(PxU32 width, PxU32 height)
+	{
+		return width * height * 4 *sizeof(GLubyte) + screenshotDataOffset();
+	}
+
+	bool OGLRenderer::captureScreen(PxU32 &width, PxU32& height, PxU32& sizeInBytes, const void*& screenshotData)
+	{
+		// Target buffer size
+		const PxU32 newBufferSize = screenshotSize(m_displayWidth, m_displayHeight);
+		
+		// Resize of necessary
+		if (newBufferSize != (PxU32)m_displayData.size())
+			m_displayData.resize(newBufferSize);
+
+		// Quit if resize failed
+		if (newBufferSize != (PxU32)m_displayData.size())
 			return false;
 
-		PxU32 width = m_displayWidth;
-		PxU32 height = m_displayHeight;
-		GLubyte* bmpBuffer = new GLubyte[width * height * 4 * sizeof(GLubyte)]; 
-		if (!bmpBuffer) 
-			return false; 
+		// Write the screen data into the buffer
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glReadPixels(0, 0, m_displayWidth, m_displayHeight, GL_RGBA, GL_UNSIGNED_BYTE, &m_displayData[screenshotDataOffset()]);
+		if (GL_NO_ERROR != glGetError())
+			return false;
 
-		glReadPixels((GLint)0, (GLint)0, (GLint)width, (GLint)height, 0x80E1/*GL_BGRA_EXT*/, GL_UNSIGNED_BYTE, bmpBuffer); 
-		
-		FILE *fp = NULL;
-		physx::fopen_s(&fp, filename, "wb");
-		if(!fp)
-			return false;		
-
+		// Write the header data into the buffer
 		PXT_BITMAPFILEHEADER    bitmapFileHeader; 
 		PXT_BITMAPINFO          bitmapInfoHeader; 
 
@@ -809,11 +849,11 @@ using namespace SampleRenderer;
 		bitmapFileHeader.bfReserved1        = 0; 
 		bitmapFileHeader.bfReserved2        = 0; 
 		bitmapFileHeader.bfOffBits          = sizeof(PXT_BITMAPFILEHEADER) + sizeof(bitmapInfoHeader.bmiHeader); 
-		bitmapFileHeader.bfSize             = width * height * 4 + bitmapFileHeader.bfOffBits; 
+		bitmapFileHeader.bfSize             = m_displayWidth * m_displayHeight * 4 + bitmapFileHeader.bfOffBits; 
 
 		bitmapInfoHeader.bmiHeader.biSize             = sizeof(bitmapInfoHeader.bmiHeader); 
-		bitmapInfoHeader.bmiHeader.biWidth            = width; 
-		bitmapInfoHeader.bmiHeader.biHeight           = height; 
+		bitmapInfoHeader.bmiHeader.biWidth            = m_displayWidth; 
+		bitmapInfoHeader.bmiHeader.biHeight           = m_displayHeight; 
 		bitmapInfoHeader.bmiHeader.biPlanes           = 1; 
 		bitmapInfoHeader.bmiHeader.biBitCount         = 32; 
 		bitmapInfoHeader.bmiHeader.biCompression      = 0 /*BI_RGB*/; 
@@ -836,13 +876,15 @@ using namespace SampleRenderer;
 		SWAP_16(bitmapInfoHeader.bmiHeader.biBitCount);
 #endif
 
-		fwrite(&bitmapFileHeader, sizeof(bitmapFileHeader), 1, fp); 
-		fwrite(&bitmapInfoHeader.bmiHeader, sizeof(bitmapInfoHeader.bmiHeader), 1, fp); 
-		fwrite(bmpBuffer, width * height * 4, 1, fp); 
-		fclose(fp); 
+		memcpy(&m_displayData[0],                        &bitmapFileHeader,           sizeof(bitmapFileHeader));
+		memcpy(&m_displayData[sizeof(bitmapFileHeader)], &bitmapInfoHeader.bmiHeader, sizeof(bitmapInfoHeader.bmiHeader));
 
-		delete[] bmpBuffer; 
+		// Output the result
+		getWindowSize(width, height);
+		sizeInBytes    = (PxU32)m_displayData.size();
+		screenshotData = &m_displayData[0];
 
 		return true;
 	}
+
 #endif // #if defined(RENDERER_ENABLE_OPENGL)

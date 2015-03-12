@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 
 #ifndef GLES2_RENDERER_VERTEXBUFFER_H
@@ -57,9 +57,8 @@ class GLES2RendererVertexBuffer : public RendererVertexBuffer
         virtual void bindGL(GLint position, const SemanticDesc &sm, PxU8 *buffer);	
         virtual void unbindGL(GLint attr);
 	private:
-        void  *m_data;
+
 		GLuint m_vbo;
-		PxU32  m_bufferSize;
 };
 
 }

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -45,13 +45,13 @@ Camera::Camera() :
 	mDirtyProj		(true),
 	mDirtyView		(true)
 {
-	mViewMatrix		= PxTransform::createIdentity();
+	mViewMatrix		= PxTransform(PxIdentity);
 	mPos	= PxVec3(0);
 	mRot	= PxVec3(0);
 
 	mDrawDebugData	= false;
 	mFreezeFrustum	= false;
-	mPerformVFC		= false;
+	mPerformVFC		= true;
 }
 
 Camera::~Camera()
@@ -99,11 +99,8 @@ PxVec3 Camera::getViewDir() const
 
 void Camera::lookAt(const PxVec3& position, const PxVec3& target)
 {
-	PxVec3 dir = target - position;
-	dir.normalize();
-
-	PxVec3 right, up;
-	computeBasis(dir, right, up);
+	PxVec3 dir, right, up;
+	Ps::computeBasis(position, target, dir, right, up);
 
 	PxTransform view;
 	view.p	= position;
@@ -217,11 +214,11 @@ void Camera::BuildFrustum()
 	mFrustum[6] = mPos + forward*mFarPlane + right*farCoeff*rightCoeff - up*farCoeff*upCoeff;
 	mFrustum[7] = mPos + forward*mFarPlane + right*farCoeff*rightCoeff + up*farCoeff*upCoeff;
 
-	if(0)
+	if(1)
 	{
 		mPlanes[0] = PxPlane(mFrustum[4], mFrustum[1], mFrustum[5]);
-		mPlanes[1] = PxPlane(mFrustum[3], mFrustum[6], mFrustum[2]);
-		mPlanes[2] = PxPlane(mFrustum[4], mFrustum[3], mFrustum[0]);
+		mPlanes[1] = PxPlane(mFrustum[6], mFrustum[3], mFrustum[7]);
+		mPlanes[2] = PxPlane(mFrustum[4], mFrustum[7], mFrustum[3]);
 		mPlanes[3] = PxPlane(mFrustum[1], mFrustum[6], mFrustum[5]);
 		mPlanes[4] = PxPlane(mFrustum[0], mFrustum[2], mFrustum[1]);
 		mPlanes[5] = PxPlane(mFrustum[5], mFrustum[7], mFrustum[4]);
@@ -235,7 +232,7 @@ void Camera::BuildFrustum()
 		}
 	}
 
-	if(1)
+	if(0)
 	{
 		//
 		const PxVec3 axisX(1.0f, 0.0f, 0.0f);

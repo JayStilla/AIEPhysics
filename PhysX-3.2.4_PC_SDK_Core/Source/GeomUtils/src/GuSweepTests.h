@@ -23,16 +23,15 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-
-#ifndef PX_PHYSICS_GEOMUTILS_PX_SWEEPTESTS
-#define PX_PHYSICS_GEOMUTILS_PX_SWEEPTESTS
+#ifndef GU_SWEEP_TESTS_H
+#define GU_SWEEP_TESTS_H
 
 #include "CmPhysXCommon.h"
-#include "PxSceneQueryReport.h"
+#include "PxQueryReport.h"
 
 namespace physx
 {
@@ -49,50 +48,61 @@ class PxMeshScale;
 class PxTriangle;
 struct PxSweepHit;
 
+//namespace Cm
+//{
+//	class RenderOutput;
+//}
+
 namespace Gu
 {
 	class Capsule;
 	class Box;
 
-	// PT: TODO: those useless functions shouldn't be exposed
-	PX_PHYSX_COMMON_API bool sweepCapsule(const PxSphereGeometry& sphereGeom,			const PxTransform& pose, const Gu::Capsule& lss, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepCapsule(const PxPlaneGeometry& planeGeom,				const PxTransform& pose, const Gu::Capsule& lss, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepCapsule(const PxCapsuleGeometry& capsuleGeom,			const PxTransform& pose, const Gu::Capsule& lss, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepCapsule(const PxBoxGeometry& boxGeom,					const PxTransform& pose, const Gu::Capsule& lss, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepCapsule(const PxConvexMeshGeometry& convexGeom,		const PxTransform& pose, const Gu::Capsule& lss, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepCapsule(const PxTriangleMeshGeometry& triMeshGeom,	const PxTransform& pose, const Gu::Capsule& lss, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepCapsule(const PxHeightFieldGeometry& heightFieldGeom,	const PxTransform& pose, const Gu::Capsule& lss, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
+#define GU_CAPSULE_SWEEP_FUNC_PARAMS	const PxGeometry& geom,	const PxTransform& pose, \
+		const Gu::Capsule& lss, const PxVec3& unitDir, const PxReal distance, \
+		PxSweepHit& sweepHit, PxHitFlags hintFlags, const PxReal inflation 
 
-	PX_PHYSX_COMMON_API bool sweepBox(const PxSphereGeometry& sphereGeom,			const PxTransform& pose, const Gu::Box& box, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepBox(const PxPlaneGeometry& planeGeom,				const PxTransform& pose, const Gu::Box& box, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepBox(const PxCapsuleGeometry& capsuleGeom,			const PxTransform& pose, const Gu::Box& box, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepBox(const PxBoxGeometry& capsuleGeom,				const PxTransform& pose, const Gu::Box& box, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepBox(const PxConvexMeshGeometry& convexGeom,		const PxTransform& pose, const Gu::Box& box, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepBox(const PxTriangleMeshGeometry& triMeshGeom,	const PxTransform& pose, const Gu::Box& box, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API bool sweepBox(const PxHeightFieldGeometry& heightFieldGeom,	const PxTransform& pose, const Gu::Box& box, const PxVec3& unitDir, const PxReal distance, PxSweepHit& sweepHit, PxSceneQueryFlags hintFlags, const PxReal inflation);
+#define GU_BOX_SWEEP_FUNC_PARAMS	const PxGeometry& geom,	const PxTransform& pose,   \
+		const Gu::Box& box, const PxVec3& unitDir, const PxReal distance,    \
+		PxSweepHit& sweepHit, PxHitFlags hintFlags, const PxReal inflation
 
-	typedef bool (*SweepCapsuleFunc) (const PxGeometry&, const PxTransform&, const Gu::Capsule&, const PxVec3& unitDir, const PxReal distance, PxSweepHit&, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API const SweepCapsuleFunc* GetSweepCapsuleMap();
-	extern const SweepCapsuleFunc gSweepCapsuleMap[7];
+	//PX_PHYSX_COMMON_API void setDebugRender(Cm::RenderOutput& output);
 
-	typedef bool (*SweepBoxFunc) (const PxGeometry&, const PxTransform&, const Gu::Box&, const PxVec3& unitDir, const PxReal distance, PxSweepHit&, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API const SweepBoxFunc* GetSweepBoxMap();
-	extern const SweepBoxFunc gSweepBoxMap[7];
+	typedef bool (*SweepCapsuleFunc) (GU_CAPSULE_SWEEP_FUNC_PARAMS);
+	typedef bool (*SweepBoxFunc) (GU_BOX_SWEEP_FUNC_PARAMS);
+	typedef bool (*SweepConvexFunc) (const PxGeometry&, const PxTransform&, const PxConvexMeshGeometry&,
+									const PxTransform&, const PxVec3& unitDir, const PxReal distance, PxSweepHit&,
+									PxHitFlags hintFlags, const PxReal inflation);
+	typedef SweepCapsuleFunc	GeomSweepCapsuleTable7[7];
+	typedef SweepBoxFunc		GeomSweepBoxTable7[7];
+	typedef SweepConvexFunc		GeomSweepConvexTable7[7];
 
-	typedef bool (*SweepConvexFunc) (const PxGeometry&, const PxTransform&, const PxConvexMeshGeometry&, const PxTransform&, const PxVec3& unitDir, const PxReal distance, PxSweepHit&, PxSceneQueryFlags hintFlags, const PxReal inflation);
-	PX_PHYSX_COMMON_API const SweepConvexFunc* GetSweepConvexMap();
-	extern const SweepConvexFunc gSweepConvexMap[7];
+	struct GeomSweepFuncs
+	{
+		GeomSweepCapsuleTable7	capsuleMap;
+		GeomSweepCapsuleTable7	cctCapsuleMap;
+		GeomSweepBoxTable7		boxMap;
+		GeomSweepBoxTable7		cctBoxMap;
+		GeomSweepConvexTable7	convexMap;
+	};
+
+	PX_PHYSX_COMMON_API const GeomSweepFuncs& GetGeomSweepFuncs();
 
 	// For sweep vs. triangle list: PxGeometryQuery::sweep()
-	PX_PHYSX_COMMON_API bool SweepCapsuleTriangles(PxU32 nb_tris, const PxTriangle* triangles,
+	bool SweepCapsuleTriangles(	PxU32 nbTris, const PxTriangle* triangles, bool doubleSided,
 								const PxCapsuleGeometry& capsuleGeom, const PxTransform& capsulePose,
 								const PxVec3& unitDir, const PxReal distance, const PxU32* cachedIndex, PxVec3& hit,
-								PxVec3& normal, PxReal& d, PxU32& index, const PxReal inflation);
+								PxVec3& normal, PxReal& d, PxU32& index, const PxReal inflation, PxHitFlags hintFlags);
 
 	// For sweep vs. triangle list: PxGeometryQuery::sweep()
-	PX_PHYSX_COMMON_API bool SweepBoxTriangles(PxU32 nb_tris, const PxTriangle* triangles,
+	bool SweepBoxTriangles(PxU32 nbTris, const PxTriangle* triangles, bool doubleSided,
 							const PxBoxGeometry& boxGeom, const PxTransform& boxPose, const PxVec3& unitDir, const PxReal distance, 
-							PxVec3& _hit, PxVec3& _normal, float& _d, PxU32& _index, const PxU32* cachedIndex, const PxReal inflation);
+							PxVec3& _hit, PxVec3& _normal, float& _d, PxU32& _index, const PxU32* cachedIndex, const PxReal inflation, PxHitFlags hintFlags);
+
+	bool sweepCCTBoxTriangles(	PxU32 nbTris, const PxTriangle* triangles, bool doubleSided,
+								const PxBoxGeometry& boxGeom, const PxTransform& boxPose, const PxVec3& unitDir, const PxReal distance, 
+								PxVec3& _hit, PxVec3& _normal, float& _d, PxU32& _index, const PxU32* cachedIndex, const PxReal inflation,
+								PxHitFlags hintFlags);
 
 }  // namespace Gu
 

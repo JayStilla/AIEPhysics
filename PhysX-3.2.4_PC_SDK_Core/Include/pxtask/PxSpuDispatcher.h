@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #ifndef PX_SPU_DISPATCHER_H
 #define PX_SPU_DISPATCHER_H
@@ -35,20 +35,17 @@ namespace physx
 {
 #endif
 
-namespace pxtask
-{
-
-class SpuTask;
+class PxSpuTask;
 
 /** 
- \brief A SpuDispatcher 
+ \brief A PxSpuDispatcher 
  
- A SpuDispatcher is responsible for scheduling the execution of SPU tasks passed to it by the SDK.
+ A PxSpuDispatcher is responsible for scheduling the execution of SPU tasks passed to it by the SDK.
  
- @see SpuTask
- @see TaskManager
+ @see PxSpuTask
+ @see PxTaskManager
 */
-class SpuDispatcher
+class PxSpuDispatcher
 {
 public:
 	/**
@@ -60,14 +57,12 @@ public:
 
 	\param[in] task The task to be run.
 
-	@see SpuTask
+	@see PxSpuTask
 	*/
-	virtual void submitTask( SpuTask& task ) = 0;
+	virtual void submitTask( PxSpuTask& task ) = 0;
 
-	virtual ~SpuDispatcher() {}
+	virtual ~PxSpuDispatcher() {}
 };
-
-} // end pxtask namespace
 
 #ifndef PX_DOXYGEN
 } // end physx namespace

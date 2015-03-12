@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -31,9 +31,10 @@
 #ifndef SAMPLE_VEHICLE_VEHICLE_CONTROLLER_H
 #define SAMPLE_VEHICLE_VEHICLE_CONTROLLER_H
 
-#include "common/PxPhysXCommon.h"
+#include "common/PxPhysXCommonConfig.h"
 #include "foundation/PxVec3.h"
 #include "vehicle/PxVehicleSDK.h"
+#include "vehicle/PxVehicleUpdate.h"
 #include "vehicle/PxVehicleUtilControl.h"
 
 using namespace physx;
@@ -73,33 +74,73 @@ public:
 		mGamepadCarHandbrake=handbrake;
 	}
 
+	void setTankKeyboardInputs
+		(const bool accel, const bool thrustLeft, const bool thrustRight, const bool brakeLeft, const bool brakeRight, const bool gearUp, const bool gearDown)
+	{
+		mKeyPressedAccel=accel;
+		mKeyPressedThrustLeft=thrustLeft;
+		mKeyPressedThrustRight=thrustRight;
+		mKeyPressedBrakeLeft=brakeLeft;
+		mKeyPressedBrakeRight=brakeRight;
+		mKeyPressedGearUp=gearUp;
+		mKeyPressedGearDown=gearDown;
+	}
+
+	void setTankGamepadInputs
+		(const PxF32 accel, const PxF32 thrustLeft, const PxF32 thrustRight, const PxF32 brakeLeft, const PxF32 brakeRight, const bool gearUp, const bool gearDown)
+	{
+		mGamepadAccel=accel;
+		mTankThrustLeft=thrustLeft;
+		mTankThrustRight=thrustRight;
+		mTankBrakeLeft=brakeLeft;
+		mTankBrakeRight=brakeRight;
+		mGamepadGearup=gearUp;
+		mGamepadGeardown=gearDown;
+	}
+
 	void toggleAutoGearFlag() 
 	{
 		mToggleAutoGears = true;
 	}
 
-	void update(const PxF32 dtime, PxVehicleWheels& focusVehicle);
+	void update(const PxF32 dtime, const PxVehicleWheelQueryResult& vehicleWheelQueryResults, PxVehicleWheels& focusVehicle);
 
 	void clear();
 
 private:
 
-	//Raw driving inputs - keys
+	//Raw driving inputs - keys (car + tank)
 	bool			mKeyPressedAccel;
+	bool			mKeyPressedGearUp;
+	bool			mKeyPressedGearDown;
+
+	//Raw driving inputs - keys (car only)
 	bool			mKeyPressedBrake;
 	bool			mKeyPressedHandbrake;
 	bool			mKeyPressedSteerLeft;
 	bool			mKeyPressedSteerRight;
-	bool			mKeyPressedGearUp;
-	bool			mKeyPressedGearDown;
 
-	//Raw driving inputs - gamepad 
+	//Raw driving inputs - keys (tank only)
+	bool			mKeyPressedThrustLeft;
+	bool			mKeyPressedThrustRight;
+	bool			mKeyPressedBrakeLeft;
+	bool			mKeyPressedBrakeRight;
+
+	//Raw driving inputs - gamepad (car + tank)
 	PxF32			mGamepadAccel;
-	PxF32			mGamepadCarBrake;
-	bool			mGamepadCarHandbrake;
 	bool			mGamepadGearup;
 	bool			mGamepadGeardown;
+
+	//Raw driving inputs - gamepad (car only)
+	PxF32			mGamepadCarBrake;
 	PxF32			mGamepadCarSteer;
+	bool			mGamepadCarHandbrake;
+
+	//Raw driving inputs - (tank only)
+	PxF32			mTankThrustLeft;
+	PxF32			mTankThrustRight;
+	PxF32			mTankBrakeLeft;
+	PxF32			mTankBrakeRight;
 
 	//Record and replay using raw driving inputs.
 	bool			mRecord;
@@ -116,13 +157,17 @@ private:
 	bool			mKeyboardSteerRightValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
 	bool			mKeyboardGearupValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
 	bool			mKeyboardGeardownValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
-	// Gamepad 
+	// Gamepad - (tank + car)
 	PxF32			mGamepadAccelValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
 	bool			mGamepadGearupValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
 	bool			mGamepadGeardownValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
+	// Gamepad - car only
 	PxF32			mGamepadCarBrakeValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
 	PxF32			mGamepadCarSteerValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
 	bool			mGamepadCarHandbrakeValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
+	//Gamepad - tank only.
+	PxF32			mGamepadTankThrustLeftValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
+	PxF32			mGamepadTankThrustRightValues[MAX_NUM_RECORD_REPLAY_SAMPLES];
 
 	PxU32			mNumSamples;
 	PxU32			mNumRecordedSamples;
@@ -139,8 +184,14 @@ private:
 
 	//Update 
 	void processRawInputs(const PxF32 timestep, const bool useAutoGears, PxVehicleDrive4WRawInputData& rawInputData);
+	void processRawInputs(const PxF32 timestep, const bool useAutoGears, PxVehicleDriveTankRawInputData& rawInputData);
 	void processAutoReverse(
-		const PxVehicleWheels& focusVehicle, const PxVehicleDriveDynData& driveDynData, const PxVehicleDrive4WRawInputData& rawInputData, 
+		const PxVehicleWheels& focusVehicle, const PxVehicleDriveDynData& driveDynData, const PxVehicleWheelQueryResult& vehicleWheelQueryResults,
+		const PxVehicleDrive4WRawInputData& rawInputData, 
+		bool& toggleAutoReverse, bool& newIsMovingForwardSlowly) const;
+	void processAutoReverse(
+		const PxVehicleWheels& focusVehicle, const PxVehicleDriveDynData& driveDynData, const PxVehicleWheelQueryResult& vehicleWheelQueryResults,
+		const PxVehicleDriveTankRawInputData& rawInputData, 
 		bool& toggleAutoReverse, bool& newIsMovingForwardSlowly) const;
 
 	////////////////////////////////

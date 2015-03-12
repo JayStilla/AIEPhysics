@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #ifndef PVD_NETWORK_STREAMS_H
 #define PVD_NETWORK_STREAMS_H
 #include "foundation/PxSimpleTypes.h"
@@ -75,6 +75,11 @@ namespace physx { namespace debugger {
 		 */
 		virtual PvdError flush() = 0;
 
+		/**
+		*	Return the size of data have been written to target
+		*/
+		virtual PxU64 getWrittenDataSize() = 0;
+
 		static PvdNetworkOutStream& createDoubleBuffered( PxAllocatorCallback& alloc, PvdNetworkOutStream& stream, PxU32 bufSize );
 		static PvdNetworkOutStream* createFromFile( PxAllocatorCallback& alloc, const char* fname );
 	};
@@ -111,6 +116,11 @@ namespace physx { namespace debugger {
 		 *	release any resources related to this stream.
 		 */
 		virtual void release() = 0;
+
+		/**
+		 *	Return the number of bytes the stream has read.
+		 */
+		virtual PxU64 getLoadedDataSize() = 0;
 	};
 
 	//Create an object responsible for a pair of instream/outstream

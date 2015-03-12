@@ -23,12 +23,13 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #include "SampleVehicle_VehicleCooking.h"
 #include "PxTkStream.h"
+#include "extensions/PxDefaultStreams.h"
 
 
 PxConvexMesh* createConvexMesh(const PxVec3* verts, const PxU32 numVerts, PxPhysics& physics, PxCooking& cooking)
@@ -41,10 +42,10 @@ PxConvexMesh* createConvexMesh(const PxVec3* verts, const PxU32 numVerts, PxPhys
 	convexDesc.flags				= PxConvexFlag::eCOMPUTE_CONVEX | PxConvexFlag::eINFLATE_CONVEX;
 
 	PxConvexMesh* convexMesh = NULL;
-	PxToolkit::MemoryOutputStream buf;
+	PxDefaultMemoryOutputStream buf;
 	if(cooking.cookConvexMesh(convexDesc, buf))
 	{
-		PxToolkit::MemoryInputData id(buf.getData(), buf.getSize());
+		PxDefaultMemoryInputData id(buf.getData(), buf.getSize());
 		convexMesh = physics.createConvexMesh(id);
 	}
 

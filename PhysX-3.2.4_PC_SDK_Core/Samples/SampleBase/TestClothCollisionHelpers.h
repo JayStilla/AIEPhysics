@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -61,13 +61,16 @@ namespace Test
         virtual PxU32 addCapsuleIndex(PxU32 i0, PxU32 i1);
 		virtual PxU32 addCapsule(const PxVec3& position1, PxReal radius1, const PxVec3& position2, PxReal radius2);
 		virtual PxU32 getNbSpheres() const;
+		virtual PxU32 getNbCapsules() const;
+
 		virtual PxBounds3 getWorldBounds() const; 
 		virtual const PxClothCollisionSphere* getSpheres() const;
+		virtual const PxU32* getCapsules() const;
+
 		virtual void setClothPose(const PxTransform &clothPose);
         virtual void setCapsuleMotion(PxU32 id, const PxVec3 &linear, const PxVec3 &angular);
 		virtual void setSphereMotion(PxU32 id, const PxVec3 &linear);
         virtual void updateMotion(PxReal time, PxReal timestep);
-        virtual bool generateClothCollisionData(PxClothCollisionData &) const;
 
 		virtual void release();
 

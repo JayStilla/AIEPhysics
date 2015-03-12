@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -68,11 +68,10 @@ PxFixedJoint*		PxFixedJointCreate(PxPhysics& physics,
  @see PxFixedJointCreate() PxJoint
 */
 
-class PxFixedJoint: public PxJoint
+class PxFixedJoint : public PxJoint
 {
 public:
-	static const PxJointType::Enum Type = PxJointType::eFIXED;
-
+	
 	/**
 	\brief Set the linear tolerance threshold for projection. Projection is enabled if PxConstraintFlag::ePROJECTION
 	is set for the joint.
@@ -84,7 +83,7 @@ public:
 
 	Sometimes it is not possible to project (for example when the joints form a cycle).
 
-	<b>Range:</b> [0,inf)<br>
+	<b>Range:</b> [0, PX_MAX_F32)<br>
 	<b>Default:</b> 1e10f
 
 	\param[in] tolerance the linear tolerance threshold
@@ -134,15 +133,32 @@ public:
 	*/
 
 	virtual PxReal				getProjectionAngularTolerance()			const					= 0;
-
-
-
-	virtual	const char*			getConcreteTypeName() const					{	return "PxFixedJoint"; }
+	
+	/**
+	\brief Returns string name of PxFixedJoint, used for serialization
+	*/
+	virtual	const char*			getConcreteTypeName() const { return "PxFixedJoint"; }
 
 protected:
-	PxFixedJoint(PxRefResolver& v)	: PxJoint(v)	{}
-	PxFixedJoint()									{}
-	virtual	bool				isKindOf(const char* name)	const		{	return !strcmp("PxFixedJoint", name) || PxJoint::isKindOf(name);	}
+
+	//serialization
+
+	/**
+	\brief Constructor
+	*/
+	PX_INLINE					PxFixedJoint(PxType concreteType, PxBaseFlags baseFlags) : PxJoint(concreteType, baseFlags) {}
+
+	/**
+	\brief Deserialization constructor
+	*/
+	PX_INLINE					PxFixedJoint(PxBaseFlags baseFlags) : PxJoint(baseFlags)	{}
+
+	/**
+	\brief Returns whether a given type name matches with the type of this instance
+	*/
+	virtual	bool				isKindOf(const char* name) const { return !strcmp("PxFixedJoint", name) || PxJoint::isKindOf(name);	}
+
+	//~serialization
 };
 
 #ifndef PX_DOXYGEN

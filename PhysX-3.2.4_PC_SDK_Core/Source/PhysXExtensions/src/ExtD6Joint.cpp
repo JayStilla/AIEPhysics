@@ -23,22 +23,23 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 
-#include <stdio.h>
 #include "ExtD6Joint.h"
 #include "ExtConstraintHelper.h"
 #include "CmRenderOutput.h"
 #include "CmConeLimitHelper.h"
 #include "PxTolerancesScale.h"
-#include "CmSerialAlignment.h"
+#include "CmUtils.h"
 
 #ifdef PX_PS3
 #include "PS3/ExtD6JointSpu.h"
 #endif
+
+#include "common/PxSerialFramework.h"
 
 using namespace physx;
 using namespace Ext;
@@ -50,10 +51,10 @@ PxD6Joint* physx::PxD6JointCreate(PxPhysics& physics,
 	PX_CHECK_AND_RETURN_NULL(localFrame0.isSane(), "PxD6JointCreate: local frame 0 is not a valid transform"); 
 	PX_CHECK_AND_RETURN_NULL(localFrame1.isSane(), "PxD6JointCreate: local frame 1 is not a valid transform"); 
 	PX_CHECK_AND_RETURN_NULL(actor0 != actor1, "PxD6JointCreate: actors must be different");
-	PX_CHECK_AND_RETURN_NULL(actor0 && actor0->is<PxRigidBody>() || actor1 && actor1->is<PxRigidBody>(), "PxD6JointCreate: at least one actor must be dynamic");
+	PX_CHECK_AND_RETURN_NULL((actor0 && actor0->is<PxRigidBody>()) || (actor1 && actor1->is<PxRigidBody>()), "PxD6JointCreate: at least one actor must be dynamic");
 
-	D6Joint* j = PX_NEW(D6Joint)(physics.getTolerancesScale(), actor0, localFrame0, actor1, localFrame1);
-
+	D6Joint *j;
+	PX_NEW_SERIALIZED(j,D6Joint)(physics.getTolerancesScale(), actor0, localFrame0, actor1, localFrame1);
 	if(j->attach(physics, actor0, actor1))
 		return j;
 
@@ -66,28 +67,27 @@ PxD6Joint* physx::PxD6JointCreate(PxPhysics& physics,
 D6Joint::D6Joint(const PxTolerancesScale& scale,
 				 PxRigidActor* actor0, const PxTransform& localFrame0, 
 				 PxRigidActor* actor1, const PxTransform& localFrame1)
-:	mRecomputeMotion(true)
+:	D6JointT(PxJointConcreteType::eD6, PxBaseFlag::eOWNS_MEMORY | PxBaseFlag::eIS_RELEASABLE)	
+,	mRecomputeMotion(true)
 ,	mRecomputeLimits(true)
 {
-	// PX_SERIALIZATION
-	setSerialType(PxConcreteType::eUSER_D6_JOINT);
-	//~PX_SERIALIZATION
 	D6JointData* data = reinterpret_cast<D6JointData*>(PX_ALLOC(sizeof(D6JointData), PX_DEBUG_EXP("D6JointData")));
+	Cm::markSerializedMem(data, sizeof(D6JointData));
 	mData = data;
 
 	initCommonData(*data,actor0, localFrame0, actor1, localFrame1);
 	for(PxU32 i=0;i<6;i++)
 		data->motion[i] = PxD6Motion::eLOCKED;
 
-	data->twistLimit = PxJointLimitPair(-PxPi/2, PxPi/2, 0.05f);
-	data->swingLimit = PxJointLimitCone(PxPi/2, PxPi/2, 0.05f);
-	data->linearLimit = PxJointLimit(PX_MAX_F32, 0.05f*scale.length);
+	data->twistLimit = PxJointAngularLimitPair(-PxPi/2, PxPi/2);
+	data->swingLimit = PxJointLimitCone(PxPi/2, PxPi/2);
+	data->linearLimit = PxJointLinearLimit(scale, PX_MAX_F32);
 	data->linearMinDist = 1e-6f*scale.length;
 
 	for(PxU32 i=0;i<PxD6Drive::eCOUNT;i++)
 		data->drive[i] = PxD6JointDrive();
 
-	data->drivePosition = PxTransform::createIdentity();
+	data->drivePosition = PxTransform(PxIdentity);
 	data->driveLinearVelocity = PxVec3(0);
 	data->driveAngularVelocity = PxVec3(0);
 
@@ -107,25 +107,55 @@ void D6Joint::setMotion(PxD6Axis::Enum index, PxD6Motion::Enum t)
 	markDirty(); 
 }
 
+
+PxReal D6Joint::getTwist() const
+{
+	PxQuat q = getRelativeTransform().q, swing, twist;
+	Ps::separateSwingTwist(q, swing, twist);
+	PxReal angle = twist.getAngle();
+	return angle<=PxPi ? angle : angle - 2*PxPi;
+}
+
+PxReal D6Joint::getSwingYAngle()	const
+{
+	PxQuat q = getRelativeTransform().q, swing, twist;
+	Ps::separateSwingTwist(q, swing, twist);
+	PxReal tqY = Ps::tanHalf(swing.y, swing.w);
+	PxReal angle = 4*PxAtan(tqY);
+	return angle<=PxPi ? angle : angle - 2*PxPi;
+}
+
+PxReal D6Joint::getSwingZAngle()	const
+{
+	PxQuat q = getRelativeTransform().q, swing, twist;
+	Ps::separateSwingTwist(q, swing, twist);
+	PxReal tqZ = Ps::tanHalf(swing.z, swing.w);
+	PxReal angle = 4*PxAtan(tqZ);
+	return angle<=PxPi ? angle : angle - 2*PxPi;
+}
+
+
 PxD6JointDrive D6Joint::getDrive(PxD6Drive::Enum index) const
 {	
 	return data().drive[index];	
 }
 
-void D6Joint::setDrive(PxD6Drive::Enum index, const PxD6JointDrive &d)
+void D6Joint::setDrive(PxD6Drive::Enum index, const PxD6JointDrive& d)
 {	
+	PX_CHECK_AND_RETURN(d.isValid(), "PxD6Joint::setDrive: drive is invalid"); 
+
 	data().drive[index] = d; 
 	mRecomputeMotion = true; 
 	markDirty(); 
 }
 
-PxJointLimit D6Joint::getLinearLimit() const
+PxJointLinearLimit D6Joint::getLinearLimit() const
 {	
 
 	return data().linearLimit;	
 }
 
-void D6Joint::setLinearLimit(const PxJointLimit &l)
+void D6Joint::setLinearLimit(const PxJointLinearLimit& l)
 {	
 	PX_CHECK_AND_RETURN(l.isValid(), "PxD6Joint::setLinearLimit: limit invalid");
 	data().linearLimit = l; 
@@ -133,12 +163,12 @@ void D6Joint::setLinearLimit(const PxJointLimit &l)
 	markDirty(); 
 }
 
-PxJointLimitPair D6Joint::getTwistLimit() const
+PxJointAngularLimitPair D6Joint::getTwistLimit() const
 {	
 	return data().twistLimit;	
 }
 
-void D6Joint::setTwistLimit(const PxJointLimitPair &l)
+void D6Joint::setTwistLimit(const PxJointAngularLimitPair& l)
 {	
 	PX_CHECK_AND_RETURN(l.isValid(), "PxD6Joint::setTwistLimit: limit invalid");
 	PX_CHECK_AND_RETURN(l.lower>-PxTwoPi && l.upper<PxTwoPi , "PxD6Joint::twist limit must be strictly -2*PI and 2*PI");
@@ -154,7 +184,7 @@ PxJointLimitCone D6Joint::getSwingLimit() const
 	return data().swingLimit;	
 }
 
-void D6Joint::setSwingLimit(const PxJointLimitCone &l)
+void D6Joint::setSwingLimit(const PxJointLimitCone& l)
 {	
 	PX_CHECK_AND_RETURN(l.isValid(), "PxD6Joint::setSwingLimit: limit invalid");
 
@@ -204,7 +234,7 @@ PxReal D6Joint::getProjectionAngularTolerance()	const
 
 void D6Joint::setProjectionLinearTolerance(PxReal tolerance)
 {	
-	PX_CHECK_AND_RETURN(PxIsFinite(tolerance), "PxD6Joint::setProjectionAngularTolerance: tolerance invalid");
+	PX_CHECK_AND_RETURN(PxIsFinite(tolerance) && tolerance >=0, "PxD6Joint::setProjectionLinearTolerance: invalid parameter");
 	data().projectionLinearTolerance = tolerance;	
 	markDirty(); 
 }
@@ -325,7 +355,7 @@ PxQuat truncateSwing(const PxQuat& in, const PxVec3& twistAxis, PxReal shat, PxR
 	PxQuat q = in.w>=0 ? in : -in;
 
 	PxReal tw = twistAxis.dot(q.getImaginaryPart());
-	PxQuat twist = PxQuat::createIdentity();
+	PxQuat twist = PxQuat(PxIdentity);
 	if(PxAbs(tw) > 1e-6f)
 	{
 		PxVec3 tv = twistAxis*PxSqrt(1-tw*tw);
@@ -363,10 +393,10 @@ void D6JointProject(const void* constantBlock,
 	case 0: projected.q = cB2cA.q; break;
 	case 1: projected.q = cB2cA.q; break;	// TODO
 	case 2:	projected.q = cB2cA.q; break;   // TODO
-	case 3: projected.q = truncateSwing(cB2cA.q, PxVec3(0,0,1), shat, chat, angularTrunc); break;
+	case 3: projected.q = truncateSwing(cB2cA.q, PxVec3(0,0,1.f), shat, chat, angularTrunc); break;
 	case 4: projected.q = cB2cA.q; break;   // TODO
-	case 5: projected.q = truncateSwing(cB2cA.q, PxVec3(0,1,0), shat, chat, angularTrunc); break; 
-	case 6: projected.q = truncateSwing(cB2cA.q, PxVec3(0,0,1), shat, chat, angularTrunc); break;
+	case 5: projected.q = truncateSwing(cB2cA.q, PxVec3(0,1.f,0), shat, chat, angularTrunc); break; 
+	case 6: projected.q = truncateSwing(cB2cA.q, PxVec3(0,0,1.f), shat, chat, angularTrunc); break;
 	case 7: projected.q = truncateAngular(cB2cA.q, shat, chat, angularTrunc); break;
 	}
 
@@ -380,7 +410,7 @@ void D6JointVisualize(PxConstraintVisualizer &viz,
  				      const void* constantBlock,
 					  const PxTransform& body0Transform,
 					  const PxTransform& body1Transform,
-					  PxU32 flags)
+					  PxU32 /*flags*/)
 {
 	using namespace joint;
 
@@ -415,7 +445,7 @@ void D6JointVisualize(PxConstraintVisualizer &viz,
 	if(data.limited&TWIST_FLAG)
 	{
 		PxReal tqPhi = Ps::tanHalf(twist.x, twist.w);		// always support (-pi, +pi)
-		viz.visualizeAngularLimit(cA2w, data.twistLimit.lower, data.twistLimit.upper, 
+		viz.visualizeAngularLimit(cB2w, data.twistLimit.lower, data.twistLimit.upper, 
 			PxAbs(tqPhi) > data.tqTwistHigh + data.tqSwingPad);
 	}
 
@@ -425,30 +455,30 @@ void D6JointVisualize(PxConstraintVisualizer &viz,
 	{
 		PxVec3 tanQSwing = PxVec3(0, Ps::tanHalf(swing.z,swing.w), -Ps::tanHalf(swing.y,swing.w));
 		Cm::ConeLimitHelper coneHelper(data.tqSwingZ, data.tqSwingY, data.tqSwingPad);
-		viz.visualizeLimitCone(cA2w, data.tqSwingZ, data.tqSwingY, 
+		viz.visualizeLimitCone(cB2w, data.tqSwingZ, data.tqSwingY, 
 			!coneHelper.contains(tanQSwing));
 	}
 	else if(swing1Limited ^ swing2Limited)
 	{
-		PxTransform yToX = PxTransform(PxVec3(0), PxQuat(-PxPi/2, PxVec3(0,0,1)));
-		PxTransform zToX = PxTransform(PxVec3(0), PxQuat(PxPi/2, PxVec3(0,1,0)));
+		PxTransform yToX = PxTransform(PxVec3(0), PxQuat(-PxPi/2, PxVec3(0,0,1.f)));
+		PxTransform zToX = PxTransform(PxVec3(0), PxQuat(PxPi/2, PxVec3(0,1.f,0)));
 
 		if(swing1Limited)
 		{
 			if(data.locked & SWING2_FLAG)
-				viz.visualizeAngularLimit(cA2w * yToX, -data.swingLimit.yAngle, data.swingLimit.yAngle, 
+				viz.visualizeAngularLimit(cB2w * yToX, -data.swingLimit.yAngle, data.swingLimit.yAngle, 
 					PxAbs(Ps::tanHalf(swing.y, swing.w)) > data.tqSwingY - data.tqSwingPad);
 			else
-				viz.visualizeDoubleCone(cA2w * zToX, data.swingLimit.yAngle, 
+				viz.visualizeDoubleCone(cB2w * zToX, data.swingLimit.yAngle, 
 					PxAbs(tanHalfFromSin(aZ.dot(bX)))> data.thSwingY - data.thSwingPad);
 		}
 		else 
 		{
 			if(data.locked & SWING1_FLAG)
-				viz.visualizeAngularLimit(cA2w * zToX, -data.swingLimit.zAngle, data.swingLimit.zAngle,
+				viz.visualizeAngularLimit(cB2w * zToX, -data.swingLimit.zAngle, data.swingLimit.zAngle,
 					PxAbs(Ps::tanHalf(swing.z, swing.w)) > data.tqSwingZ - data.tqSwingPad);
 			else
-				viz.visualizeDoubleCone(cA2w * yToX, data.swingLimit.zAngle,  
+				viz.visualizeDoubleCone(cB2w * yToX, data.swingLimit.zAngle,  
 					PxAbs(tanHalfFromSin(aY.dot(bX)))> data.thSwingZ - data.thSwingPad);
 		}
 	}
@@ -461,38 +491,36 @@ bool D6Joint::attach(PxPhysics &physics, PxRigidActor* actor0, PxRigidActor* act
 	return mPxConstraint!=NULL;
 }
 
-
-// PX_SERIALIZATION
-BEGIN_FIELDS(D6Joint)
-//	DEFINE_STATIC_ARRAY(D6Joint, mData, PxField::eBYTE, sizeof(D6JointData), Ps::F_SERIALIZE),
-END_FIELDS(D6Joint)
-
-void D6Joint::exportExtraData(PxSerialStream& stream)
+void D6Joint::exportExtraData(PxSerializationContext& stream)
 {
 	if(mData)
 	{
-		Cm::alignStream(stream, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-		stream.storeBuffer(mData, sizeof(D6JointData));
+		stream.alignData(PX_SERIAL_ALIGN);
+		stream.writeData(mData, sizeof(D6JointData));
 	}
+	stream.writeName(mName);
 }
 
-char* D6Joint::importExtraData(char* address, PxU32& totalPadding)
+void D6Joint::importExtraData(PxDeserializationContext& context)
 {
 	if(mData)
-	{
-		address = Cm::alignStream(address, totalPadding, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-		mData = reinterpret_cast<D6JointData*>(address);
-		address += sizeof(D6JointData);
-	}
-	return address;
+		mData = context.readExtraData<D6JointData, PX_SERIAL_ALIGN>();
+
+	context.readName(mName);
 }
 
-bool D6Joint::resolvePointers(PxRefResolver& v, void* context)
+void D6Joint::resolveReferences(PxDeserializationContext& context)
 {
-	D6JointT::resolvePointers(v, context);
+	setPxConstraint(resolveConstraintPtr(context, getPxConstraint(), getConnector(), sShaders));	
+}
 
-	setPxConstraint(resolveConstraintPtr(v, getPxConstraint(), getConnector(), sShaders));
-	return true;
+D6Joint* D6Joint::createObject(PxU8*& address, PxDeserializationContext& context)
+{
+	D6Joint* obj = new (address) D6Joint(PxBaseFlag::eIS_RELEASABLE);
+	address += sizeof(D6Joint);	
+	obj->importExtraData(context);
+	obj->resolveReferences(context);
+	return obj;
 }
 
 #ifdef PX_PS3

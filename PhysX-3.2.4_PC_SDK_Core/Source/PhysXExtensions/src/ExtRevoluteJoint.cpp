@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,11 +34,13 @@
 #include "CmRenderOutput.h"
 #include "PsMathUtils.h"
 #include "CmVisualization.h"
-#include "CmSerialAlignment.h"
+#include "CmUtils.h"
 
 #ifdef PX_PS3
 #include "PS3/ExtRevoluteJointSpu.h"
 #endif
+
+#include "common/PxSerialFramework.h"
 
 using namespace physx;
 using namespace Ext;
@@ -57,10 +59,10 @@ PxRevoluteJoint* physx::PxRevoluteJointCreate(PxPhysics& physics,
 	PX_CHECK_AND_RETURN_NULL(localFrame0.isSane(), "PxRevoluteJointCreate: local frame 0 is not a valid transform"); 
 	PX_CHECK_AND_RETURN_NULL(localFrame1.isSane(), "PxRevoluteJointCreate: local frame 1 is not a valid transform"); 
 	PX_CHECK_AND_RETURN_NULL(actor0 != actor1, "PxRevoluteJointCreate: actors must be different");
-	PX_CHECK_AND_RETURN_NULL(actor0 && actor0->is<PxRigidBody>() || actor1 && actor1->is<PxRigidBody>(), "PxRevoluteJointCreate: at least one actor must be dynamic");
+	PX_CHECK_AND_RETURN_NULL((actor0 && actor0->is<PxRigidBody>()) || (actor1 && actor1->is<PxRigidBody>()), "PxRevoluteJointCreate: at least one actor must be dynamic");
 
-	RevoluteJoint* j = PX_NEW(RevoluteJoint)(physics.getTolerancesScale(), actor0, localFrame0, actor1, localFrame1);
-
+	RevoluteJoint* j;
+	PX_NEW_SERIALIZED(j,RevoluteJoint)(physics.getTolerancesScale(), actor0, localFrame0, actor1, localFrame1);
 	if(j->attach(physics, actor0, actor1))
 		return j;
 
@@ -69,17 +71,38 @@ PxRevoluteJoint* physx::PxRevoluteJointCreate(PxPhysics& physics,
 }
 
 
-PxJointLimitPair RevoluteJoint::getLimit()	const
+PxReal RevoluteJoint::getAngle() const
+{
+	PxQuat q = getRelativeTransform().q, swing, twist;
+	Ps::separateSwingTwist(q, swing, twist);
+	PxReal angle = twist.getAngle();
+	if(q.x<0)
+		angle = 2*PxPi - angle;
+	if(angle>PxPi)
+		angle-=2*PxPi;
+	return angle;
+	
+}
+
+PxReal RevoluteJoint::getVelocity() const
+{
+	return getRelativeAngularVelocity().x;
+}
+
+
+
+PxJointAngularLimitPair RevoluteJoint::getLimit()	const
 { 
 	return data().limit;	
 }
 
-void RevoluteJoint::setLimit(const PxJointLimitPair& limit)
+void RevoluteJoint::setLimit(const PxJointAngularLimitPair& limit)
 { 
 	PX_CHECK_AND_RETURN(limit.isValid(), "PxRevoluteJoint::setTwistLimit: limit invalid");
-	PX_CHECK_AND_RETURN(limit.lower>-PxTwoPi && limit.upper<PxTwoPi , "PxRevoluteJoint::twist limit must be strictly -2*PI and 2*PI");
+	PX_CHECK_AND_RETURN(limit.lower>-PxPi && limit.upper<PxPi , "PxRevoluteJoint::twist limit must be strictly -*PI and PI");
 	PX_CHECK_AND_RETURN(limit.upper - limit.lower < PxTwoPi, "PxRevoluteJoint::twist limit range must be strictly less than 2*PI");
-	data().limit = limit; markDirty();	
+	data().limit = limit; 
+	markDirty();	
 }
 
 PxReal RevoluteJoint::getDriveVelocity() const
@@ -132,7 +155,7 @@ PxReal RevoluteJoint::getProjectionAngularTolerance() const
 
 void RevoluteJoint::setProjectionLinearTolerance(PxReal tolerance)
 { 
-	PX_CHECK_AND_RETURN(PxIsFinite(tolerance), "PxRevoluteJoint::setProjectionLinearTolerance: invalid parameter");
+	PX_CHECK_AND_RETURN(PxIsFinite(tolerance) && tolerance >=0, "PxRevoluteJoint::setProjectionLinearTolerance: invalid parameter");
 	data().projectionLinearTolerance = tolerance;
 	markDirty(); 
 }
@@ -207,7 +230,7 @@ void RevoluteJointVisualize(PxConstraintVisualizer& viz,
 		 					const void* constantBlock,
 							const PxTransform& body0Transform,
 							const PxTransform& body1Transform,
-							PxU32 flags)
+							PxU32 /*flags*/)
 {
 	const RevoluteJointData& data = *reinterpret_cast<const RevoluteJointData*>(constantBlock);
 
@@ -217,7 +240,7 @@ void RevoluteJointVisualize(PxConstraintVisualizer& viz,
 	viz.visualizeJointFrames(t0, t1);
 
 	if(data.jointFlags & PxRevoluteJointFlag::eLIMIT_ENABLED)
-		viz.visualizeAngularLimit(t0, data.limit.lower, data.limit.upper, false);
+		viz.visualizeAngularLimit(t1, data.limit.lower, data.limit.upper, false);
 }
 }
 
@@ -227,37 +250,35 @@ bool Ext::RevoluteJoint::attach(PxPhysics &physics, PxRigidActor* actor0, PxRigi
 	return mPxConstraint!=NULL;
 }
 
-// PX_SERIALIZATION
-BEGIN_FIELDS(RevoluteJoint)
-//	DEFINE_STATIC_ARRAY(RevoluteJoint, mData, PxField::eBYTE, sizeof(RevoluteJointData), Ps::F_SERIALIZE),
-END_FIELDS(RevoluteJoint)
-
-void RevoluteJoint::exportExtraData(PxSerialStream& stream)
+void RevoluteJoint::exportExtraData(PxSerializationContext& stream)
 {
 	if(mData)
 	{
-		Cm::alignStream(stream, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-		stream.storeBuffer(mData, sizeof(RevoluteJointData));
+		stream.alignData(PX_SERIAL_ALIGN);
+		stream.writeData(mData, sizeof(RevoluteJointData));
 	}
+	stream.writeName(mName);
 }
 
-char* RevoluteJoint::importExtraData(char* address, PxU32& totalPadding)
+void RevoluteJoint::importExtraData(PxDeserializationContext& context)
 {
 	if(mData)
-	{
-		address = Cm::alignStream(address, totalPadding, PX_SERIAL_DEFAULT_ALIGN_EXTRA_DATA_WIP);
-		mData = reinterpret_cast<RevoluteJointData*>(address);
-		address += sizeof(RevoluteJointData);
-	}
-	return address;
+		mData = context.readExtraData<RevoluteJointData, PX_SERIAL_ALIGN>();
+	context.readName(mName);
 }
 
-bool RevoluteJoint::resolvePointers(PxRefResolver& v, void* context)
+void RevoluteJoint::resolveReferences(PxDeserializationContext& context)
 {
-	RevoluteJointT::resolvePointers(v, context);
+	setPxConstraint(resolveConstraintPtr(context, getPxConstraint(), getConnector(), sShaders));	
+}
 
-	setPxConstraint(resolveConstraintPtr(v, getPxConstraint(), getConnector(), sShaders));
-	return true;
+RevoluteJoint* RevoluteJoint::createObject(PxU8*& address, PxDeserializationContext& context)
+{
+	RevoluteJoint* obj = new (address) RevoluteJoint(PxBaseFlag::eIS_RELEASABLE);
+	address += sizeof(RevoluteJoint);	
+	obj->importExtraData(context);
+	obj->resolveReferences(context);
+	return obj;
 }
 
 //~PX_SERIALIZATION

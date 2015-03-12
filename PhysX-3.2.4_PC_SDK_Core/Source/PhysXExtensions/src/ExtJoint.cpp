@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -41,9 +41,6 @@
 #include "ExtPrismaticJoint.h"
 #include "ExtRevoluteJoint.h"
 #include "ExtSphericalJoint.h"
-// PX_SERIALIZATION
-#include "CmSerialFramework.h"
-//~PX_SERIALIZATION
 
 using namespace physx;
 using namespace Ext;
@@ -51,26 +48,13 @@ using namespace Ext;
 // PX_SERIALIZATION
 using namespace Ext;
 
-namespace physx
-{
-	PxConstraint* resolveConstraintPtr(PxRefResolver& v,
-		PxConstraint* old,
-		PxConstraintConnector* connector,
-		PxConstraintShaderTable &shaders);
-}
-
-PxConstraint* physx::resolveConstraintPtr(PxRefResolver& v,
+PxConstraint* physx::resolveConstraintPtr(PxDeserializationContext& v,
 										  PxConstraint* old,
 										  PxConstraintConnector* connector,
 										  PxConstraintShaderTable &shaders)
 {
-	PxSerializable* s = (PxSerializable*)v.newAddress(old);
-	if(!s)
-	{
-		Ps::getFoundation().error(PxErrorCode::eINVALID_OPERATION, __FILE__, __LINE__, "resolveConstraintPtr: constraint not found.");
-		return NULL;
-	}
-	PxConstraint* new_nx = static_cast<PxConstraint*>(s);
+	v.translatePxBase(old);
+	PxConstraint* new_nx = static_cast<PxConstraint*>(old);
 	new_nx->setConstraintFunctions(*connector, shaders);
 	return new_nx;
 }
@@ -106,7 +90,7 @@ void PxSetJointGlobalFrame(PxJoint& joint, const PxVec3* wsAnchor, const PxVec3*
 
 	PxTransform localPose[2];
 	for(PxU32 i=0; i<2; i++)
-		localPose[i] = PxTransform::createIdentity();
+		localPose[i] = PxTransform(PxIdentity);
 
 	// 1) global anchor
 	if(wsAnchor)

@@ -23,13 +23,15 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #include <stdio.h>
 #include "AcclaimLoader.h"
+#include "FrameworkFoundation.h"
 #include "PsMathUtils.h"
+#include "PsFile.h"
 #include "SampleAllocatorSDKClasses.h"
 #include "SampleArray.h"
 
@@ -57,17 +59,17 @@ static inline bool isNumeric(int c)
 ///////////////////////////////////////////////////////////////////////////////
 class SampleFileBuffer
 {
-	FILE*	mFP;
-	char	mBuffer[MAX_FILE_BUFFER_SIZE];
-	int		mCurrentBufferSize;
-	int		mCurrentCounter;
-	int		mEOF;
+	SampleFramework::File*	mFP;
+	char					mBuffer[MAX_FILE_BUFFER_SIZE];
+	int						mCurrentBufferSize;
+	int						mCurrentCounter;
+	int						mEOF;
 
 public:
-	SampleFileBuffer(FILE* fp) : 
+	SampleFileBuffer(SampleFramework::File* fp) : 
 		mFP(fp), 
 		mCurrentBufferSize(0),
-		mCurrentCounter(0), 
+		mCurrentCounter(0),
 		mEOF(0)
 		{} 
 
@@ -559,7 +561,8 @@ bool Acclaim::readASFData(const char* filename, Acclaim::ASFData& data)
 
 	char token[MAX_TOKEN_LENGTH];
 
-	FILE* fp = fopen(filename, "r");
+	SampleFramework::File* fp = NULL;
+	physx::shdfnd::fopen_s(&fp, filename, "r");
 
 	if (!fp)
 		return false;
@@ -633,7 +636,8 @@ bool Acclaim::readAMCData(const char* filename, Acclaim::ASFData& asfData, Accla
 	SampleArray<FrameData> tempFrameData;
 	tempFrameData.reserve(300);
 
-	FILE* fp = fopen(filename, "r");
+	SampleFramework::File* fp = NULL;
+	physx::shdfnd::fopen_s(&fp, filename, "r");
 
 	if (!fp)
 		return false;
@@ -659,7 +663,7 @@ bool Acclaim::readAMCData(const char* filename, Acclaim::ASFData& asfData, Accla
 		else if (isNumeric(token[0]) == true)
 		{
 			// frame number
-			int frameNo = atoi(token);
+			//int frameNo = atoi(token);
 
 			FrameData frameData;
 			if (readFrameData(buffer, asfData, frameData) == true)

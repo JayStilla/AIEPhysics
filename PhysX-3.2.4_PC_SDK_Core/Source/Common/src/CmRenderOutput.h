@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,6 @@
 #include "CmRenderBuffer.h"
 #include "CmMatrix34.h"
 #include "PsArray.h"
-#include "PsNoCopy.h"
 #include "foundation/PxMat44.h"
 #include "PsUserAllocated.h"
 
@@ -44,16 +43,16 @@ namespace Cm
 {
 	struct DebugText;
 
+#if defined(PX_VC) 
+    #pragma warning(push)
+	#pragma warning( disable : 4251 ) // class needs to have dll-interface to be used by clients of class
+#endif
 	/**
 	Output stream to fill RenderBuffer
 	*/
 	class PX_PHYSX_COMMON_API RenderOutput
 	{
 	public:
-
-		RenderOutput(RenderBuffer& buffer) 
-			: mTransform(PxMat44::createIdentity()), mBuffer(buffer) 
-		{}
 
 		enum Primitive {
 			POINTS,
@@ -63,6 +62,11 @@ namespace Cm
 			TRIANGLESTRIP,
 			TEXT
 		};
+
+		RenderOutput(RenderBuffer& buffer) 
+			: mPrim(POINTS), mColor(0), mVertex0(0.0f), mVertex1(0.0f)
+			, mVertexCount(0), mTransform(PxMat44(PxIdentity)), mBuffer(buffer) 
+		{}
 
 		RenderOutput& operator<<(Primitive prim);
 		RenderOutput& operator<<(PxU32 color); // 0xbbggrr
@@ -123,14 +127,14 @@ namespace Cm
 
 	struct DebugBox 
 	{
-		explicit DebugBox(const PxVec3& extents, bool wireframe = true) 
-		: minimum(-extents), maximum(extents), wireframe(wireframe) {}
+		explicit DebugBox(const PxVec3& extents, bool wireframe_ = true) 
+		: minimum(-extents), maximum(extents), wireframe(wireframe_) {}
 
-		explicit DebugBox(const PxVec3& pos, const PxVec3& extents, bool wireframe = true) 
-		: minimum(pos-extents), maximum(pos+extents), wireframe(wireframe) {}
+		explicit DebugBox(const PxVec3& pos, const PxVec3& extents, bool wireframe_ = true) 
+		: minimum(pos-extents), maximum(pos+extents), wireframe(wireframe_) {}
 
-		explicit DebugBox(const PxBounds3& bounds, bool wireframe = true)
-		: minimum(bounds.minimum), maximum(bounds.maximum), wireframe(wireframe) {}
+		explicit DebugBox(const PxBounds3& bounds, bool wireframe_ = true)
+		: minimum(bounds.minimum), maximum(bounds.maximum), wireframe(wireframe_) {}
 
 		PxVec3 minimum, maximum;
 		bool wireframe;
@@ -142,8 +146,8 @@ namespace Cm
 		DebugArrow(const PxVec3& pos, const PxVec3& vec) 
 		: base(pos), tip(pos+vec), headLength(vec.magnitude()*0.15f) {}
 
-		DebugArrow(const PxVec3& pos, const PxVec3& vec, PxReal headLength) 
-		: base(pos), tip(pos+vec), headLength(headLength) {}
+		DebugArrow(const PxVec3& pos, const PxVec3& vec, PxReal headLength_) 
+		: base(pos), tip(pos+vec), headLength(headLength_) {}
 
 		PxVec3 base, tip;
 		PxReal headLength;
@@ -152,18 +156,22 @@ namespace Cm
 
 	struct DebugBasis
 	{
-		DebugBasis(const PxVec3& extends, PxU32 colorX = PxDebugColor::eARGB_RED, 
-			PxU32 colorY = PxDebugColor::eARGB_GREEN, PxU32 colorZ = PxDebugColor::eARGB_BLUE) 
-		: extends(extends), colorX(colorX), colorY(colorY), colorZ(colorZ) {}
+		DebugBasis(const PxVec3& ext, PxU32 cX = PxDebugColor::eARGB_RED, 
+			PxU32 cY = PxDebugColor::eARGB_GREEN, PxU32 cZ = PxDebugColor::eARGB_BLUE) 
+		: extends(ext), colorX(cX), colorY(cY), colorZ(cZ) {}
 		PxVec3 extends;
 		PxU32 colorX, colorY, colorZ;
 	};
 	PX_PHYSX_COMMON_API RenderOutput& operator<<(RenderOutput& out, const DebugBasis& basis);
 
+#if defined(PX_VC) 
+     #pragma warning(pop) 
+#endif
+
 	struct DebugCircle
 	{
-		DebugCircle(PxU32 nSegments, PxReal radius) 
-		: nSegments(nSegments), radius(radius) {}
+		DebugCircle(PxU32 s, PxReal r) 
+		: nSegments(s), radius(r) {}
 		PxU32 nSegments;
 		PxReal radius;
 	};
@@ -171,8 +179,8 @@ namespace Cm
 
 	struct DebugArc
 	{
-		DebugArc(PxU32 nSegments, PxReal radius, PxReal minAngle, PxReal maxAngle) 
-		: nSegments(nSegments), radius(radius), minAngle(minAngle), maxAngle(maxAngle) {}
+		DebugArc(PxU32 s, PxReal r, PxReal minAng, PxReal maxAng) 
+		: nSegments(s), radius(r), minAngle(minAng), maxAngle(maxAng) {}
 		PxU32 nSegments;
 		PxReal radius;
 		PxReal minAngle, maxAngle;

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -50,6 +50,9 @@ void PxDefaultErrorCallback::reportError(PxErrorCode::Enum e, const char* messag
 
 	switch (e)
 	{
+	case PxErrorCode::eNO_ERROR:
+		errorCode = "no error";
+		break;
 	case PxErrorCode::eINVALID_PARAMETER:
 		errorCode = "invalid parameter";
 		break;
@@ -71,6 +74,10 @@ void PxDefaultErrorCallback::reportError(PxErrorCode::Enum e, const char* messag
 	case PxErrorCode::eABORT:
 		errorCode = "abort";
 		break;
+	case PxErrorCode::eINTERNAL_ERROR:
+		errorCode = "internal error";
+		break;
+	case PxErrorCode::eMASK_ALL:
 	default:
 		errorCode = "unknown error";
 		break;

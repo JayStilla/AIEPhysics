@@ -23,9 +23,9 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
-// Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
+// Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
 
 
 #ifndef PX_FOUNDATION_PS_WINDOWS_STRING_H
@@ -38,7 +38,7 @@
 #include <stdarg.h>
 
 #pragma warning(push)
-#pragma warning(disable: 4995 4996)
+#pragma warning(disable: 4996)
 
 namespace physx
 {
@@ -46,11 +46,11 @@ namespace physx
 	{
 		PX_INLINE PxI32 stricmp(const char *str, const char *str1) {return(::_stricmp(str, str1));}
 		PX_INLINE PxI32 strnicmp(const char *str, const char *str1, size_t len) {return(::_strnicmp(str, str1, len));}
-		PX_INLINE PxI32 strncat_s(char* a, PxI32 b, const char* c, size_t d) {return(::strncat_s(a, b, c, d));}
+		PX_INLINE PxI32 strncat_s(char* a, PxI32 b, const char* c, size_t d) {return ::strncat_s(a, (rsize_t)b, c, d);}
 		PX_INLINE PxI32 strncpy_s( char *strDest, size_t sizeInBytes, const char *strSource, size_t count) {return(::strncpy_s( strDest,sizeInBytes,strSource, count));}
 		PX_INLINE void strcpy_s(char* dest, size_t size, const char* src) {::strcpy_s(dest, size, src);}
 		PX_INLINE void strcat_s(char* dest, size_t size, const char* src) {::strcat_s(dest, size, src);}
-		PX_INLINE PxI32 _vsnprintf(char* dest, size_t size, const char* src, va_list arg) 
+		PX_INLINE PxI32 _vsnprintf(char* dest, size_t size, const char* src, va_list arg)
 		{
 			PxI32 r = ::_vsnprintf(dest, size, src, arg);
 

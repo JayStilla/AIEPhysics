@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 #ifndef _SAMPLE_FRAMEWORK_INPUT_EVENT_IDS_H
 #define _SAMPLE_FRAMEWORK_INPUT_EVENT_IDS_H
 
@@ -33,7 +33,7 @@ static const float GAMEPAD_DEFAULT_SENSITIVITY = 1.0f;
 // InputEvents used by SampleApplication
 enum SampleFrameworkInputEventIds
 {
-	CAMERA_SHIFT_SPEED,
+	CAMERA_SHIFT_SPEED = 0,
 	CAMERA_MOVE_LEFT,
 	CAMERA_MOVE_RIGHT,
 	CAMERA_MOVE_UP,
@@ -58,6 +58,35 @@ enum SampleFrameworkInputEventIds
 
 	NUM_SAMPLE_FRAMEWORK_INPUT_EVENT_IDS, 
 };
+
+// InputEvent descriptions used by SampleApplication
+const char* const SampleFrameworkInputEventDescriptions[] =
+{
+	"change the camera speed",
+	"move the camera left", 
+	"move the camera right",
+	"move the camera up",
+	"move the camera down",
+	"move the camera forward",
+	"move the camera backward",
+	"increase the camera move speed",
+	"decrease the camera move speed",
+
+	"look around with the camera",
+	"enable looking around with the camera",
+
+	"look left and right with the camera",
+	"look up and down look with the camera",
+	"move the camera left and right",
+	"move the camera forward and backward",
+
+	"jump",
+	"crouch",
+	"next controller",
+	"previous controller",
+};
+
+PX_COMPILE_TIME_ASSERT(PX_ARRAY_SIZE(SampleFrameworkInputEventDescriptions) == NUM_SAMPLE_FRAMEWORK_INPUT_EVENT_IDS);
 
 #endif
 

@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -57,20 +57,23 @@ class PhysXSample;
 
 	struct ControlledActorDesc
 	{
-									ControlledActorDesc();
+										ControlledActorDesc();
 
-		PxControllerShapeType::Enum	mType;
-		PxExtendedVec3				mPosition;
-		float						mSlopeLimit;
-		float						mContactOffset;
-		float						mStepOffset;
-		float						mInvisibleWallHeight;
-		float						mMaxJumpHeight;
-		float						mRadius;
-		float						mHeight;
-		float						mCrouchHeight;
-		float						mProxyDensity;
-		float						mProxyScale;
+		PxControllerShapeType::Enum		mType;
+		PxExtendedVec3					mPosition;
+		float							mSlopeLimit;
+		float							mContactOffset;
+		float							mStepOffset;
+		float							mInvisibleWallHeight;
+		float							mMaxJumpHeight;
+		float							mRadius;
+		float							mHeight;
+		float							mCrouchHeight;
+		float							mProxyDensity;
+		float							mProxyScale;
+		float							mVolumeGrowth;
+		PxUserControllerHitReport*		mReportCallback;
+		PxControllerBehaviorCallback*	mBehaviorCallback;
 	};
 
 	class ControlledActor : public SampleAllocateable
@@ -79,7 +82,7 @@ class PhysXSample;
 													ControlledActor(PhysXSample& owner);
 		virtual										~ControlledActor();
 
-						PxController*				init(const ControlledActorDesc& desc, PxControllerManager* manager, PxUserControllerHitReport* report=NULL, PxControllerBehaviorCallback* behaviorCallback=NULL);
+						PxController*				init(const ControlledActorDesc& desc, PxControllerManager* manager);
 						PxExtendedVec3				getFootPosition()	const;
 						void						reset();
 						void						teleport(const PxVec3& pos);
@@ -114,6 +117,9 @@ class PhysXSample;
 						bool						mDoStandup;
 						bool						mIsCrouching;
 		friend class SampleCCTCameraController;
+
+	private:
+		ControlledActor& operator=(const ControlledActor&);
 	};
 
 	void defaultCCTInteraction(const PxControllerShapeHit& hit);

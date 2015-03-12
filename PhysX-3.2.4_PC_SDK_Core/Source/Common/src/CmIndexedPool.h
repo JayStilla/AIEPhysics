@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -59,6 +59,8 @@ namespace Cm
 	template <class T, PxU32 EltsPerSlab> 
 	class IndexedPool
 	{
+		PX_NOCOPY(IndexedPool)
+
 	public:
 		static const PxU32 LOG2_ELTS_PER_SLAB = Ps::LogTwo<EltsPerSlab>::value;
 
@@ -161,6 +163,7 @@ namespace Cm
 			PX_INLINE bool done() const { return mIndex == Cm::BitMap::Iterator::DONE; }
 
 		private:
+			Iterator& operator=(const Iterator&);
 			Cm::IndexedPool<T, EltsPerSlab>& mPool;
 			Cm::BitMap::Iterator mBitmapIter;
 			PxU32 mIndex;

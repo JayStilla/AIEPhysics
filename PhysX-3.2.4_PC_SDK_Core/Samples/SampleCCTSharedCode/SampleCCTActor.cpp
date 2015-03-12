@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -53,7 +53,10 @@ ControlledActorDesc::ControlledActorDesc() :
 	mCrouchHeight		(0.0f),
 	mProxyDensity		(10.0f),
 //	mProxyScale			(0.8f)
-	mProxyScale			(0.9f)
+	mProxyScale			(0.9f),
+	mVolumeGrowth		(1.5f),
+	mReportCallback		(NULL),
+	mBehaviorCallback	(NULL)
 {
 }
 
@@ -82,11 +85,13 @@ ControlledActor::~ControlledActor()
 
 void ControlledActor::reset()
 {
+	PxSceneWriteLock scopedLock(mOwner.getActiveScene());
 	mController->setPosition(mInitialPosition);
 }
 
 void ControlledActor::teleport(const PxVec3& pos)
 {
+	PxSceneWriteLock scopedLock(mOwner.getActiveScene());
 	mController->setPosition(PxExtendedVec3(pos.x, pos.y, pos.z));
 	mTransferMomentum = false;
 	mDelta = PxVec3(0);
@@ -111,7 +116,7 @@ void ControlledActor::sync()
 
 	const PxTransform tr(toVec3(newPos));
 
-//	printf("%f %f %f\n", tr.p.x, tr.p.y, tr.p.z);
+//	shdfnd::printFormatted("%f %f %f\n", tr.p.x, tr.p.y, tr.p.z);
 
 	if(mRenderActorStanding)
 		mRenderActorStanding->setTransform(tr);
@@ -119,24 +124,17 @@ void ControlledActor::sync()
 		mRenderActorCrouching->setTransform(tr);
 }
 
-PxController* ControlledActor::init(const ControlledActorDesc& desc, PxControllerManager* manager, PxUserControllerHitReport* report, PxControllerBehaviorCallback* behaviorCallback)
+PxController* ControlledActor::init(const ControlledActorDesc& desc, PxControllerManager* manager)
 {
-	PxControllerShapeType::Enum	type	= desc.mType;
-	const PxExtendedVec3& position		= desc.mPosition;
-	float slopeLimit					= desc.mSlopeLimit;
-	float contactOffset					= desc.mContactOffset;
-	float stepOffset					= desc.mStepOffset;
-	float invisibleWallHeight			= desc.mInvisibleWallHeight;
-	float maxJumpHeight					= desc.mMaxJumpHeight;
-	float radius						= desc.mRadius;
-	float height						= desc.mHeight;
-	float crouchHeight					= desc.mCrouchHeight;
+	const float radius	= desc.mRadius;
+	float height		= desc.mHeight;
+	float crouchHeight	= desc.mCrouchHeight;
 
 	PxControllerDesc* cDesc;
 	PxBoxControllerDesc boxDesc;
 	PxCapsuleControllerDesc capsuleDesc;
 
-	if(type==PxControllerShapeType::eBOX)
+	if(desc.mType==PxControllerShapeType::eBOX)
 	{
 		height *= 0.5f;
 		height += radius;
@@ -149,33 +147,34 @@ PxController* ControlledActor::init(const ControlledActorDesc& desc, PxControlle
 	}
 	else 
 	{
-		PX_ASSERT(type==PxControllerShapeType::eCAPSULE);
+		PX_ASSERT(desc.mType==PxControllerShapeType::eCAPSULE);
 		capsuleDesc.height = height;
 		capsuleDesc.radius = radius;
+		capsuleDesc.climbingMode = PxCapsuleClimbingMode::eCONSTRAINED;
 		cDesc = &capsuleDesc;
 	}
 
 	cDesc->density				= desc.mProxyDensity;
 	cDesc->scaleCoeff			= desc.mProxyScale;
 	cDesc->material				= &mOwner.getDefaultMaterial();
-	cDesc->position				= position;
-	cDesc->slopeLimit			= slopeLimit;
-	cDesc->contactOffset		= contactOffset;
-	cDesc->stepOffset			= stepOffset;
-	cDesc->invisibleWallHeight	= invisibleWallHeight;
-	cDesc->maxJumpHeight		= maxJumpHeight;
-	cDesc->callback				= report;
-	cDesc->behaviorCallback		= behaviorCallback;
-//	cDesc->nonWalkableMode		= PxCCTNonWalkableMode::eFORCE_SLIDING;
-//	cDesc->volumeGrowth			= 2.0f;
+	cDesc->position				= desc.mPosition;
+	cDesc->slopeLimit			= desc.mSlopeLimit;
+	cDesc->contactOffset		= desc.mContactOffset;
+	cDesc->stepOffset			= desc.mStepOffset;
+	cDesc->invisibleWallHeight	= desc.mInvisibleWallHeight;
+	cDesc->maxJumpHeight		= desc.mMaxJumpHeight;
+//	cDesc->nonWalkableMode		= PxControllerNonWalkableMode::ePREVENT_CLIMBING_AND_FORCE_SLIDING;
+	cDesc->reportCallback		= desc.mReportCallback;
+	cDesc->behaviorCallback		= desc.mBehaviorCallback;
+	cDesc->volumeGrowth			= desc.mVolumeGrowth;
 
-	mType						= type;
-	mInitialPosition			= position;
+	mType						= desc.mType;
+	mInitialPosition			= desc.mPosition;
 	mStandingSize				= height;
 	mCrouchingSize				= crouchHeight;
 	mControllerRadius			= radius;
 
-	PxController* ctrl = static_cast<PxBoxController*>(manager->createController(mOwner.getPhysics(), &mOwner.getActiveScene(), *cDesc));
+	PxController* ctrl = static_cast<PxBoxController*>(manager->createController(*cDesc));
 	PX_ASSERT(ctrl);
 
 	// remove controller shape from scene query for standup overlap test
@@ -190,7 +189,7 @@ PxController* ControlledActor::init(const ControlledActorDesc& desc, PxControlle
 
 			Renderer* renderer = mOwner.getRenderer();
 
-			if(type==PxControllerShapeType::eBOX)
+			if(desc.mType==PxControllerShapeType::eBOX)
 			{
 				const PxVec3 standingExtents(radius, height, radius);
 				const PxVec3 crouchingExtents(radius, crouchHeight, radius);
@@ -198,7 +197,7 @@ PxController* ControlledActor::init(const ControlledActorDesc& desc, PxControlle
 				mRenderActorStanding = SAMPLE_NEW(RenderBoxActor)(*renderer, standingExtents);
 				mRenderActorCrouching = SAMPLE_NEW(RenderBoxActor)(*renderer, crouchingExtents);
 			}
-			else if(type==PxControllerShapeType::eCAPSULE)
+			else if(desc.mType==PxControllerShapeType::eCAPSULE)
 			{
 				mRenderActorStanding = SAMPLE_NEW(RenderCapsuleActor)(*renderer, radius, height*0.5f);
 				mRenderActorCrouching = SAMPLE_NEW(RenderCapsuleActor)(*renderer, radius, crouchHeight*0.5f);
@@ -218,6 +217,9 @@ void ControlledActor::tryStandup()
 	}
 	else if(mType==PxControllerShapeType::eCAPSULE)
 	{
+		PxScene* scene = mController->getScene();
+		PxSceneReadLock scopedLock(*scene);
+		
 		PxCapsuleController* capsuleCtrl = static_cast<PxCapsuleController*>(mController);
 
 		PxReal r = capsuleCtrl->getRadius();
@@ -228,9 +230,9 @@ void ControlledActor::tryStandup()
 		PxVec3 pos((float)position.x,(float)position.y+mStandingSize*.5f+r,(float)position.z);
 		PxQuat orientation(PxHalfPi, PxVec3(0.0f, 0.0f, 1.0f));
 
-		PxShape* hit;
-		PxScene* scene = mController->getScene();
-		if(scene->overlapMultiple(geom, PxTransform(pos,orientation),&hit,1) != 0) return;
+		PxOverlapBuffer hit;
+		if(scene->overlap(geom, PxTransform(pos,orientation), hit, PxQueryFilterData(PxQueryFlag::eANY_HIT|PxQueryFlag::eSTATIC|PxQueryFlag::eDYNAMIC)))
+			return;
 	}
 
 	// if no hit, we can stand up
@@ -242,6 +244,7 @@ void ControlledActor::tryStandup()
 
 void ControlledActor::resizeController(PxReal height)
 {
+	PxSceneWriteLock scopedLock(mOwner.getActiveScene());
 	mIsCrouching = true;
 	mController->resize(height);
 }
@@ -277,18 +280,44 @@ static void addForceAtLocalPos(PxRigidBody& body, const PxVec3& force, const PxV
 
 void defaultCCTInteraction(const PxControllerShapeHit& hit)
 {
-	PxRigidDynamic* actor = hit.shape->getActor().is<PxRigidDynamic>();
+	PxRigidDynamic* actor = hit.shape->getActor()->is<PxRigidDynamic>();
 	if(actor)
 	{
-		if(actor->getRigidDynamicFlags() & PxRigidDynamicFlag::eKINEMATIC)
+		if(actor->getRigidBodyFlags() & PxRigidBodyFlag::eKINEMATIC)
 			return;
+
+		if(0)
+		{
+			const PxVec3 p = actor->getGlobalPose().p + hit.dir * 10.0f;
+
+			PxShape* shape;
+			actor->getShapes(&shape, 1);
+			PxRaycastHit newHit;
+			PxU32 n = PxShapeExt::raycast(*shape, *shape->getActor(), p, -hit.dir, 20.0f, PxHitFlag::ePOSITION, 1, &newHit, false);
+			if(n)
+			{
+				// We only allow horizontal pushes. Vertical pushes when we stand on dynamic objects creates
+				// useless stress on the solver. It would be possible to enable/disable vertical pushes on
+				// particular objects, if the gameplay requires it.
+				const PxVec3 upVector = hit.controller->getUpDirection();
+				const PxF32 dp = hit.dir.dot(upVector);
+		//		shdfnd::printFormatted("%f\n", fabsf(dp));
+				if(fabsf(dp)<1e-3f)
+		//		if(hit.dir.y==0.0f)
+				{
+					const PxTransform globalPose = actor->getGlobalPose();
+					const PxVec3 localPos = globalPose.transformInv(newHit.position);
+					::addForceAtLocalPos(*actor, hit.dir*hit.length*1000.0f, localPos, PxForceMode::eACCELERATION);
+				}
+			}
+		}
 
 		// We only allow horizontal pushes. Vertical pushes when we stand on dynamic objects creates
 		// useless stress on the solver. It would be possible to enable/disable vertical pushes on
 		// particular objects, if the gameplay requires it.
 		const PxVec3 upVector = hit.controller->getUpDirection();
 		const PxF32 dp = hit.dir.dot(upVector);
-//		printf("%f\n", fabsf(dp));
+//		shdfnd::printFormatted("%f\n", fabsf(dp));
 		if(fabsf(dp)<1e-3f)
 //		if(hit.dir.y==0.0f)
 		{

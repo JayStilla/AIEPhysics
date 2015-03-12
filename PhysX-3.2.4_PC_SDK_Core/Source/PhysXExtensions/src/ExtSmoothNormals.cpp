@@ -23,16 +23,16 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 
+#include "foundation/PxMemory.h"
 #include "PxSmoothNormals.h"
 #include "PsMathUtils.h"
 #include "PsUserAllocated.h"
 #include "PsUtilities.h"
-#include "PsIntrinsics.h"
 #include "CmPhysXCommon.h"
 
 using namespace physx;
@@ -77,7 +77,7 @@ bool PxBuildSmoothNormals(PxU32 nbTris, PxU32 nbVerts, const PxVec3* verts, cons
 	if(!FNormals) return false;
 
 	// Compute face normals
-	const PxU32 c = (flip!=0);
+	const PxU32 c = PxU32(flip!=0);
 	for(PxU32 i=0; i<nbTris; i++)
 	{
 		// compute indices outside of array index to workaround
@@ -96,11 +96,11 @@ bool PxBuildSmoothNormals(PxU32 nbTris, PxU32 nbVerts, const PxVec3* verts, cons
 	}
 
 	// Compute vertex normals
-	Ps::memSet(normals, 0, nbVerts*sizeof(PxVec3));
+	PxMemSet(normals, 0, nbVerts*sizeof(PxVec3));
 
 	// TTP 3751
 	PxVec3* TmpNormals = (PxVec3*)PX_ALLOC_TEMP(sizeof(PxVec3)*nbVerts, PX_DEBUG_EXP("PxVec3"));
-	Ps::memSet(TmpNormals, 0, nbVerts*sizeof(PxVec3));
+	PxMemSet(TmpNormals, 0, nbVerts*sizeof(PxVec3));
 	for(PxU32 i=0;i<nbTris;i++)
 	{
 		PxU32 Ref[3];

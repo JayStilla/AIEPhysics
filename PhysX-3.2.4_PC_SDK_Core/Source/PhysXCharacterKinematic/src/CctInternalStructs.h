@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -46,13 +46,13 @@ namespace Cct
 	{
 		USER_OBJECT_CCT					= 0,
 		USER_OBJECT_BOX_OBSTACLE		= 1,
-		USER_OBJECT_CAPSULE_OBSTACLE	= 2,
+		USER_OBJECT_CAPSULE_OBSTACLE	= 2
 	};
 
 	PX_FORCE_INLINE	PxU32	encodeUserObject(PxU32 index, UserObjectType type)
 	{
 		PX_ASSERT(index<=0xffff);
-		PX_ASSERT(type<=0xffff);
+		PX_ASSERT((PxU32)type<=0xffff);
 		return (PxU16(index)<<16)|PxU32(type);
 	}
 

@@ -23,11 +23,11 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 
 #if PX_USE_CLOTH_API
 
@@ -39,7 +39,8 @@
 #include "TestClothHelpers.h"
 #include "SampleCharacterHelpers.h"
 #include "characterkinematic/PxCapsuleController.h"
-#include "cloth/PxClothReadData.h"
+#include "cloth/PxClothParticleData.h"
+#include "extensions/PxClothMeshQuadifier.h"
 
 using namespace PxToolkit;
 
@@ -122,6 +123,8 @@ SampleCharacterCloth::createCharacter()
 void
 SampleCharacterCloth::createCape()
 {
+	PxSceneWriteLock scopedLock(*mScene);
+
 	// compute root transform and positions of all the bones
 	PxTransform rootPose;
 	SampleArray<PxVec3> positions;	
@@ -137,59 +140,60 @@ SampleCharacterCloth::createCape()
 		spheres[i].radius = gCharacterScale * gSphereRadius[i];
 	}
 
-	PxClothCollisionData collisionData;
-	collisionData.numSpheres = static_cast<PxU32>(positions.size());
-	collisionData.spheres = spheres.begin();
-	collisionData.numPairs = static_cast<PxU32>(indexPairs.size()) / 2; // number of capsules
-	collisionData.pairIndexBuffer = indexPairs.begin();
-
 	// create the cloth cape mesh from file
-	PxClothMeshDesc meshDesc;
-	SampleArray<PxVec3> vertices;
+	SampleArray<PxVec4> vertices;
 	SampleArray<PxU32> primitives;
-	SampleArray<PxReal> uvs;
+	SampleArray<PxVec2> uvs;
 	const char* capeFileName = getSampleMediaFilename("ctdm_cape_m.obj");
-	PxReal clothScale = gCharacterScale * 0.3f;
-	PxVec3 offset = PxVec3(0,-1.5,0); 
-	PxQuat rot = PxQuat(0, PxVec3(0,1,0));
-	Test::ClothHelpers::createMeshFromObj(capeFileName, clothScale, &rot, &offset, 
-		vertices, primitives, &uvs, meshDesc);
+	PxClothMeshDesc meshDesc = Test::ClothHelpers::createMeshFromObj(capeFileName, 
+		gCharacterScale * 0.3f, PxQuat(PxIdentity), PxVec3(0,-1.5,0), vertices, primitives, uvs);
+
+	for (PxU32 i = 0; i < meshDesc.invMasses.count; i++)
+	{
+		((float*)meshDesc.invMasses.data)[i*4] = 0.5f;
+	}
 
 	if (!meshDesc.isValid()) fatalError("Could not load ctdm_cape_m.obj\n");
-	// create the cloth
-	PxCloth& cloth = *createClothFromMeshDesc(
-		meshDesc, rootPose, &collisionData, PxVec3(0,-1,0),
-		uvs.begin(), "dummy_cape_d.bmp", PxVec3(0.5f, 0.5f, 0.5f), 0.8f);
 
-	mCape = &cloth;
-
-	// attach top verts
-	PxClothReadData* readData = cloth.lockClothReadData();
-	PX_ASSERT(readData);
-	PxU32 numParticles = cloth.getNbParticles();
-	SampleArray<PxClothParticle> particles(numParticles);
-	SampleArray<PxVec3> particlePositions(numParticles);
-    for(PxU32 i = 0; i < numParticles; i++)
+	for (PxU32 i = 0; i < meshDesc.points.count; i++)
 	{
-		particles[i].pos = readData->particles[i].pos;
-		particles[i].invWeight = (uvs[i*2+1] > 0.85f) ? 0.0f : readData->particles[i].invWeight;
-		particlePositions[i] = readData->particles[i].pos;
+		if(uvs[i].y > 0.85f)
+			vertices[i].w = 0.0f;
 	}
-	readData->unlock();
-	cloth.setParticles(particles.begin(), particles.begin());
+
+	// create the cloth
+	PxClothMeshQuadifier quadifier(meshDesc);
+	mCape = createClothFromMeshDesc(quadifier.getDescriptor(), rootPose, PxVec3(0,-1,0),
+		uvs.begin(), "dummy_cape_d.bmp", 0.8f);
+	PxCloth& cloth = *mCape;
+
+	cloth.setCollisionSpheres(spheres.begin(), static_cast<PxU32>(positions.size()));
+	for(PxU32 i=0; i<indexPairs.size(); i+=2)
+		cloth.addCollisionCapsule(indexPairs[i], indexPairs[i+1]);
 
 	// compute initial skin binding to the character
-	mSkin.bindToCharacter(mCharacter, particlePositions);
+	mSkin.bindToCharacter(mCharacter, vertices);
 
 	// set solver settings
 	cloth.setSolverFrequency(240);
 
-	// damp global particle velocity to 90% every 0.1 seconds
-	cloth.setDampingCoefficient(0.1f); // damp local particle velocity
-	cloth.setDragCoefficient(0.1f); // transfer frame velocity
+	cloth.setStiffnessFrequency(10.0f);
 
-	// reduce effect of local frame acceleration
-	cloth.setInertiaScale(0.3f);
+	// damp global particle velocity to 90% every 0.1 seconds
+	cloth.setDampingCoefficient(PxVec3(0.2f)); // damp local particle velocity
+	cloth.setLinearDragCoefficient(PxVec3(0.2f)); // transfer frame velocity
+	cloth.setAngularDragCoefficient(PxVec3(0.2f)); // transfer frame rotation
+
+	// reduce impact of frame acceleration
+	// x, z: cloth swings out less when walking in a circle
+	// y: cloth responds less to jump acceleration
+	cloth.setLinearInertiaScale(PxVec3(0.8f, 0.6f, 0.8f));
+
+	// leave impact of frame torque at default
+	cloth.setAngularInertiaScale(PxVec3(1.0f));
+
+	// reduce centrifugal force of rotating frame
+	cloth.setCentrifugalInertiaScale(PxVec3(0.3f));	
 	
 	const bool useVirtualParticles = true;
 	const bool useSweptContact = true;
@@ -201,7 +205,7 @@ SampleCharacterCloth::createCape()
 
 	// ccd
 	cloth.setClothFlag(PxClothFlag::eSWEPT_CONTACT, useSweptContact);
-
+	
 	// use GPU or not
 #if PX_SUPPORT_GPU_PHYSX
 	cloth.setClothFlag(PxClothFlag::eGPU, mUseGPU);
@@ -210,27 +214,14 @@ SampleCharacterCloth::createCape()
 	// custom fiber configuration
 	if (useCustomConfig)
 	{
-		PxClothPhaseSolverConfig config;
+		PxClothStretchConfig stretchConfig;
+		stretchConfig.stiffness = 1.0f;
 
-		config = cloth.getPhaseSolverConfig(PxClothFabricPhaseType::eSTRETCHING);
-		config.solverType = PxClothPhaseSolverConfig::eSTIFF;
-		config.stiffness = 1.0f;
-		cloth.setPhaseSolverConfig(PxClothFabricPhaseType::eSTRETCHING, config);
-
-		config = cloth.getPhaseSolverConfig(PxClothFabricPhaseType::eSTRETCHING_HORIZONTAL);
-		config.solverType = PxClothPhaseSolverConfig::eFAST;
-		config.stiffness = 1.0f;
-		cloth.setPhaseSolverConfig(PxClothFabricPhaseType::eSTRETCHING_HORIZONTAL, config);
-
-		config = cloth.getPhaseSolverConfig(PxClothFabricPhaseType::eSHEARING);
-		config.solverType = PxClothPhaseSolverConfig::eFAST;
-		config.stiffness = 0.75f;
-		cloth.setPhaseSolverConfig(PxClothFabricPhaseType::eSHEARING, config);
-
-		config = cloth.getPhaseSolverConfig(PxClothFabricPhaseType::eBENDING_ANGLE);
-		config.solverType = PxClothPhaseSolverConfig::eBENDING;
-		config.stiffness = 0.5f;
-		cloth.setPhaseSolverConfig(PxClothFabricPhaseType::eBENDING_ANGLE, config);
+		cloth.setStretchConfig(PxClothFabricPhaseType::eVERTICAL, PxClothStretchConfig(1.0f));		
+		cloth.setStretchConfig(PxClothFabricPhaseType::eVERTICAL, PxClothStretchConfig(1.0f));
+		cloth.setStretchConfig(PxClothFabricPhaseType::eSHEARING, PxClothStretchConfig(0.75f));
+		cloth.setStretchConfig(PxClothFabricPhaseType::eBENDING, PxClothStretchConfig(0.5f));
+		cloth.setTetherConfig(PxClothTetherConfig(1.0f));
 	}
 }
 
@@ -238,17 +229,67 @@ SampleCharacterCloth::createCape()
 void
 SampleCharacterCloth::createFlags()
 {
-	PxQuat q = PxQuat::createIdentity();
+	PxSceneWriteLock scopedLock(*mScene);
 
-    mFlags.pushBack(new SampleCharacterClothFlag(*this, PxTransform(PxVec3(-3,0,-10), q), 2.0f, 1.0f, 5.0f));
-	mFlags.pushBack(new SampleCharacterClothFlag(*this, PxTransform(PxVec3(-3,0,-20), q), 2.0f, 1.0f, 5.0f));
-	mFlags.pushBack(new SampleCharacterClothFlag(*this, PxTransform(PxVec3(-3,0,-30), q), 2.0f, 1.0f, 5.0f));
+	PxQuat q = PxQuat(PxIdentity);
+
+	PxU32 numFlagRow = 2;
+	PxU32 resX = 20, resY = 10;
+	if (mClothFlagCountIndex == 0) 
+	{
+		numFlagRow = 2;
+		resX = 20;
+		resY = 10;
+	}
+	else if (mClothFlagCountIndex == 1) 
+	{
+		numFlagRow = 4;
+		resX = 30;
+		resY = 15;
+	}
+	else if (mClothFlagCountIndex == 2) 
+	{		
+		numFlagRow = 8;
+		resX = 50;
+		resY = 25;
+	}
+	else if (mClothFlagCountIndex == 3) 
+	{		
+		numFlagRow = 15;
+		resX = 50;
+		resY = 25;
+	}
+
+	for (PxU32 i = 0; i < numFlagRow; i++)
+	{
+	    mFlags.pushBack(new SampleCharacterClothFlag(*this, PxTransform(PxVec3(-4,0,-10.0f -5.0f * i), q), resX, resY, 2.0f, 1.0f, 5.0f));
+		mFlags.pushBack(new SampleCharacterClothFlag(*this, PxTransform(PxVec3(4,0,-10.0f -5.0f * i), q), resX, resY, 2.0f, 1.0f, 5.0f));
+	}
+
+#if PX_SUPPORT_GPU_PHYSX
+	for (PxU32 i = 0; i < mFlags.size(); ++i)
+		mFlags[i]->getCloth()->setClothFlag(PxClothFlag::eGPU, mUseGPU);
+#endif
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void
+SampleCharacterCloth::releaseFlags()
+{
+	PxSceneWriteLock scopedLock(*mScene);
+
+	const size_t nbFlags = mFlags.size();
+	for(PxU32 i = 0;i < nbFlags;i++)
+		mFlags[i]->release();
+	mFlags.clear();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 void
 SampleCharacterCloth::resetCape()
 {
+	PxSceneWriteLock scopedLock(*mScene);
+
 	PxCloth& cloth = *mCape;
 
 	// compute cloth pose and collider positions
@@ -257,17 +298,15 @@ SampleCharacterCloth::resetCape()
 	SampleArray<PxU32> indexPairs;
 	mCharacter.getFramePose(rootPose, positions, indexPairs);
 
-	// set cloth pose
+	// set cloth pose and zero velocity/acceleration
 	cloth.setGlobalPose(rootPose);
 
 	// set collision sphere positions
 	SampleArray<PxClothCollisionSphere> spheres(positions.size());
-	SampleArray<PxClothCollisionPlane> planes(cloth.getNbCollisionPlanes());
-	SampleArray<PxU32> convexMasks(cloth.getNbCollisionConvexes());
-	cloth.getCollisionData(spheres.begin(), indexPairs.begin(), planes.begin(), convexMasks.begin());
+	cloth.getCollisionData(spheres.begin(), 0, 0, 0, 0);
 	for (PxU32 i = 0; i < positions.size(); i++)
 		spheres[i].pos = positions[i];
-	cloth.setCollisionSpheres(spheres.begin());
+	cloth.setCollisionSpheres(spheres.begin(), spheres.size());
 
 	// set positions for constrained particles
 	SampleArray<PxVec3> particlePositions;
@@ -290,7 +329,7 @@ SampleCharacterCloth::resetCharacter()
 
 	PxTransform pose;
 	pose.p = pos;
-	pose.q = PxQuat::createIdentity();
+	pose.q = PxQuat(PxIdentity);
 
 	mCharacter.resetMotion(37.0f);
 	mCharacter.setGlobalPose(pose);
@@ -309,26 +348,25 @@ SampleCharacterCloth::resetCharacter()
 void
 SampleCharacterCloth::updateCape(float dtime)
 {
+	PxSceneWriteLock scopedLock(*mScene);
+
 	PxCloth& cloth = *mCape;
 
 	// compute cloth pose and collider positions
 	PxTransform rootPose;
-	SampleArray<PxVec3> positions;
+	SampleArray<PxVec3> spherePositions;
 	SampleArray<PxU32> indexPairs;
-	mCharacter.getFramePose(rootPose, positions, indexPairs);
+	mCharacter.getFramePose(rootPose, spherePositions, indexPairs);
 
 	// set cloth pose
 	cloth.setTargetPose(rootPose);
 
 	// set collision sphere positions
-	SampleArray<PxClothCollisionSphere> spheres(positions.size());
-	SampleArray<PxClothCollisionPlane> planes(cloth.getNbCollisionPlanes());
-	SampleArray<PxU32> convexMasks(cloth.getNbCollisionConvexes());
-
-	cloth.getCollisionData(spheres.begin(), indexPairs.begin(), planes.begin(), convexMasks.begin());
-	for (PxU32 i = 0; i < positions.size(); i++)
-		spheres[i].pos = positions[i];
-	cloth.setCollisionSpheres(spheres.begin());
+	SampleArray<PxClothCollisionSphere> spheres(spherePositions.size());
+	cloth.getCollisionData(spheres.begin(), 0, 0, 0, 0);
+	for (PxU32 i = 0; i < spherePositions.size(); i++)
+		spheres[i].pos = spherePositions[i];
+	cloth.setCollisionSpheres(spheres.begin(), spheres.size());
 
 	// set positions for constrained particles
 	SampleArray<PxVec3> particlePositions;
@@ -376,10 +414,12 @@ SampleCharacterCloth::updateCharacter(float dtime)
 void
 SampleCharacterCloth::updateFlags(float dtime)
 {
+	PxSceneWriteLock scopedLock(*mScene);
+
 	// apply wind force to flags
 	for (PxU32 i = 0 ; i < mFlags.size(); i++)
 	{
-		mFlags[i]->setWind(PxVec3(1,0.1,0), 40.0f, PxVec3(0.0f, 5.0f, 15.0f));
+		mFlags[i]->setWind(PxVec3(1,0.1,0), 40.0f, PxVec3(0.0f, 10.0f, 10.0f));
 		mFlags[i]->update(dtime);
 	}
 }
@@ -389,6 +429,8 @@ SampleCharacterCloth::updateFlags(float dtime)
 void
 SampleCharacterCloth::toggleGPU()
 {
+	PxSceneWriteLock scopedLock(*mScene);
+
 	mUseGPU = !mUseGPU;
 
 	if (mCape)

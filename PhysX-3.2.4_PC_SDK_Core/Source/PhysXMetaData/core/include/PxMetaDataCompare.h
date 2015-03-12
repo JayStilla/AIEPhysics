@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.
 
@@ -91,9 +91,22 @@ struct EqualityOp
 	//a stack overflow.
 
 	//Children is unnecessary and articulation points back to the source.
-	void operator()( const PxReadOnlyCollectionPropertyInfo<PxPropertyInfoName::PxArticulationLink_Children, PxArticulationLink, PxArticulationLink >& inProp, PxU32 ) {}
+	void operator()( const PxReadOnlyCollectionPropertyInfo<PxPropertyInfoName::PxArticulationLink_Children, PxArticulationLink, PxArticulationLink* >& inProp, PxU32 ) {}
+	void operator()( const PxReadOnlyCollectionPropertyInfo<PxPropertyInfoName::PxRigidActor_Constraints, PxRigidActor, PxConstraint* >& inProp, PxU32 ){}
+	void operator()( const PxReadOnlyCollectionPropertyInfo<PxPropertyInfoName::PxAggregate_Actors, PxAggregate, PxActor* >& inProp, PxU32 ) {}
+    void operator()( const PxWriteOnlyPropertyInfo<PxPropertyInfoName::PxRigidDynamic_KinematicTarget, PxRigidDynamic, const PxTransform &  >& inProp, PxU32 ) {}
+    void operator()( const PxWriteOnlyPropertyInfo<PxPropertyInfoName::PxCloth_TargetPose, PxCloth, const PxTransform &  >& inProp, PxU32 ) {}
+	void operator()( const PxWriteOnlyPropertyInfo<PxPropertyInfoName::PxCloth_InertiaScale, PxCloth, PxReal >& inProp, PxU32 ) {}
+	void operator()( const PxWriteOnlyPropertyInfo<PxPropertyInfoName::PxCloth_DragCoefficient, PxCloth, PxReal >& inProp, PxU32 ) {}
+		
+    template<PxU32 TKey, typename TObjType, typename TGetPropType>
+	void operator()( const PxBufferCollectionPropertyInfo<TKey, TObjType, TGetPropType> & inProp, PxU32 )
+	{
+		
+	}
 	
-	template<PxU32 TKey, typename TObjType, typename TGetPropType>
+
+    template<PxU32 TKey, typename TObjType, typename TGetPropType>
 	void operator()( const PxReadOnlyPropertyInfo<TKey, TObjType, TGetPropType> & inProp, PxU32 )
 	{
 		if ( hasFailed() ) return;
@@ -199,13 +212,12 @@ struct EqualityOp
 		TGeometryType lhs;
 		TGeometryType rhs;
 		bool lsuc = inProp.getGeometry( mLhs, lhs );
-		bool rsuc = inProp.getGeometry( mLhs, rhs );
+		bool rsuc = inProp.getGeometry( mRhs, rhs );
 		if ( !( lsuc && rsuc ) )
 			update( false, inProp.mName );
 		else
 			update( areEqual( lhs, rhs, NULL ), inProp.mName );
 	}
-
 
 	void operator()( const PxShapeGeometryProperty& inProp, PxU32 )
 	{
@@ -240,27 +252,7 @@ inline bool areEqual( const char* lhs, const char* rhs, const char**, const PxUn
 
 inline bool areEqual( PxReal inLhs, PxReal inRhs )
 {
-	return PxAbs( inLhs - inRhs ) < 1e-6f;
-}
-
-inline bool operator==( const PxQuat& inLhs, const PxQuat& inRhs )
-{
-	return areEqual( inLhs.x, inRhs.x )
-		&& areEqual( inLhs.y, inRhs.y )
-		&& areEqual( inLhs.z, inRhs.z )
-		&& areEqual( inLhs.w, inRhs.w );
-}
-
-inline bool operator==( const PxTransform& inLhs, const PxTransform& inRhs )
-{
-	return inLhs.q == inRhs.q 
-		&& inLhs.p == inRhs.p;
-}
-
-inline bool operator==( const PxBounds3& inLhs, const PxBounds3& inRhs )
-{
-	return inLhs.minimum == inRhs.minimum
-		&& inLhs.maximum == inRhs.maximum;
+	return PxAbs( inLhs - inRhs ) < 1e-5f;
 }
 
 inline bool operator==( const PxFilterData& lhs, const PxFilterData& rhs )
@@ -269,6 +261,57 @@ inline bool operator==( const PxFilterData& lhs, const PxFilterData& rhs )
 		&& lhs.word1 == rhs.word1
 		&& lhs.word2 == rhs.word2
 		&& lhs.word3 == rhs.word3;
+}
+
+inline bool areEqual( PxVec3& lhs, PxVec3& rhs ) 
+{ 
+	return areEqual( lhs.x, rhs.x )
+		&& areEqual( lhs.y, rhs.y )
+		&& areEqual( lhs.z, rhs.z );
+}
+
+inline bool areEqual( const PxVec3& lhs, const PxVec3& rhs ) 
+{ 
+	return areEqual( lhs.x, rhs.x )
+		&& areEqual( lhs.y, rhs.y )
+		&& areEqual( lhs.z, rhs.z );
+}
+
+inline bool areEqual( const PxVec4& lhs, const PxVec4& rhs ) 
+{ 
+	return areEqual( lhs.x, rhs.x )
+		&& areEqual( lhs.y, rhs.y )
+		&& areEqual( lhs.z, rhs.z )
+		&& areEqual( lhs.w, rhs.w );
+}
+
+inline bool areEqual( const PxQuat& lhs, const PxQuat& rhs )
+{
+	return areEqual( lhs.x, rhs.x )
+		&& areEqual( lhs.y, rhs.y )
+		&& areEqual( lhs.z, rhs.z )
+		&& areEqual( lhs.w, rhs.w );
+}
+
+
+inline bool areEqual( const PxTransform& lhs, const PxTransform& rhs )
+{
+	return areEqual(lhs.p, rhs.p) && areEqual(lhs.q, rhs.q);
+}
+
+
+inline bool areEqual( const PxBounds3& inLhs, const PxBounds3& inRhs )
+{
+	return areEqual(inLhs.minimum,inRhs.minimum)
+		&& areEqual(inLhs.maximum,inRhs.maximum);
+}
+
+inline bool areEqual( const PxMetaDataPlane& lhs, const PxMetaDataPlane& rhs ) 
+{ 
+	return areEqual( lhs.normal.x, rhs.normal.x )
+		&& areEqual( lhs.normal.y, rhs.normal.y )
+		&& areEqual( lhs.normal.z, rhs.normal.z )
+		&& areEqual( lhs.distance, rhs.distance );
 }
 
 template<typename TBaseObjType>
@@ -290,6 +333,8 @@ inline bool areEqual( const TBaseObjType& lhs, const TBaseObjType& rhs, const ch
 {
 	const char* theFailureName = NULL;
 	bool result = true;
+	static int i = 0;
+	++i;
 	visitAllProperties<TBaseObjType>( EqualityOp<TBaseObjType>( result, lhs, rhs, theFailureName ) );
 	if ( outFailurePropName != NULL && theFailureName )
 		*outFailurePropName = theFailureName;
@@ -306,6 +351,15 @@ inline bool areEqualPointerCheck( const TBaseObjType& lhs, const TBaseObjType& r
 inline bool areEqualPointerCheck( const void* lhs, const void* rhs, const char**, bool )
 {
 	return lhs == rhs;
+}
+
+inline bool areEqualPointerCheck( const char* lhs, const char* rhs, const char** outFailurePropName, bool )
+{
+	bool bRet = true;
+	if ( lhs && rhs ) bRet = strcmp( lhs, rhs ) == 0;
+	else if ( lhs || rhs ) bRet = false;
+	
+	return bRet;
 }
 
 inline bool areEqualPointerCheck( void* lhs, void* rhs, const char**, bool )

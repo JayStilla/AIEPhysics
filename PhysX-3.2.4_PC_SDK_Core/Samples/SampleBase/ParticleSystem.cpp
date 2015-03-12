@@ -23,31 +23,49 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 
 #if PX_USE_PARTICLE_SYSTEM_API
 
 #include "ParticleSystem.h"
 #include "ParticleFactory.h"
-#include "PsIntrinsics.h"
+#include "foundation/PxMemory.h"
 #include "PsMathUtils.h"
 #include "PsBitUtils.h"
+#include "PsFile.h"
 #include "PhysXSample.h"
 #include "SampleArray.h"
 #include <algorithm>
 
-ParticleSystem::ParticleSystem(PxParticleBase* _mParticleSystem, bool _useInstancedMeshes) : 
+#if defined(RENDERER_ENABLE_CUDA_INTEROP)
+#include <cuda.h>
+
+namespace
+{
+	void checkSuccess(CUresult r)
+	{
+		PX_ASSERT(r == CUDA_SUCCESS);
+	}
+}
+
+#endif
+
+ParticleSystem::ParticleSystem(PxParticleBase* _mParticleSystem, bool _useInstancedMeshes) :
 	mParticleSystem(_mParticleSystem),
 	mParticlesPositions(_mParticleSystem->getMaxParticles()),
 	mParticlesVelocities(_mParticleSystem->getMaxParticles()),
 	mParticlesOrientations(_mParticleSystem->getMaxParticles()),
 	mParticleLifetime(0.0f),
 	mValidParticleRange(0),
-	mUseInstancedMeshes(_useInstancedMeshes)
+	mUseInstancedMeshes(_useInstancedMeshes),
+	mParticlesOrientationsDevice(0),
+	mParticleLifetimeDevice(0),
+	mParticleValidityDevice(0),
+	mCtxMgr(NULL)
 {
 	mNumParticles = _mParticleSystem->getMaxParticles();
 	setUseLifetime(false);
@@ -57,6 +75,39 @@ ParticleSystem::ParticleSystem(PxParticleBase* _mParticleSystem, bool _useInstan
 	}
 	mIndexPool = PxParticleExt::createIndexPool(mNumParticles);
 	mParticleValidity = (PxU32*)PX_ALLOC(((_mParticleSystem->getMaxParticles() + 31) >> 5) << 2, "validParticleBitmap");
+
+#ifdef RENDERER_ENABLE_CUDA_INTEROP
+
+	PxScene* scene = _mParticleSystem->getScene();
+	if (scene)
+	{
+		PxGpuDispatcher* dispatcher = scene->getTaskManager()->getGpuDispatcher();
+		// contxt must be created in at least one valid interop mode
+		if (dispatcher && (mCtxMgr = dispatcher->getCudaContextManager()) && 
+			mCtxMgr->getInteropMode() != PxCudaInteropMode::D3D9_INTEROP &&
+			mCtxMgr->getInteropMode() != PxCudaInteropMode::D3D10_INTEROP &&
+			mCtxMgr->getInteropMode() != PxCudaInteropMode::D3D11_INTEROP)
+		{		
+			mCtxMgr = NULL;
+		}
+	}
+
+	if (mCtxMgr)
+	{
+		mCtxMgr->acquireContext();
+
+		checkSuccess(cuMemAlloc(&mParticleValidityDevice, sizeof(PxU32)*(_mParticleSystem->getMaxParticles() + 31) >> 5));
+		checkSuccess(cuMemAlloc(&mParticleLifetimeDevice, sizeof(PxU32)*(_mParticleSystem->getMaxParticles())));
+
+		if(mUseInstancedMeshes)
+		{
+			checkSuccess(cuMemAlloc(&mParticlesOrientationsDevice, sizeof(PxMat33)*_mParticleSystem->getMaxParticles()));
+			checkSuccess(cuMemcpyHtoDAsync(mParticlesOrientationsDevice, &mParticlesOrientations[0], sizeof(PxMat33)*_mParticleSystem->getMaxParticles(), 0));
+		}
+
+		mCtxMgr->releaseContext();
+	}
+#endif
 }
 
 void ParticleSystem::initializeParticlesOrientations() 
@@ -76,6 +127,17 @@ void ParticleSystem::initializeParticlesOrientations()
 
 ParticleSystem::~ParticleSystem() 
 {
+#ifdef RENDERER_ENABLE_CUDA_INTEROP
+	if (mCtxMgr)
+	{
+		mCtxMgr->acquireContext();
+		checkSuccess(cuMemFree(mParticleValidityDevice));
+		checkSuccess(cuMemFree(mParticleLifetimeDevice));
+		checkSuccess(cuMemFree(mParticlesOrientationsDevice));
+		mCtxMgr->releaseContext();
+	}
+#endif
+
 	PX_FREE(mParticleValidity);
 	if (mParticleSystem)
 	{
@@ -142,7 +204,7 @@ void ParticleSystem::update(float deltaTime)
 		PxStrideIterator<const PxVec3> positions(mParticleSystemData->positionBuffer);
 		PxStrideIterator<const PxVec3> velocities(mParticleSystemData->velocityBuffer);
 		PxStrideIterator<const PxParticleFlags> particleFlags(mParticleSystemData->flagsBuffer);
-		Ps::memCopy(mParticleValidity, mParticleSystemData->validParticleBitmap, ((mParticleSystemData->validParticleRange + 31) >> 5) << 2);
+		PxMemCopy(mParticleValidity, mParticleSystemData->validParticleBitmap, ((mParticleSystemData->validParticleRange + 31) >> 5) << 2);
 
 		// copy particles positions
 		for (PxU32 w = 0; w <= (mParticleSystemData->validParticleRange-1) >> 5; w++)
@@ -169,7 +231,7 @@ void ParticleSystem::update(float deltaTime)
 				if(!removed) 
 				{
 					mParticlesPositions[index] = positions[index];
-					mParticlesVelocities[index] = velocities[index];					
+					mParticlesVelocities[index] = velocities.ptr() ? velocities[index] : PxVec3(0.0f);						
 					if(mUseInstancedMeshes) 
 					{
 						modifyRotationMatrix(mParticlesOrientations[index], deltaTime, velocities[index]);
@@ -190,8 +252,27 @@ void ParticleSystem::update(float deltaTime)
 	}
 	
 	mValidParticleRange = newValidRange;
-	
+
 	mParticleSystemData->unlock();
+
+#ifdef RENDERER_ENABLE_CUDA_INTEROP
+	if (mCtxMgr && (mParticleSystem->getParticleBaseFlags()&PxParticleBaseFlag::eGPU))
+	{
+		mCtxMgr->acquireContext();
+
+		if (mValidParticleRange)
+			cuMemcpyHtoDAsync(mParticleValidityDevice, &mParticleValidity[0], sizeof(PxU32)*(mParticleSystem->getMaxParticles() + 31) >> 5, 0);		
+
+		if (mUseLifetime && mParticleLifes.size())
+			cuMemcpyHtoDAsync(mParticleLifetimeDevice, &mParticleLifes[0], sizeof(PxReal)*mValidParticleRange, 0);
+
+		if (mUseInstancedMeshes)
+			cuMemcpyHtoDAsync(mParticlesOrientationsDevice, &mParticlesOrientations[0], sizeof(PxMat33)*mValidParticleRange, 0);
+
+		mCtxMgr->releaseContext();
+	}
+#endif
+
 	if(mNumParticles > 0 && mTmpIndexArray.size() != 0) 
 	{
 		PxStrideIterator<const PxU32> indexData(&mTmpIndexArray[0]);
@@ -220,6 +301,7 @@ void ParticleSystem::createParticles(ParticleData& particles)
 		particleCreationData.velocityBuffer	= PxStrideIterator<const PxVec3>(&particles.velocities[0]);
 		mNumParticles += particles.numParticles;
 		bool ok = mParticleSystem->createParticles(particleCreationData);
+		PX_UNUSED(ok);
 		PX_ASSERT(ok);
 	}	
 }
@@ -271,7 +353,7 @@ PxU32 ParticleSystem::getNumParticles()
 { 
 	PxParticleReadData* particleReadData = mParticleSystem->lockParticleReadData();
 	PX_ASSERT(particleReadData);
-	PxU32 numParticles = particleReadData->numValidParticles;
+	PxU32 numParticles = particleReadData->nbValidParticles;
 	particleReadData->unlock();
 	return numParticles;
 }
@@ -291,6 +373,7 @@ PxU32 ParticleSystem::createParticles(const PxParticleCreationData& particles, P
 	particlesCopy.numParticles = numAllocatedIndices;
 
 	bool isSuccess = mParticleSystem->createParticles(particlesCopy);
+	PX_UNUSED(isSuccess);
 	PX_ASSERT(isSuccess);
 
 	if (mUseLifetime)
@@ -378,11 +461,12 @@ PxU32 ParticleSystem::createParticleRand(PxU32 numParticles,const PxVec3& partic
 PxU32 ParticleSystem::createParticlesFromFile(const char* particleFileName)
 {
 	PxU32 count = 0;
-	FILE* file = fopen(particleFileName, "rb");
+	SampleFramework::File* file = NULL;
+	physx::shdfnd::fopen_s(&file, particleFileName, "rb");
 	if (!file)
 		return 0;
 		
-	bool readSuccess = fread(&count, sizeof(PxU32), 1, file) == 1;
+	bool readSuccess = fread(&count, 1, sizeof(PxU32), file) == sizeof(PxU32);
 	if (!readSuccess)
 		return 0;
 		
@@ -393,8 +477,8 @@ PxU32 ParticleSystem::createParticlesFromFile(const char* particleFileName)
 
 	for (PxU32 i = 0; i < count; ++i)
 	{
-		readSuccess &= fread(&positions[i], sizeof(PxVec3), 1, file) == 1;
-		readSuccess &= fread(&velocities[i], sizeof(PxVec3), 1, file) == 1;
+		readSuccess &= fread(&positions[i], 1, sizeof(PxVec3), file) == sizeof(PxVec3);
+		readSuccess &= fread(&velocities[i], 1, sizeof(PxVec3), file) == sizeof(PxVec3);
 	}
 
 	PxU32 numNewParticles = 0;
@@ -413,7 +497,8 @@ PxU32 ParticleSystem::createParticlesFromFile(const char* particleFileName)
 
 bool ParticleSystem::dumpParticlesToFile(const char* particleFileName)
 {
-	FILE* file = fopen(particleFileName, "wb");
+	SampleFramework::File* file = NULL;
+	physx::shdfnd::fopen_s(&file, particleFileName, "wb");
 	if (!file)
 		return false;
 
@@ -428,7 +513,7 @@ bool ParticleSystem::dumpParticlesToFile(const char* particleFileName)
 	PxStrideIterator<const PxVec3> velocities = (prd->velocityBuffer.ptr()) ? prd->velocityBuffer : PxStrideIterator<const PxVec3>(&zero, 0);
 	
 	//write particle count;
-	bool writeSuccess = fwrite(&prd->numValidParticles, sizeof(PxU32), 1, file) == 1;
+	bool writeSuccess = fwrite(&prd->nbValidParticles, 1, sizeof(PxU32), file) == sizeof(PxU32);
 
 	//write particles
 	if (prd->validParticleRange > 0)
@@ -437,8 +522,8 @@ bool ParticleSystem::dumpParticlesToFile(const char* particleFileName)
 			for (PxU32 b = prd->validParticleBitmap[w]; b; b &= b-1)
 			{
 				PxU32 index = (w<<5|physx::shdfnd::lowestSetBit(b));
-				writeSuccess &= fwrite(&positions[index], sizeof(PxVec3), 1, file) == 1;
-				writeSuccess &= fwrite(&velocities[index], sizeof(PxVec3), 1, file) == 1;
+				writeSuccess &= fwrite(&positions[index], 1, sizeof(PxVec3), file) == sizeof(PxVec3);
+				writeSuccess &= fwrite(&velocities[index], 1, sizeof(PxVec3), file) == sizeof(PxVec3);
 			}
 	}
 	

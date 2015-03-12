@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -33,12 +33,13 @@
 #include "PxProfileFoundationWrapper.h" //tools for using a custom allocator
 #include "PsString.h"
 #include "PsUserAllocated.h"
+#include "CmPhysXCommon.h"
 
 namespace physx
 {
 	using namespace physx::profile;
 
-	class PxStringTableImpl : public PxStringTable, public UserAllocated
+	class PxStringTableImpl : public PxStringTable, public Ps::UserAllocated
 	{
 		typedef ProfileHashMap<const char*, PxU32> THashMapType;
 		FoundationWrapper mWrapper;

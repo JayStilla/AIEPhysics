@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -104,16 +104,17 @@ namespace Cm
 			PxVec3 r(0,-clamped.z,clamped.y), d(0, -normal.z, normal.y);
 
 			// the point on the cone defined by the tanQ swing vector r
-			PxVec3 p(1,0,0);
+			PxVec3 p(1.f,0,0);
 			PxReal r2 = r.dot(r), a = 1-r2, b = 1/(1+r2), b2 = b*b;
 			PxReal v1 = 2*a*b2;
 			PxVec3 v2(a, 2*r.z, -2*r.y);		// a*p + 2*r.cross(p);
 			PxVec3 coneLine = v1 * v2 - p;		// already normalized
 
-			// the derivative of coneLine in the direction d
-			PxReal da = -2*r.dot(d);
-			PxReal dv1 = 2*da*(a+2)*b2*b;
-			PxVec3 dv2(da, 2*d.z, -2*d.y);		// da*p + 2*d.cross(p);
+			// the derivative of coneLine in the direction d	
+			PxReal rd = r.dot(d);
+			PxReal dv1 = -4*rd*(3-r2)*b2*b;
+			PxVec3 dv2(-2*rd, 2*d.z, -2*d.y);
+	
 			PxVec3 coneNormal = v1 * dv2 + dv1 * v2;
 
 			axis = coneLine.cross(coneNormal)/coneNormal.magnitude();

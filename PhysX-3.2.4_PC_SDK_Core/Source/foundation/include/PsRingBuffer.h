@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 #ifndef PS_RING_BUFFER_H
@@ -60,7 +60,7 @@ public:
 		EC_MULTI_PART_SEND_PENDING,
 		EC_SEND_DATA_EXCEEDS_MAX_BUFFER,
 		EC_NO_RECEIVE_PENDING, // tried to acknowledge a receive packet when no recieve was pending.
-		EC_PENDING_SEND_BUFFER_FULL, // too many buffered sends pending
+		EC_PENDING_SEND_BUFFER_FULL // too many buffered sends pending
 	};
 
 	// message types.  Applications should uses MT_APP and above.  The otehr send types are reserved for use by the
@@ -71,7 +71,7 @@ public:
 		MT_PAD,
 		MT_MULTI_PART_HEADER,
 		MT_MULTI_PART_PACKET,
-		MT_APP = 100,			// message enum from the application
+		MT_APP = 100			// message enum from the application
 	};
 
 	PxRingBuffer(void 	*baseAddress,		// the base address of the ring buffer. If this pointer is null, then a buffer will be allocated locally
@@ -288,8 +288,8 @@ public:
        					// if it is a multi-part message header, then allocate it.
        					{
 							PX_ASSERT( mReceiveData == NULL );
-       						const MultiPartPacketHeader *ph = (const MultiPartPacketHeader *)data;
-       						mReceiveData = PX_NEW(MultiPartData)(ph);
+       						const MultiPartPacketHeader *pph = (const MultiPartPacketHeader *)data;
+       						mReceiveData = PX_NEW(MultiPartData)(pph);
        						acknowledgeInternal();
        						ret = MT_NONE;
        					}
@@ -312,6 +312,8 @@ public:
        						}
        					}
        					break;
+					case MT_APP:
+					case MT_NONE:
 					default:
 						break;
        			}
@@ -460,9 +462,9 @@ private:
 			return mDataLen == 0;
 		}
 
-		PxRingBuffer::MessageType getMessageType(void) const { return mMessageType; };
-		const void * getData(void) const { return mData; };
-		PxU32 getMessageSize(void) const { return mMessageSize; };
+		PxRingBuffer::MessageType getMessageType(void) const { return mMessageType; }
+		const void * getData(void) const { return mData; }
+		PxU32 getMessageSize(void) const { return mMessageSize; }
 
 	private:
 		PxRingBuffer::MessageType	mMessageType;
@@ -500,7 +502,7 @@ private:
 			{
     			MultiPartPacketHeader m;
     			m.mMessageType 	= mMessageType;
-    			m.mMessageSize 	= mDataLen;;
+    			m.mMessageSize 	= mDataLen;
     			mErrorCode = mParent->sendDataInternal(MT_MULTI_PART_HEADER,&m,sizeof(MultiPartPacketHeader));
     			assert( mErrorCode == EC_OK );
     			mHeaderSent = true;
@@ -548,10 +550,10 @@ private:
 			return mErrorCode;
 		}
 
-		PxU32	getMessageSize(void) const { return mMessageSize; };
+		PxU32	getMessageSize(void) const { return mMessageSize; }
 
-		MultiPartPacket * getNext(void) const { return mNext; };
-		void				setNext(MultiPartPacket *p) { mNext = p; };
+		MultiPartPacket * getNext(void) const { return mNext; }
+		void				setNext(MultiPartPacket *p) { mNext = p; }
 
 		private:
 		MultiPartPacket	*mNext;
@@ -608,10 +610,10 @@ private:
 		const char *data = (const char *)_data;
 		char *dest = &mBaseAddress[writeAddress];
 
-		PxU32 remain = mBufferSize - (writeAddress+packetLen); // compute the remainder bytes to the end of the ring buffer
 		PxU32 dataLen = packetLen-sizeof(PacketHeader);
 		if ( (writeAddress+packetLen) <= mBufferSize )
 		{
+			PxU32 remain = mBufferSize - (writeAddress+packetLen); // compute the remainder bytes to the end of the ring buffer
 			PacketHeader *ph = (PacketHeader *)dest;
 			ph->init(packetLen,type,remain);
 			dest+=sizeof(PacketHeader);
@@ -706,6 +708,6 @@ private:
 	bool			mLocalAlloc;		// a flag indicating whether or not we allocated the ring buffer and are responsible for freeing it on release
 };
 
-}; // end of namespace
-}; // end of namespace 
+} // end of namespace
+} // end of namespace 
 #endif

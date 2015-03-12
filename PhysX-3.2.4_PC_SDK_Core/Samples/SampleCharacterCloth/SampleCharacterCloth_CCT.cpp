@@ -23,11 +23,11 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 
 #if PX_USE_CLOTH_API
 
@@ -50,7 +50,6 @@
 #include "RenderBaseActor.h"
 #include "RenderBoxActor.h"
 #include "RenderCapsuleActor.h"
-#include "SampleCharacterClothInputEventIds.h"
 #include <SampleUserInputIds.h>
 #include <SamplePlatform.h>
 #include <SampleUserInput.h>
@@ -62,18 +61,22 @@ using namespace SampleFramework;
 ///////////////////////////////////////////////////////////////////////////////
 void SampleCharacterCloth::bufferCCTMotion(const PxVec3& targetDisp, PxReal dtime)
 {
-	// advance jump controller
-	mJump.tick(dtime);
-
-	// modify y component of displacement due to jump status
 	PxVec3 disp = targetDisp;
-	disp.y = mJump.getDisplacement(dtime);
 
-	if (mJump.isInFreefall())
+	if(!isPaused())
 	{
-		disp.x = 0;
-		disp.z = 0;
-		mCCTActive = false;
+		// advance jump controller
+		mJump.tick(dtime);
+
+		// modify y component of displacement due to jump status
+		disp.y = mJump.getDisplacement(dtime);
+
+		if (mJump.isInFreefall())
+		{
+			disp.x = 0;
+			disp.z = 0;
+			mCCTActive = false;
+		}
 	}
 
 	// buffer the displacement and timestep to feed in onSubstep function
@@ -84,13 +87,15 @@ void SampleCharacterCloth::bufferCCTMotion(const PxVec3& targetDisp, PxReal dtim
 ///////////////////////////////////////////////////////////////////////////////
 void SampleCharacterCloth::createCCTController()
 {
-	mControllerManager = PxCreateControllerManager(getPhysics().getFoundation());
+	mControllerManager = PxCreateControllerManager(getActiveScene());
 
 	// use ray casting to position the CCT on the terrain
 	PxScene& scene = getActiveScene();
-	PxRaycastHit hit;
-	scene.raycastSingle(PxVec3(0,100,0), PxVec3(0,-1,0), 500.0f, PxSceneQueryFlags(0xffffffff), hit);
-	mControllerInitialPosition = hit.impact + PxVec3(0.0f, 1.8f, 0.0f);
+	PxRaycastBuffer hit;
+	bool didHit = scene.raycast(PxVec3(0,100,0), PxVec3(0,-1,0), 500.0f, hit, PxHitFlags(0xffff));
+	PX_UNUSED(didHit);
+	PX_ASSERT(didHit);
+	mControllerInitialPosition = hit.block.position + PxVec3(0.0f, 1.6f, 0.0f);
 
 	// create and fill in the descriptor for the capsule controller
 	PxCapsuleControllerDesc cDesc;
@@ -102,14 +107,13 @@ void SampleCharacterCloth::createCCTController()
 	cDesc.slopeLimit			= 0.1f;
 	cDesc.contactOffset			= 0.01f;
 	cDesc.stepOffset			= 0.1f;
+	cDesc.scaleCoeff			= 0.9f;
+	cDesc.climbingMode			= PxCapsuleClimbingMode::eEASY;
 	cDesc.invisibleWallHeight	= 0.0f;
 	cDesc.maxJumpHeight			= 2.0f;
-	cDesc.scaleCoeff            = 0.9f;
-	cDesc.climbingMode          = PxCapsuleClimbingMode::eEASY;
-	cDesc.callback              = this;
+	cDesc.reportCallback		= this;
 
-	mController = static_cast<PxCapsuleController*>(
-		mControllerManager->createController(getPhysics(), &getActiveScene(), cDesc));
+	mController = static_cast<PxCapsuleController*>(mControllerManager->createController(cDesc));
 	
 	// create camera
 	mCCTCamera = SAMPLE_NEW(SampleCharacterClothCameraController)(*mController, *this);
@@ -121,6 +125,18 @@ void SampleCharacterCloth::createCCTController()
 ///////////////////////////////////////////////////////////////////////////////
 void SampleCharacterCloth::onShapeHit(const PxControllerShapeHit& hit)
 {
+	PxRigidDynamic* hitActor = hit.shape->getActor()->is<PxRigidDynamic>();
+
+	const size_t nbPlatforms = mPlatforms.size();
+	for(PxU32 i = 0;i < nbPlatforms;i++)
+	{
+		if (mPlatforms[i]->getType() == SampleCharacterClothPlatform::ePLATFORM_TYPE_TRIGGERED)
+		{
+			PxRigidDynamic* actor = mPlatforms[i]->getPhysicsActor();
+			if (hitActor == actor)
+				mPlatforms[i]->setActive(true);
+		}
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -134,60 +150,21 @@ void SampleCharacterCloth::onObstacleHit(const PxControllerObstacleHit& hit)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-PxU32 SampleCharacterCloth::getBehaviorFlags(const PxShape&)
+PxControllerBehaviorFlags SampleCharacterCloth::getBehaviorFlags(const PxShape&, const PxActor&)
 {
-	return 0;
+	return PxControllerBehaviorFlags(0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-PxU32 SampleCharacterCloth::getBehaviorFlags(const PxController&)
+PxControllerBehaviorFlags SampleCharacterCloth::getBehaviorFlags(const PxController&)
 {
-	return 0;
+	return PxControllerBehaviorFlags(0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-PxU32 SampleCharacterCloth::getBehaviorFlags(const PxObstacle& obstacle)
+PxControllerBehaviorFlags SampleCharacterCloth::getBehaviorFlags(const PxObstacle& obstacle)
 {
 	return PxControllerBehaviorFlag::eCCT_CAN_RIDE_ON_OBJECT;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-void SampleCharacterCloth::collectInputEvents(std::vector<const InputEvent*>& inputEvents)
-{
-	PhysXSample::collectInputEvents(inputEvents);
-	getApplication().getPlatform()->getSampleUserInput()->unregisterInputEvent(SPAWN_DEBUG_OBJECT);
-
-	//digital keyboard events
-	DIGITAL_INPUT_EVENT_DEF(RESET_SCENE,	WKEY_R,	XKEY_R,	PS3KEY_R,	AKEY_UNKNOWN,	OSXKEY_R,	GAMEPAD_DIGI_LEFT,	IKEY_UNKNOWN,	LINUXKEY_R);
-
-    //touch events
-    TOUCH_INPUT_EVENT_DEF(RESET_SCENE,		"Reset",			ABUTTON_5,		IBUTTON_5);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-bool SampleCharacterCloth::onDigitalInputEvent(const InputEvent& ie, bool val)
-{
-	if(val)
-	{
-		switch (ie.m_Id)
-		{
-		case RESET_SCENE:
-			{
-				resetScene();
-			}
-			break;
-#if PX_SUPPORT_GPU_PHYSX
-		case TOGGLE_CPU_GPU:
-			toggleGPU();
-			return true;
-			break;
-#endif
-		}
-	}
-
-	PhysXSample::onDigitalInputEvent(ie,val);
-
-	return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -213,7 +190,7 @@ void SampleCharacterCloth::updateCCT(float dtime)
 	
 	// move the CCT and change jump status due to contact
 	const PxU32 flags = mController->move(dispCurStep, 0.01f, dtime, PxControllerFilters());
-	if(flags & PxControllerFlag::eCOLLISION_DOWN)
+	if(flags & PxControllerCollisionFlag::eCOLLISION_DOWN)
 		mJump.reset();
 
 	// update camera controller

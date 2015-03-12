@@ -23,15 +23,14 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #ifndef PX_TOOLKIT_STREAM_H
 #define PX_TOOLKIT_STREAM_H
 
-#include "common/PxIO.h"
-#include <stdio.h>
+#include "extensions/PxDefaultStreams.h"
 
 #include "cooking/PxCooking.h"
 namespace physx
@@ -47,76 +46,13 @@ namespace PxToolkit
 {
 	using namespace physx;
 
-	class MemoryOutputStream: public PxOutputStream
-	{
-	public:
-						MemoryOutputStream();
-	virtual				~MemoryOutputStream();
-
-			PxU32		write(const void* src, PxU32 count);
-
-			PxU32		getSize()	const	{	return mSize; }
-			PxU8*		getData()	const	{	return mData; }
-	private:
-			PxU8*		mData;
-			PxU32		mSize;
-			PxU32		mCapacity;
-	};
-
-	class FileOutputStream: public PxOutputStream
-	{
-	public:
-						FileOutputStream(const char* name);
-	virtual				~FileOutputStream();
-
-			PxU32		write(const void* src, PxU32 count);
-
-			bool		isValid();
-	private:
-			FILE*		mFile;
-	};
-
-	class MemoryInputData: public PxInputData
-	{
-	public:
-						MemoryInputData(PxU8* data, PxU32 length);
-
-			PxU32		read(void* dest, PxU32 count);
-			PxU32		getLength() const;
-			void		seek(PxU32 pos);
-			PxU32		tell() const;
-
-	private:
-			PxU32		mSize;
-			const PxU8*	mData;
-			PxU32		mPos;
-	};
-
-	class FileInputData: public PxInputData
-	{
-	public:
-						FileInputData(const char* name);
-	virtual				~FileInputData();
-
-			PxU32		read(void* dest, PxU32 count);
-			void		seek(PxU32 pos);
-			PxU32		tell() const;
-			PxU32		getLength() const;
-			
-			bool		isValid() const;
-	private:
-			FILE*		mFile;
-			PxU32		mLength;
-	};
-
-
-
 	// temporarily located here
-	physx::PxTriangleMesh* createTriangleMesh32(physx::PxPhysics& physics, physx::PxCooking& cooking, const PxVec3* verts, PxU32 vertCount, const PxU32* indices32, PxU32 triCount);
+	physx::PxTriangleMesh* createTriangleMesh32(physx::PxPhysics& physics, physx::PxCooking& cooking, const PxVec3* verts, PxU32 vertCount, const PxU32* indices32, PxU32 triCount, bool insert = false);
 	physx::PxConvexMesh* createConvexMesh(physx::PxPhysics& physics, physx::PxCooking& cooking, const PxVec3* verts, PxU32 vertCount, PxConvexFlags flags);
+	physx::PxConvexMesh* createConvexMeshSafe(physx::PxPhysics& physics, physx::PxCooking& cooking, const PxVec3* verts, PxU32 vertCount, PxConvexFlags flags, PxU32 vLimit = 256);
 	
 	//this function is for MultiMaterial and MultiMaterialTerrain
-	physx::PxTriangleMesh* createTriangleMesh32(physx::PxPhysics& physics, physx::PxCooking& cooking, physx::PxTriangleMeshDesc* meshDesc);
+	physx::PxTriangleMesh* createTriangleMesh32(physx::PxPhysics& physics, physx::PxCooking& cooking, physx::PxTriangleMeshDesc* meshDesc, bool insert = false);
 }
 
 

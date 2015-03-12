@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -38,54 +38,196 @@
 #define PX_SUPPORT_SIMD
 
 
-PX_FORCE_INLINE __m128 m128_I2F(__m128i n) { return _mm_castsi128_ps(n); }
-PX_FORCE_INLINE __m128i m128_F2I(__m128 n) { return _mm_castps_si128(n); }
-
-PX_FORCE_INLINE PxU32 BAllTrue4_R(const BoolV a)
-{
-	const PxI32 moveMask = _mm_movemask_ps(a);
-	return  moveMask == (0xf);
-}
-
-PX_FORCE_INLINE PxU32 BAnyTrue4_R(const BoolV a)
-{
-	const PxI32 moveMask = _mm_movemask_ps(a);
-	return moveMask != (0x0);
-}
-
-PX_FORCE_INLINE PxU32 BAllTrue3_R(const BoolV a)
-{
-	const PxI32 moveMask = _mm_movemask_ps(a);
-	return (moveMask & 0x7) == (0x7);
-}
-
-PX_FORCE_INLINE PxU32 BAnyTrue3_R(const BoolV a)
-{
-	const PxI32 moveMask = _mm_movemask_ps(a);
-	return (moveMask & 0x7) != (0x0);
-}
-
 /////////////////////////////////////////////////////////////////////
 ////FUNCTIONS USED ONLY FOR ASSERTS IN VECTORISED IMPLEMENTATIONS
 /////////////////////////////////////////////////////////////////////
 
-PX_FORCE_INLINE PxU32 FiniteTestEq(const Vec4V a, const Vec4V b)
+//////////////////////////////////////////////////////////////////////
+//USED ONLY INTERNALLY
+//////////////////////////////////////////////////////////////////////
+
+namespace internalWindowsSimd
 {
-	//This is a bit of a bodge. 
-	//_mm_comieq_ss returns 1 if either value is nan so we need to re-cast a and b with true encoded as a non-nan number.
-	//There must be a better way of doing this in sse.
-	const BoolV one = FOne();
-	const BoolV zero = FZero();
-	const BoolV a1 =V4Sel(a,one,zero);
-	const BoolV b1 =V4Sel(b,one,zero);
-	return
-	(
-		_mm_comieq_ss(a1, b1) && 
-		_mm_comieq_ss(_mm_shuffle_ps(a1, a1, _MM_SHUFFLE(1,1,1,1)),_mm_shuffle_ps(b1, b1, _MM_SHUFFLE(1,1,1,1))) && 
-		_mm_comieq_ss(_mm_shuffle_ps(a1, a1, _MM_SHUFFLE(2,2,2,2)),_mm_shuffle_ps(b1, b1, _MM_SHUFFLE(2,2,2,2))) &&
-		_mm_comieq_ss(_mm_shuffle_ps(a1, a1, _MM_SHUFFLE(3,3,3,3)),_mm_shuffle_ps(b1, b1, _MM_SHUFFLE(3,3,3,3)))
-	);
+	PX_FORCE_INLINE __m128 m128_I2F(__m128i n) 
+	{ 
+		return _mm_castsi128_ps(n); 
+	}
+
+	PX_FORCE_INLINE __m128i m128_F2I(__m128 n) 
+	{ 
+		return _mm_castps_si128(n); 
+	}
+
+	PX_FORCE_INLINE PxU32 BAllTrue4_R(const BoolV a)
+	{
+		const PxI32 moveMask = _mm_movemask_ps(a);
+		return  PxU32(moveMask == (0xf));
+	}
+
+	PX_FORCE_INLINE PxU32 BAnyTrue4_R(const BoolV a)
+	{
+		const PxI32 moveMask = _mm_movemask_ps(a);
+		return PxU32(moveMask != (0x0));
+	}
+
+	PX_FORCE_INLINE PxU32 BAllTrue3_R(const BoolV a)
+	{
+		const PxI32 moveMask = _mm_movemask_ps(a);
+		return PxU32(((moveMask & 0x7) == (0x7)));
+	}
+
+	PX_FORCE_INLINE PxU32 BAnyTrue3_R(const BoolV a)
+	{
+		const PxI32 moveMask = _mm_movemask_ps(a);
+		return PxU32(((moveMask & 0x7) != (0x0)));
+	}
+
+	PX_FORCE_INLINE PxU32 FiniteTestEq(const Vec4V a, const Vec4V b)
+	{
+		//This is a bit of a bodge. 
+		//_mm_comieq_ss returns 1 if either value is nan so we need to re-cast a and b with true encoded as a non-nan number.
+		//There must be a better way of doing this in sse.
+		const BoolV one = FOne();
+		const BoolV zero = FZero();
+		const BoolV a1 =V4Sel(a,one,zero);
+		const BoolV b1 =V4Sel(b,one,zero);
+		return
+		(
+			PxU32(_mm_comieq_ss(a1, b1) && 
+			_mm_comieq_ss(_mm_shuffle_ps(a1, a1, _MM_SHUFFLE(1,1,1,1)),_mm_shuffle_ps(b1, b1, _MM_SHUFFLE(1,1,1,1))) && 
+			_mm_comieq_ss(_mm_shuffle_ps(a1, a1, _MM_SHUFFLE(2,2,2,2)),_mm_shuffle_ps(b1, b1, _MM_SHUFFLE(2,2,2,2))) &&
+			_mm_comieq_ss(_mm_shuffle_ps(a1, a1, _MM_SHUFFLE(3,3,3,3)),_mm_shuffle_ps(b1, b1, _MM_SHUFFLE(3,3,3,3))))
+		);
+	}
+
+	PX_FORCE_INLINE bool hasZeroElementinFloatV(const FloatV a)
+	{
+		VECMATHAOS_ASSERT(isValidFloatV(a));
+		return (_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(0,0,0,0)),FZero()) ? true : false);
+	}
+
+	PX_FORCE_INLINE bool hasZeroElementInVec3V(const Vec3V a)
+	{
+		VECMATHAOS_ASSERT(isValidVec3V(a));
+		return
+			(
+			_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(0,0,0,0)),FZero()) ||
+			_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(1,1,1,1)),FZero()) || 
+			_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(2,2,2,2)),FZero())
+			);
+	}
+
+	PX_FORCE_INLINE bool hasZeroElementInVec4V(const Vec4V a)
+	{
+		return
+			(
+			_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(0,0,0,0)),FZero()) ||
+			_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(1,1,1,1)),FZero()) || 
+			_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(2,2,2,2)),FZero()) ||
+			_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(3,3,3,3)),FZero())
+			);
+	}
+
+
+	const PX_ALIGN(16, PxU32 gMaskXYZ[4])={0xffffffff, 0xffffffff, 0xffffffff, 0};
 }
+
+namespace _VecMathTests
+{
+	// PT: this function returns an invalid Vec3V (W!=0.0f) just for unit-testing 'isValidVec3V'
+	PX_FORCE_INLINE Vec3V getInvalidVec3V()
+	{
+		const float f = 1.0f;
+		return _mm_load1_ps(&f);
+	}
+
+	PX_FORCE_INLINE bool allElementsEqualFloatV(const FloatV a, const FloatV b)
+	{
+		VECMATHAOS_ASSERT(isValidFloatV(a));
+		VECMATHAOS_ASSERT(isValidFloatV(b));
+		return(_mm_comieq_ss(a,b)!=0);
+	}
+
+	PX_FORCE_INLINE bool allElementsEqualVec3V(const Vec3V a, const Vec3V b)
+	{
+		VECMATHAOS_ASSERT(isValidVec3V(a));
+		VECMATHAOS_ASSERT(isValidVec3V(b));
+		return V3AllEq(a, b) != 0;
+	}
+
+	PX_FORCE_INLINE bool allElementsEqualVec4V(const Vec4V a, const Vec4V b)
+	{
+		return V4AllEq(a, b) != 0;
+	}
+
+	PX_FORCE_INLINE bool allElementsEqualBoolV(const BoolV a, const BoolV b)
+	{
+		return internalWindowsSimd::BAllTrue4_R(VecI32V_IsEq(a, b)) != 0;
+	}
+
+	PX_FORCE_INLINE bool allElementsEqualVecU32V(const VecU32V a, const VecU32V b)
+	{
+		return internalWindowsSimd::BAllTrue4_R(V4IsEqU32(a, b)) != 0;
+	}
+
+	PX_FORCE_INLINE bool allElementsEqualVecI32V(const VecI32V a, const VecI32V b)
+	{
+		BoolV c = internalWindowsSimd::m128_I2F(_mm_cmpeq_epi32(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
+		return internalWindowsSimd::BAllTrue4_R(c) != 0;
+	}
+
+
+	#define VECMATH_AOS_EPSILON (1e-3f)
+	static const FloatV minFError=FLoad(-VECMATH_AOS_EPSILON);
+	static const FloatV maxFError=FLoad(VECMATH_AOS_EPSILON);
+	static const Vec3V minV3Error=V3Load(-VECMATH_AOS_EPSILON);
+	static const Vec3V maxV3Error=V3Load(VECMATH_AOS_EPSILON);	
+	static const Vec4V minV4Error=V4Load(-VECMATH_AOS_EPSILON);
+	static const Vec4V maxV4Error=V4Load(VECMATH_AOS_EPSILON);
+	
+
+	PX_FORCE_INLINE bool allElementsNearEqualFloatV(const FloatV a, const FloatV b)
+	{
+		VECMATHAOS_ASSERT(isValidFloatV(a));
+		VECMATHAOS_ASSERT(isValidFloatV(b));
+		const FloatV c=FSub(a,b);
+		return (_mm_comigt_ss(c,minFError) && _mm_comilt_ss(c,maxFError));
+	}
+
+	PX_FORCE_INLINE bool allElementsNearEqualVec3V(const Vec3V a, const Vec3V b)
+	{
+		VECMATHAOS_ASSERT(isValidVec3V(a));
+		VECMATHAOS_ASSERT(isValidVec3V(b));
+		const Vec3V c=V3Sub(a,b);
+		return
+			(
+			_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(0,0,0,0)),minV3Error) && 
+			_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(0,0,0,0)),maxV3Error) &&
+			_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(1,1,1,1)),minV3Error) && 
+			_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(1,1,1,1)),maxV3Error) &&
+			_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(2,2,2,2)),minV3Error) && 
+			_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(2,2,2,2)),maxV3Error)
+			);
+	}
+
+	PX_FORCE_INLINE bool allElementsNearEqualVec4V(const Vec4V a, const Vec4V b)
+	{
+		const Vec4V c=V4Sub(a,b);
+		return
+			(
+			_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(0,0,0,0)),minV4Error) && 
+			_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(0,0,0,0)),maxV4Error) &&
+			_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(1,1,1,1)),minV4Error) && 
+			_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(1,1,1,1)),maxV4Error) &&
+			_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(2,2,2,2)),minV4Error) && 
+			_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(2,2,2,2)),maxV4Error) &&
+			_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(3,3,3,3)),minV4Error) && 
+			_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(3,3,3,3)),maxV4Error) 
+			);
+	}
+
+}
+
 
 
 PX_FORCE_INLINE bool isValidFloatV(const FloatV a)
@@ -100,13 +242,18 @@ PX_FORCE_INLINE bool isValidFloatV(const FloatV a)
 
 PX_FORCE_INLINE bool isValidVec3V(const Vec3V a)
 {
+	PX_ALIGN(16, PxF32 f[4]);
+	V4StoreA((const Vec4V&)a, f);
+	if(f[3]!=0.0f)
+		return false;
+
 	return (_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(3,3,3,3)),FZero()) ? true : false);
 }
 
 
 PX_FORCE_INLINE bool isFiniteFloatV(const FloatV a)
 {
-	return PxIsFinite(PxF32_From_FloatV(a));
+	return PxIsFinite(FStore(a));
 	/*
 	const PxU32 badNumber = (_FPCLASS_SNAN | _FPCLASS_QNAN | _FPCLASS_NINF | _FPCLASS_PINF);
 	const FloatV vBadNum = FloatV_From_F32((PxF32&)badNumber);
@@ -118,7 +265,7 @@ PX_FORCE_INLINE bool isFiniteFloatV(const FloatV a)
 PX_FORCE_INLINE bool isFiniteVec3V(const Vec3V a)
 {
 	PX_ALIGN(16, PxF32 f[4]);
-	F32Array_Aligned_From_Vec4V((Vec4V&)a, f);
+	V4StoreA((Vec4V&)a, f);
 	return PxIsFinite(f[0]) 
 		&& PxIsFinite(f[1])
 		&& PxIsFinite(f[2]);
@@ -135,7 +282,7 @@ PX_FORCE_INLINE bool isFiniteVec4V(const Vec4V a)
 {
 	
 	PX_ALIGN(16, PxF32 f[4]);
-	F32Array_Aligned_From_Vec4V(a, f);
+	V4StoreA(a, f);
 	return PxIsFinite(f[0]) 
 		&& PxIsFinite(f[1]) 
 		&& PxIsFinite(f[2])
@@ -151,80 +298,66 @@ PX_FORCE_INLINE bool isFiniteVec4V(const Vec4V a)
 	*/
 }
 
-PX_FORCE_INLINE bool hasZeroElementinFloatV(const FloatV a)
-{
-	VECMATHAOS_ASSERT(isValidFloatV(a));
-	return (_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(0,0,0,0)),FZero()) ? true : false);
-}
 
-PX_FORCE_INLINE bool hasZeroElementInVec3V(const Vec3V a)
-{
-	VECMATHAOS_ASSERT(isValidVec3V(a));
-	return
-	(
-	_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(0,0,0,0)),FZero()) ||
-	_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(1,1,1,1)),FZero()) || 
-	_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(2,2,2,2)),FZero())
-	);
-}
 
-PX_FORCE_INLINE bool hasZeroElementInVec4V(const Vec4V a)
-{
-	return
-	(
-	_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(0,0,0,0)),FZero()) ||
-	_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(1,1,1,1)),FZero()) || 
-	_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(2,2,2,2)),FZero()) ||
-	_mm_comieq_ss(_mm_shuffle_ps(a, a, _MM_SHUFFLE(3,3,3,3)),FZero())
-	);
-}
 
 /////////////////////////////////////////////////////////////////////
 ////VECTORISED FUNCTION IMPLEMENTATIONS
 /////////////////////////////////////////////////////////////////////
 
-PX_FORCE_INLINE FloatV FloatV_From_F32(const PxF32 f)			
+PX_FORCE_INLINE FloatV FLoad(const PxF32 f)			
 {
 	return (_mm_load1_ps(&f));
 }
 
-PX_FORCE_INLINE Vec3V Vec3V_From_F32(const PxF32 f)			
+PX_FORCE_INLINE Vec3V V3Load(const PxF32 f)			
 {
 	return _mm_set_ps(0.0f,f,f,f);
 }
 
-PX_FORCE_INLINE Vec4V Vec4V_From_F32(const PxF32 f)			
+PX_FORCE_INLINE Vec4V V4Load(const PxF32 f)			
 {
 	return (_mm_load1_ps(&f));
 }
 
-PX_FORCE_INLINE BoolV BoolV_From_Bool32(const bool f)			
+PX_FORCE_INLINE BoolV BLoad(const bool f)			
 {
-	const PxU32 i=-(PxI32)f;
+	const PxU32 i=PxU32(-(PxI32)f);
 	return _mm_load1_ps((float*)&i);
 }
 
-PX_FORCE_INLINE Vec3V Vec3V_From_PxVec3_Aligned(const PxVec3& f)
+PX_FORCE_INLINE Vec3V V3LoadA(const PxVec3& f)
 {
 	VECMATHAOS_ASSERT(0 == ((size_t)&f & 0x0f));
-	return (_mm_set_ps(0.0f,f.z,f.y,f.x));
-	//return _mm_load_ps(&f.x);
+	return _mm_and_ps(_mm_load_ps(&f.x), reinterpret_cast<const Vec4V&>(internalWindowsSimd::gMaskXYZ));
 }
 
-PX_FORCE_INLINE Vec3V Vec3V_From_PxVec3(const PxVec3& f)		
+PX_FORCE_INLINE Vec3V V3LoadU(const PxVec3& f)		
 {
 	return (_mm_set_ps(0.0f,f.z,f.y,f.x));
 }
 
-PX_FORCE_INLINE Vec3V Vec3V_From_PxVec3_WUndefined(const PxVec3& f)
+// w component of result is undefined
+PX_FORCE_INLINE Vec3V V3LoadUnsafeA(const PxVec3& f)
 {
-	return (_mm_set_ps(0.0f,f.z,f.y,f.x));
-	//return _mm_load_ps(&f.x);
+	VECMATHAOS_ASSERT(0 == ((PxU64)&f & 0x0f));
+	return _mm_load_ps(&f.x);
+}
+
+PX_FORCE_INLINE Vec3V V3LoadA(const PxF32* const f)	
+{
+	VECMATHAOS_ASSERT(0 == ((PxU64)f & 0x0f));
+	return V4ClearW(_mm_load_ps(f));
+}
+
+PX_FORCE_INLINE Vec3V V3LoadU(const PxF32* const i)
+{
+	return (_mm_set_ps(0.0f,i[2],i[1],i[0]));
 }
 
 PX_FORCE_INLINE Vec3V Vec3V_From_Vec4V(Vec4V v)
 {
-	return V4SetW(v, V4Zero());
+	return V4ClearW(v);
 }
 
 PX_FORCE_INLINE Vec3V Vec3V_From_Vec4V_WUndefined(const Vec4V v)
@@ -232,15 +365,10 @@ PX_FORCE_INLINE Vec3V Vec3V_From_Vec4V_WUndefined(const Vec4V v)
 	return v;
 }
 
-PX_FORCE_INLINE Vec3V Vec3V_From_F32Array_Aligned(const PxF32* const f)	
-{
-	VECMATHAOS_ASSERT(0 == ((PxU64)f & 0x0f));
-	return (_mm_load_ps(f));
-}
 
-PX_FORCE_INLINE Vec3V Vec3V_From_F32Array(const PxF32* const i)
+PX_FORCE_INLINE Vec4V Vec4V_From_Vec3V(Vec3V f)
 {
-	return (_mm_set_ps(0.0f,i[2],i[1],i[0]));
+	return f;	//ok if it is implemented as the same type.
 }
 
 PX_FORCE_INLINE Vec4V Vec4V_From_FloatV(FloatV f)
@@ -248,14 +376,14 @@ PX_FORCE_INLINE Vec4V Vec4V_From_FloatV(FloatV f)
 	return f;	
 }
 
-PX_FORCE_INLINE Vec4V Vec4V_From_Vec3V(Vec3V f)
-{
-	return f;	//ok if it is implemented as the same type.
-}
-
 PX_FORCE_INLINE Vec3V Vec3V_From_FloatV(FloatV f)
 {
 	return Vec3V_From_Vec4V(Vec4V_From_FloatV(f));	
+}
+
+PX_FORCE_INLINE Vec3V Vec3V_From_FloatV_WUndefined(FloatV f)
+{
+	return Vec3V_From_Vec4V_WUndefined(Vec4V_From_FloatV(f));	
 }
 
 PX_FORCE_INLINE Vec4V Vec4V_From_PxVec3_WUndefined(const PxVec3& f)
@@ -263,36 +391,54 @@ PX_FORCE_INLINE Vec4V Vec4V_From_PxVec3_WUndefined(const PxVec3& f)
 	return (_mm_set_ps(0.0f,f.z,f.y,f.x));
 }
 
-PX_FORCE_INLINE Vec4V Vec4V_From_F32Array_Aligned(const PxF32* const f)	
+PX_FORCE_INLINE Vec4V V4LoadA(const PxF32* const f)	
 {
 	VECMATHAOS_ASSERT(0 == ((PxU64)f & 0x0f));
 	return (_mm_load_ps(f));
 }
 
-PX_FORCE_INLINE void F32Array_Aligned_From_Vec4V(const Vec4V a, PxF32* f)
+PX_FORCE_INLINE void V4StoreA(const Vec4V a, PxF32* f)
 {
 	VECMATHAOS_ASSERT(0 == ((PxU64)f & 0x0f));
 	_mm_store_ps(f,a);
 }
 
-PX_FORCE_INLINE void PxU32Array_Aligned_From_BoolV(const BoolV a, PxU32* f)
+PX_FORCE_INLINE void V4StoreU(const Vec4V a, PxF32* f)
+{
+	_mm_storeu_ps(f,a);
+}
+
+PX_FORCE_INLINE void BStoreA(const BoolV a, PxU32* f)
 {
 	VECMATHAOS_ASSERT(0 == ((PxU64)f & 0x0f));
 	_mm_store_ps((PxF32*)f,a);
 }
 
-PX_FORCE_INLINE Vec4V Vec4V_From_F32Array(const PxF32* const f)	
+PX_FORCE_INLINE void U4StoreA(const VecU32V uv, PxU32* u)
+{
+	VECMATHAOS_ASSERT(0 == ((PxU64)u & 0x0f));
+	_mm_store_ps((PxF32*)u,uv);
+}
+
+PX_FORCE_INLINE void I4StoreA(const VecI32V iv, PxI32* i)
+{
+	VECMATHAOS_ASSERT(0 == ((PxU64)i & 0x0f));
+	_mm_store_ps((PxF32*)i,iv);
+}
+
+PX_FORCE_INLINE Vec4V V4LoadU(const PxF32* const f)	
 {
 	return (_mm_loadu_ps(f));
 }
 
-PX_FORCE_INLINE BoolV BoolV_From_Bool32Array(const bool* const f)			
+PX_FORCE_INLINE BoolV BLoad(const bool* const f)			
 {
-	const PX_ALIGN(16, PxU32 b[4])={-(PxI32)f[0],-(PxI32)f[1],-(PxI32)f[2],-(PxI32)f[3]};
-	return _mm_load1_ps((float*)&b);
+	const PX_ALIGN(16, PxU32 b[4])={PxU32(-(PxI32)f[0]), PxU32(-(PxI32)f[1]), PxU32(-(PxI32)f[2]), PxU32(-(PxI32)f[3])};
+	return _mm_load_ps((float*)&b);
 }
 
-PX_FORCE_INLINE PxF32 PxF32_From_FloatV(const FloatV a)		
+
+PX_FORCE_INLINE PxF32 FStore(const FloatV a)		
 {
 	VECMATHAOS_ASSERT(isValidFloatV(a));
 	PxF32 f; 
@@ -301,13 +447,13 @@ PX_FORCE_INLINE PxF32 PxF32_From_FloatV(const FloatV a)
 }
 
 
-PX_FORCE_INLINE void PxF32_From_FloatV(const FloatV a, PxF32* PX_RESTRICT f)		
+PX_FORCE_INLINE void FStore(const FloatV a, PxF32* PX_RESTRICT f)		
 {
 	VECMATHAOS_ASSERT(isValidFloatV(a));
 	_mm_store_ss(f,a);
 }
 
-PX_FORCE_INLINE void PxVec3Aligned_From_Vec3V(const Vec3V a, PxVec3& f)
+PX_FORCE_INLINE void V3StoreA(const Vec3V a, PxVec3& f)
 {
 	VECMATHAOS_ASSERT(isValidVec3V(a));
 	VECMATHAOS_ASSERT(0 == ((int)&a & 0x0F));
@@ -322,7 +468,7 @@ PX_FORCE_INLINE void Store_From_BoolV(const BoolV b, PxU32* b2)
 	_mm_store_ss((PxF32*)b2,b);
 }
 
-PX_FORCE_INLINE void PxVec3_From_Vec3V(const Vec3V a, PxVec3& f)
+PX_FORCE_INLINE void V3StoreU(const Vec3V a, PxVec3& f)
 {
 	VECMATHAOS_ASSERT(isValidVec3V(a));
 	VECMATHAOS_ASSERT(0 == ((int)&a & 0x0F));
@@ -334,92 +480,17 @@ PX_FORCE_INLINE void PxVec3_From_Vec3V(const Vec3V a, PxVec3& f)
 
 PX_FORCE_INLINE Mat33V Mat33V_From_PxMat33(const PxMat33 &m)
 {
-	return Mat33V(Vec3V_From_PxVec3(m.column0), 
-				  Vec3V_From_PxVec3(m.column1), 
-				  Vec3V_From_PxVec3(m.column2));
+	return Mat33V(V3LoadU(m.column0), 
+				  V3LoadU(m.column1), 
+				  V3LoadU(m.column2));
 }
 
 PX_FORCE_INLINE void PxMat33_From_Mat33V(const Mat33V &m, PxMat33 &out)
 {
 	PX_ASSERT((size_t(&out)&15)==0);
-	PxVec3_From_Vec3V(m.col0, out.column0);
-	PxVec3_From_Vec3V(m.col1, out.column1);
-	PxVec3_From_Vec3V(m.col2, out.column2);
-}
-
-
-
-PX_FORCE_INLINE bool _VecMathTests::allElementsEqualFloatV(const FloatV a, const FloatV b)
-{
-	VECMATHAOS_ASSERT(isValidFloatV(a));
-	VECMATHAOS_ASSERT(isValidFloatV(b));
-	return(_mm_comieq_ss(a,b)!=0);
-}
-
-PX_FORCE_INLINE bool _VecMathTests::allElementsEqualVec3V(const Vec3V a, const Vec3V b)
-{
-	VECMATHAOS_ASSERT(isValidVec3V(a));
-	VECMATHAOS_ASSERT(isValidVec3V(b));
-	return V3AllEq(a, b) != 0;
-}
-
-PX_FORCE_INLINE bool _VecMathTests::allElementsEqualVec4V(const Vec4V a, const Vec4V b)
-{
-	return V4AllEq(a, b) != 0;
-}
-
-PX_FORCE_INLINE bool _VecMathTests::allElementsEqualBoolV(const BoolV a, const BoolV b)
-{
-	return BAllTrue4_R(VecI32V_IsEq(a, b)) != 0;
-}
-
-
-#define VECMATH_AOS_EPSILON (1e-3f)
-
-PX_FORCE_INLINE bool _VecMathTests::allElementsNearEqualFloatV(const FloatV a, const FloatV b)
-{
-	VECMATHAOS_ASSERT(isValidFloatV(a));
-	VECMATHAOS_ASSERT(isValidFloatV(b));
-	const FloatV c=FSub(a,b);
-	static const FloatV minError=FloatV_From_F32(-VECMATH_AOS_EPSILON);
-	static const FloatV maxError=FloatV_From_F32(VECMATH_AOS_EPSILON);
-	return (_mm_comigt_ss(c,minError) && _mm_comilt_ss(c,maxError));
-}
-
-PX_FORCE_INLINE bool _VecMathTests::allElementsNearEqualVec3V(const Vec3V a, const Vec3V b)
-{
-	VECMATHAOS_ASSERT(isValidVec3V(a));
-	VECMATHAOS_ASSERT(isValidVec3V(b));
-	const Vec3V c=V3Sub(a,b);
-	static const Vec3V minError=Vec3V_From_F32(-VECMATH_AOS_EPSILON);
-	static const Vec3V maxError=Vec3V_From_F32(VECMATH_AOS_EPSILON);
-	return
-	(
-	_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(0,0,0,0)),minError) && 
-	_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(0,0,0,0)),maxError) &&
-	_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(1,1,1,1)),minError) && 
-	_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(1,1,1,1)),maxError) &&
-	_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(2,2,2,2)),minError) && 
-	_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(2,2,2,2)),maxError)
-	);
-}
-
-PX_FORCE_INLINE bool _VecMathTests::allElementsNearEqualVec4V(const Vec4V a, const Vec4V b)
-{
-	const Vec4V c=V4Sub(a,b);
-	static const Vec4V minError=Vec4V_From_F32(-VECMATH_AOS_EPSILON);
-	static const Vec4V maxError=Vec4V_From_F32(VECMATH_AOS_EPSILON);
-	return
-	(
-	_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(0,0,0,0)),minError) && 
-	_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(0,0,0,0)),maxError) &&
-	_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(1,1,1,1)),minError) && 
-	_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(1,1,1,1)),maxError) &&
-	_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(2,2,2,2)),minError) && 
-	_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(2,2,2,2)),maxError) &&
-	_mm_comigt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(3,3,3,3)),minError) && 
-	_mm_comilt_ss(_mm_shuffle_ps(c, c, _MM_SHUFFLE(3,3,3,3)),maxError) 
-	);
+	V3StoreU(m.col0, out.column0);
+	V3StoreU(m.col1, out.column1);
+	V3StoreU(m.col2, out.column2);
 }
 
 
@@ -429,37 +500,38 @@ PX_FORCE_INLINE bool _VecMathTests::allElementsNearEqualVec4V(const Vec4V a, con
 
 PX_FORCE_INLINE FloatV FZero()
 {
-	return FloatV_From_F32(0.0f);
+	//return FloatV_From_F32(0.0f);
+	return _mm_setzero_ps();
 }
 
 PX_FORCE_INLINE FloatV FOne()
 {
-	return FloatV_From_F32(1.0f);
+	return FLoad(1.0f);
 }
 
 PX_FORCE_INLINE FloatV FHalf()
 {
-	return FloatV_From_F32(0.5f);
+	return FLoad(0.5f);
 }
 
 PX_FORCE_INLINE FloatV FEps()
 {
-	return FloatV_From_F32(PX_EPS_REAL);
+	return FLoad(PX_EPS_REAL);
 }
 
 PX_FORCE_INLINE FloatV FEps6()
 {
-	return FloatV_From_F32(1e-6f);
+	return FLoad(1e-6f);
 }
 
 PX_FORCE_INLINE FloatV FMax()
 {
-	return FloatV_From_F32(PX_MAX_REAL);
+	return FLoad(PX_MAX_REAL);
 }
 
 PX_FORCE_INLINE FloatV FNegMax()
 {
-	return FloatV_From_F32(-PX_MAX_REAL);
+	return FLoad(-PX_MAX_REAL);
 }
 
 PX_FORCE_INLINE FloatV IZero()
@@ -639,7 +711,7 @@ PX_FORCE_INLINE PxU32 FAllGrtr(const FloatV a, const FloatV b)
 {
 	VECMATHAOS_ASSERT(isValidFloatV(a));
 	VECMATHAOS_ASSERT(isValidFloatV(b));
-	return(_mm_comigt_ss(a,b));
+	return PxU32(_mm_comigt_ss(a,b));
 }
 
 PX_FORCE_INLINE PxU32 FAllGrtrOrEq(const FloatV a, const FloatV b)
@@ -647,7 +719,7 @@ PX_FORCE_INLINE PxU32 FAllGrtrOrEq(const FloatV a, const FloatV b)
 	VECMATHAOS_ASSERT(isValidFloatV(a));
 	VECMATHAOS_ASSERT(isValidFloatV(b));
 
-	return(_mm_comige_ss(a,b));
+	return PxU32(_mm_comige_ss(a,b));
 }
 
 PX_FORCE_INLINE PxU32 FAllEq(const FloatV a, const FloatV b)
@@ -655,15 +727,16 @@ PX_FORCE_INLINE PxU32 FAllEq(const FloatV a, const FloatV b)
 	VECMATHAOS_ASSERT(isValidFloatV(a));
 	VECMATHAOS_ASSERT(isValidFloatV(b));
 
-	return(_mm_comieq_ss(a,b));
+	return PxU32(_mm_comieq_ss(a,b));
 }
 
 PX_FORCE_INLINE FloatV FRound(const FloatV a)
 {
 	//return _mm_round_ps(a, 0x0);
-	const Vec3V half = Vec3V_From_F32(0.5f);
-	const Vec3V aPlusHalf = V3Add(a, half);
-	__m128i tmp = _mm_cvttps_epi32(aPlusHalf);
+	const FloatV half = FLoad(0.5f);
+	const __m128 signBit = _mm_cvtepi32_ps(_mm_srli_epi32(_mm_cvtps_epi32(a), 31));
+	const FloatV aRound = FSub(FAdd(a, half), signBit);
+	__m128i tmp = _mm_cvttps_epi32(aRound);
 	return _mm_cvtepi32_ps(tmp);
 }
 
@@ -674,9 +747,10 @@ PX_FORCE_INLINE FloatV FSin(const FloatV a)
     //Vec4V S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11;
     FloatV Result;
 
-	 // Modulo the range of the given angles such that -XM_PI <= Angles < XM_PI
-	const FloatV twoPi = Vec4V_From_F32Array_Aligned(g_PXReciprocalTwoPi.f);
-	const FloatV tmp = FMul(a, twoPi);
+	 // Modulo the range of the given angles such that -XM_2PI <= Angles < XM_2PI
+	const FloatV recipTwoPi = V4LoadA(g_PXReciprocalTwoPi.f);
+	const FloatV twoPi = V4LoadA(g_PXTwoPi.f);
+	const FloatV tmp = FMul(a, recipTwoPi);
     const FloatV b = FRound(tmp);
     const FloatV V1 = FNegMulSub(twoPi, b, a);
 
@@ -695,9 +769,9 @@ PX_FORCE_INLINE FloatV FSin(const FloatV a)
     const FloatV V21 = FMul(V19, V2);
     const FloatV V23 = FMul(V21, V2);
 
-	const Vec4V sinCoefficients0 = Vec4V_From_F32Array_Aligned(g_PXSinCoefficients0.f);
-	const Vec4V sinCoefficients1 = Vec4V_From_F32Array_Aligned(g_PXSinCoefficients1.f);
-	const Vec4V sinCoefficients2 = Vec4V_From_F32Array_Aligned(g_PXSinCoefficients2.f);
+	const Vec4V sinCoefficients0 = V4LoadA(g_PXSinCoefficients0.f);
+	const Vec4V sinCoefficients1 = V4LoadA(g_PXSinCoefficients1.f);
+	const Vec4V sinCoefficients2 = V4LoadA(g_PXSinCoefficients2.f);
 
     const FloatV S1  = V4GetY(sinCoefficients0);
     const FloatV S2  = V4GetZ(sinCoefficients0);
@@ -733,9 +807,10 @@ PX_FORCE_INLINE FloatV FCos(const FloatV a)
     //XMVECTOR C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11;
 	FloatV Result;
 
-	 // Modulo the range of the given angles such that -XM_PI <= Angles < XM_PI
-	const FloatV twoPi = Vec4V_From_F32Array_Aligned(g_PXReciprocalTwoPi.f);
-	const FloatV tmp = FMul(a, twoPi);
+	 // Modulo the range of the given angles such that -XM_2PI <= Angles < XM_2PI
+	const FloatV recipTwoPi = V4LoadA(g_PXReciprocalTwoPi.f);
+	const FloatV twoPi = V4LoadA(g_PXTwoPi.f);
+	const FloatV tmp = FMul(a, recipTwoPi);
     const FloatV b = FRound(tmp);
     const FloatV V1 = FNegMulSub(twoPi, b, a);
 
@@ -753,9 +828,9 @@ PX_FORCE_INLINE FloatV FCos(const FloatV a)
     const FloatV V20 = FMul(V10, V10);
     const FloatV V22 = FMul(V12, V10);
 
-	const Vec4V cosCoefficients0 = Vec4V_From_F32Array_Aligned(g_PXCosCoefficients0.f);
-	const Vec4V cosCoefficients1 = Vec4V_From_F32Array_Aligned(g_PXCosCoefficients1.f);
-	const Vec4V cosCoefficients2 = Vec4V_From_F32Array_Aligned(g_PXCosCoefficients2.f);
+	const Vec4V cosCoefficients0 = V4LoadA(g_PXCosCoefficients0.f);
+	const Vec4V cosCoefficients1 = V4LoadA(g_PXCosCoefficients1.f);
+	const Vec4V cosCoefficients2 = V4LoadA(g_PXCosCoefficients2.f);
 
     const FloatV C1  = V4GetY(cosCoefficients0);
     const FloatV C2  = V4GetZ(cosCoefficients0);
@@ -789,7 +864,7 @@ PX_FORCE_INLINE PxU32 FOutOfBounds(const FloatV a, const FloatV min, const Float
 {
 	const BoolV ffff = BFFFF();
 	const BoolV c = BOr(FIsGrtr(a, max), FIsGrtr(min, a));
-	return !BAllEq(c, ffff);
+	return PxU32(!BAllEq(c, ffff));
 }
 
 PX_FORCE_INLINE PxU32 FInBounds(const FloatV a, const FloatV min, const FloatV max)
@@ -914,17 +989,17 @@ PX_FORCE_INLINE Vec3V V3ColZ(const Vec3V a, const Vec3V b, const Vec3V c)
 
 PX_FORCE_INLINE Vec3V V3Zero()
 {
-	return Vec3V_From_F32(0.0f);
+	return _mm_setzero_ps();
 }
 
 PX_FORCE_INLINE Vec3V V3One()
 {
-	return Vec3V_From_F32(1.0f);
+	return V3Load(1.0f);
 }
 
 PX_FORCE_INLINE Vec3V V3Eps()
 {
-	return Vec3V_From_F32(PX_EPS_REAL);
+	return V3Load(PX_EPS_REAL);
 }
 
 PX_FORCE_INLINE Vec3V V3Neg(const Vec3V f)					
@@ -972,11 +1047,7 @@ PX_FORCE_INLINE Vec3V V3Div(const Vec3V a, const Vec3V b)
 {
 	VECMATHAOS_ASSERT(isValidVec3V(a));
 	VECMATHAOS_ASSERT(isValidVec3V(b));
-	// why are these here?
-	//static const __m128 one=V3One();
-	//static const __m128 tttf=BTTTF();
-	//const __m128 b1=V3Sel(tttf,b,one);
-	return  _mm_div_ps(a,b);
+	return V4ClearW(_mm_div_ps(a,b));
 }
 
 PX_FORCE_INLINE Vec3V V3ScaleInvFast(const Vec3V a, const FloatV b)
@@ -990,10 +1061,7 @@ PX_FORCE_INLINE Vec3V V3DivFast(const Vec3V a, const Vec3V b)
 {
 	VECMATHAOS_ASSERT(isValidVec3V(a));
 	VECMATHAOS_ASSERT(isValidVec3V(b));
-	const __m128 one=V3One();
-	const __m128 tttf=BTTTF();
-	const __m128 b1=V3Sel(tttf,b,one);
-	return _mm_mul_ps(a,_mm_rcp_ps(b1));
+	return V4ClearW(_mm_mul_ps(a,_mm_rcp_ps(b)));
 }
 
 PX_FORCE_INLINE Vec3V V3Recip(const Vec3V a)
@@ -1097,6 +1165,33 @@ PX_FORCE_INLINE Vec3V V3Cross(const Vec3V a, const Vec3V b)
 	return _mm_sub_ps(_mm_mul_ps(l1, l2), _mm_mul_ps(r1,r2));
 }
 
+PX_FORCE_INLINE VecCrossV V3PrepareCross(const Vec3V a)
+{
+	VecCrossV v;
+	v.mR1 = _mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 1, 0, 2)); //z,x,y,w
+	v.mL1 = _mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 0, 2, 1)); //y,z,x,w
+	return v;
+}
+
+PX_FORCE_INLINE Vec3V V3Cross(const VecCrossV& a, const Vec3V b)
+{
+	__m128 r2 = _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 0, 2, 1)); //y,z,x,w
+	__m128 l2 = _mm_shuffle_ps(b, b, _MM_SHUFFLE(3, 1, 0, 2)); //z,x,y,w
+	return _mm_sub_ps(_mm_mul_ps(a.mL1, l2), _mm_mul_ps(a.mR1, r2));
+}
+
+PX_FORCE_INLINE Vec3V V3Cross(const Vec3V a, const VecCrossV& b)
+{
+	__m128 r2 = _mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 0, 2, 1)); //y,z,x,w
+	__m128 l2 = _mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 1, 0, 2)); //z,x,y,w
+	return _mm_sub_ps(_mm_mul_ps(b.mR1, r2), _mm_mul_ps(b.mL1, l2));
+}
+
+PX_FORCE_INLINE Vec3V V3Cross(const VecCrossV& a, const VecCrossV& b)
+{
+	return _mm_sub_ps(_mm_mul_ps(a.mL1, b.mR1), _mm_mul_ps(a.mR1, b.mL1));
+}
+
 PX_FORCE_INLINE FloatV V3Length(const Vec3V a)
 {
 	VECMATHAOS_ASSERT(isValidVec3V(a));
@@ -1112,7 +1207,7 @@ PX_FORCE_INLINE FloatV V3LengthSq(const Vec3V a)
 PX_FORCE_INLINE Vec3V V3Normalize(const Vec3V a)
 {
 	VECMATHAOS_ASSERT(isValidVec3V(a));
-	VECMATHAOS_ASSERT(V3Dot(a,a)!=FZero())
+	VECMATHAOS_ASSERT(!FAllEq(V3Dot(a,a), FZero()));
 	return V3ScaleInv(a, _mm_sqrt_ps(V3Dot(a,a)));
 }
 
@@ -1126,7 +1221,7 @@ PX_FORCE_INLINE Vec3V V3NormalizeSafe(const Vec3V a)
 {
 	VECMATHAOS_ASSERT(isValidVec3V(a));
 	const __m128 zero=V3Zero();
-	const __m128 eps=V3Eps();
+	const __m128 eps=FEps();
 	const __m128 length=V3Length(a);
 	const __m128 isGreaterThanZero=FIsGrtr(length,eps);
 	return V3Sel(isGreaterThanZero,V3ScaleInv(a,length),zero);
@@ -1228,27 +1323,28 @@ PX_FORCE_INLINE Vec3V V3Clamp(const Vec3V a, const Vec3V minV, const Vec3V maxV)
 
 PX_FORCE_INLINE PxU32 V3AllGrtr(const Vec3V a, const Vec3V b)
 {
-	return BAllTrue3_R(V4IsGrtr(a, b));
+	return internalWindowsSimd::BAllTrue3_R(V4IsGrtr(a, b));
 }
 
 
 PX_FORCE_INLINE PxU32 V3AllGrtrOrEq(const Vec3V a, const Vec3V b)
 {
-	return BAllTrue3_R(V4IsGrtrOrEq(a, b));
+	return internalWindowsSimd::BAllTrue3_R(V4IsGrtrOrEq(a, b));
 }
 
 PX_FORCE_INLINE PxU32 V3AllEq(const Vec3V a, const Vec3V b)
 {
-	return BAllTrue3_R(V4IsEq(a, b));
+	return internalWindowsSimd::BAllTrue3_R(V4IsEq(a, b));
 }
 
 
 PX_FORCE_INLINE Vec3V V3Round(const Vec3V a)
 {
 	//return _mm_round_ps(a, 0x0);
-	const Vec3V half = Vec3V_From_F32(0.5f);
-	const Vec3V aPlusHalf = V3Add(a, half);
-	const __m128i tmp = _mm_cvttps_epi32(aPlusHalf);
+	const Vec3V half = V3Load(0.5f);
+	const __m128 signBit = _mm_cvtepi32_ps(_mm_srli_epi32(_mm_cvtps_epi32(a), 31));
+	const Vec3V aRound = V3Sub(V3Add(a, half), signBit);
+	__m128i tmp = _mm_cvttps_epi32(aRound);
 	return _mm_cvtepi32_ps(tmp);
 }
 
@@ -1259,9 +1355,10 @@ PX_FORCE_INLINE Vec3V V3Sin(const Vec3V a)
     //Vec4V S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11;
     Vec3V Result;
 
-    // Modulo the range of the given angles such that -XM_PI <= Angles < XM_PI
-	const Vec3V twoPi = Vec4V_From_F32Array_Aligned(g_PXReciprocalTwoPi.f);
-	const Vec3V tmp = V3Mul(a, twoPi);
+    // Modulo the range of the given angles such that -XM_2PI <= Angles < XM_2PI
+	const Vec3V recipTwoPi = V4LoadA(g_PXReciprocalTwoPi.f);
+	const Vec3V twoPi = V4LoadA(g_PXTwoPi.f);
+	const Vec3V tmp = V3Mul(a, recipTwoPi);
     const Vec3V b = V3Round(tmp);
     const Vec3V V1 = V3NegMulSub(twoPi, b, a);
 
@@ -1280,9 +1377,9 @@ PX_FORCE_INLINE Vec3V V3Sin(const Vec3V a)
     const Vec3V V21 = V3Mul(V19, V2);
     const Vec3V V23 = V3Mul(V21, V2);
 
-	const Vec4V sinCoefficients0 = Vec4V_From_F32Array_Aligned(g_PXSinCoefficients0.f);
-	const Vec4V sinCoefficients1 = Vec4V_From_F32Array_Aligned(g_PXSinCoefficients1.f);
-	const Vec4V sinCoefficients2 = Vec4V_From_F32Array_Aligned(g_PXSinCoefficients2.f);
+	const Vec4V sinCoefficients0 = V4LoadA(g_PXSinCoefficients0.f);
+	const Vec4V sinCoefficients1 = V4LoadA(g_PXSinCoefficients1.f);
+	const Vec4V sinCoefficients2 = V4LoadA(g_PXSinCoefficients2.f);
 
     const FloatV S1  = V4GetY(sinCoefficients0);
     const FloatV S2  = V4GetZ(sinCoefficients0);
@@ -1318,9 +1415,10 @@ PX_FORCE_INLINE Vec3V V3Cos(const Vec3V a)
     //XMVECTOR C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11;
     Vec3V Result;
 
-    // Modulo the range of the given angles such that -XM_PI <= Angles < XM_PI
-	const Vec3V twoPi = Vec4V_From_F32Array_Aligned(g_PXReciprocalTwoPi.f);
-	const Vec3V tmp = V3Mul(a, twoPi);
+    // Modulo the range of the given angles such that -XM_2PI <= Angles < XM_2PI
+	const Vec3V recipTwoPi = V4LoadA(g_PXReciprocalTwoPi.f);
+	const Vec3V twoPi = V4LoadA(g_PXTwoPi.f);
+	const Vec3V tmp = V3Mul(a, recipTwoPi);
     const Vec3V b = V3Round(tmp);
     const Vec3V V1 = V3NegMulSub(twoPi, b, a);
 
@@ -1338,9 +1436,9 @@ PX_FORCE_INLINE Vec3V V3Cos(const Vec3V a)
     const Vec3V V20 = V3Mul(V10, V10);
     const Vec3V V22 = V3Mul(V12, V10);
 
-	const Vec4V cosCoefficients0 = Vec4V_From_F32Array_Aligned(g_PXCosCoefficients0.f);
-	const Vec4V cosCoefficients1 = Vec4V_From_F32Array_Aligned(g_PXCosCoefficients1.f);
-	const Vec4V cosCoefficients2 = Vec4V_From_F32Array_Aligned(g_PXCosCoefficients2.f);
+	const Vec4V cosCoefficients0 = V4LoadA(g_PXCosCoefficients0.f);
+	const Vec4V cosCoefficients1 = V4LoadA(g_PXCosCoefficients1.f);
+	const Vec4V cosCoefficients2 = V4LoadA(g_PXCosCoefficients2.f);
 
     const FloatV C1  = V4GetY(cosCoefficients0);
     const FloatV C2  = V4GetZ(cosCoefficients0);
@@ -1366,7 +1464,7 @@ PX_FORCE_INLINE Vec3V V3Cos(const Vec3V a)
     Result = V3MulAdd(C10, V20, Result);
     Result = V3MulAdd(C11, V22, Result);
 
-    return Result;
+    return V4ClearW(Result);
 	
 }
 
@@ -1384,7 +1482,7 @@ PX_FORCE_INLINE Vec3V V3PermXYX(const Vec3V a)
 
 PX_FORCE_INLINE Vec3V V3PermYZX(const Vec3V a)
 {
-	VECMATHAOS_ASSERT(isValidVec3V(a))
+	VECMATHAOS_ASSERT(isValidVec3V(a));
 	return _mm_shuffle_ps(a,a,_MM_SHUFFLE(3,0,2,1));
 }
 
@@ -1449,7 +1547,7 @@ PX_FORCE_INLINE PxU32 V3OutOfBounds(const Vec3V a, const Vec3V min, const Vec3V 
 	VECMATHAOS_ASSERT(isValidVec3V(max));
 	const BoolV ffff = BFFFF();
 	const BoolV c = BOr(V3IsGrtr(a, max), V3IsGrtr(min, a));
-	return !BAllEq(c, ffff);
+	return PxU32(!BAllEq(c, ffff));
 }
 
 PX_FORCE_INLINE PxU32 V3InBounds(const Vec3V a, const Vec3V min, const Vec3V max)
@@ -1547,6 +1645,25 @@ PX_FORCE_INLINE Vec4V V4UnpackZW(const Vec4VArg a, const Vec4VArg b)
 	return _mm_unpackhi_ps(a, b);
 }
 
+PX_FORCE_INLINE Vec4V V4Perm_YXWZ(const Vec4V a)
+{
+	return _mm_shuffle_ps(a, a, _MM_SHUFFLE(2,3,0,1));
+}
+
+PX_FORCE_INLINE Vec4V V4Perm_XZXZ(const Vec4V a)
+{
+	return _mm_shuffle_ps(a, a, _MM_SHUFFLE(2,0,2,0));
+}
+
+PX_FORCE_INLINE Vec4V V4Perm_YWYW(const Vec4V a)
+{
+	return _mm_shuffle_ps(a, a, _MM_SHUFFLE(3,1,3,1));
+}
+
+template<PxU8 x, PxU8 y, PxU8 z, PxU8 w> PX_FORCE_INLINE Vec4V V4Perm(const Vec4V a)
+{
+	return _mm_shuffle_ps(a, a,  _MM_SHUFFLE(w, z, y, x));
+}
 
 PX_FORCE_INLINE Vec4V V4UnitW()
 {
@@ -1602,6 +1719,11 @@ PX_FORCE_INLINE Vec4V V4SetW(const Vec4V v, const FloatV f)
 	return V4Sel(BTTTF(),v,f);
 }
 
+PX_FORCE_INLINE Vec4V V4ClearW(const Vec4V v)
+{
+	return _mm_and_ps(v, (VecI32V&)internalWindowsSimd::gMaskXYZ);
+}
+
 PX_FORCE_INLINE Vec4V V4SetX(const Vec4V v, const FloatV f)
 {
 	VECMATHAOS_ASSERT(isValidFloatV(f));
@@ -1623,17 +1745,17 @@ PX_FORCE_INLINE Vec4V V4SetZ(const Vec4V v, const FloatV f)
 
 PX_FORCE_INLINE Vec4V V4Zero()
 {
-	return Vec4V_From_F32(0.0f);
+	return _mm_setzero_ps();
 }
 
 PX_FORCE_INLINE Vec4V V4One()
 {
-	return Vec4V_From_F32(1.0f);
+	return V4Load(1.0f);
 }
 
 PX_FORCE_INLINE Vec4V V4Eps()
 {
-	return Vec4V_From_F32(PX_EPS_REAL);
+	return V4Load(PX_EPS_REAL);
 }
 
 PX_FORCE_INLINE Vec4V V4Neg(const Vec4V f)					
@@ -1703,6 +1825,11 @@ PX_FORCE_INLINE Vec4V V4RsqrtFast(const Vec4V a)
 	return _mm_rsqrt_ps(a);
 }
 
+PX_FORCE_INLINE Vec4V V4Sqrt(const Vec4V a)
+{
+	return _mm_sqrt_ps(a);
+}
+
 PX_FORCE_INLINE Vec4V V4ScaleAdd(const Vec4V a, const FloatV b, const Vec4V c)
 {
 	VECMATHAOS_ASSERT(isValidFloatV(b));
@@ -1730,6 +1857,16 @@ PX_FORCE_INLINE Vec4V V4Abs(const Vec4V a)
 	return V4Max(a,V4Neg(a));
 }
 
+PX_FORCE_INLINE FloatV V4SumElements(const Vec4V a)
+{
+	const Vec4V xy = V4UnpackXY(a, a);	//x,x,y,y
+	const Vec4V zw = V4UnpackZW(a, a);	//z,z,w,w
+	const Vec4V xz_yw = V4Add(xy, zw);	//x+z,x+z,y+w,y+w
+	const FloatV xz = V4GetX(xz_yw);	//x+z
+	const FloatV yw = V4GetZ(xz_yw);	//y+w
+	return FAdd(xz, yw);				//sum
+}
+
 PX_FORCE_INLINE FloatV V4Dot(const Vec4V a, const Vec4V b)		
 {
 	__m128 dot1 = _mm_mul_ps(a, b);										//x,y,z,w
@@ -1751,7 +1888,7 @@ PX_FORCE_INLINE FloatV V4LengthSq(const Vec4V a)
 
 PX_FORCE_INLINE Vec4V V4Normalize(const Vec4V a)
 {
-	VECMATHAOS_ASSERT(V4Dot(a,a)!=FZero())
+	VECMATHAOS_ASSERT(!FAllEq(V4Dot(a,a), FZero()));
 	return V4ScaleInv(a,_mm_sqrt_ps(V4Dot(a,a)));
 }
 
@@ -1790,11 +1927,11 @@ PX_FORCE_INLINE BoolV V4IsEq(const Vec4V a, const Vec4V b)
 }
 
 PX_FORCE_INLINE BoolV V4IsEqU32(const VecU32V a, const VecU32V b)
-{	
-	return m128_I2F(_mm_cmpeq_epi32(m128_F2I(a), m128_F2I(b)));
+{
+	return internalWindowsSimd::m128_I2F(_mm_cmpeq_epi32(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
 
-PX_FORCE_INLINE Vec3V V4Max(const Vec4V a, const Vec4V b)				
+PX_FORCE_INLINE Vec4V V4Max(const Vec4V a, const Vec4V b)				
 {
 	return _mm_max_ps(a, b);
 }
@@ -1831,26 +1968,27 @@ PX_FORCE_INLINE Vec4V V4Clamp(const Vec4V a, const Vec4V minV, const Vec4V maxV)
 
 PX_FORCE_INLINE PxU32 V4AllGrtr(const Vec4V a, const Vec4V b)
 {
-	return BAllTrue4_R(V4IsGrtr(a, b));
+	return internalWindowsSimd::BAllTrue4_R(V4IsGrtr(a, b));
 }
 
 
 PX_FORCE_INLINE PxU32 V4AllGrtrOrEq(const Vec4V a, const Vec4V b)
 {
-	return BAllTrue4_R(V4IsGrtrOrEq(a, b));
+	return internalWindowsSimd::BAllTrue4_R(V4IsGrtrOrEq(a, b));
 }
 
 PX_FORCE_INLINE PxU32 V4AllEq(const Vec4V a, const Vec4V b)
 {
-	return BAllTrue4_R(V4IsEq(a, b));
+	return internalWindowsSimd::BAllTrue4_R(V4IsEq(a, b));
 }
 
 PX_FORCE_INLINE Vec4V V4Round(const Vec4V a)
 {
 	//return _mm_round_ps(a, 0x0);
-	const Vec3V half = Vec3V_From_F32(0.5f);
-	const Vec3V aPlusHalf = V3Add(a, half);
-	__m128i tmp = _mm_cvttps_epi32(aPlusHalf);
+	const Vec4V half = V4Load(0.5f);
+	const __m128 signBit = _mm_cvtepi32_ps(_mm_srli_epi32(_mm_cvtps_epi32(a), 31));
+	const Vec4V aRound = V4Sub(V4Add(a, half), signBit);
+	__m128i tmp = _mm_cvttps_epi32(aRound);
 	return _mm_cvtepi32_ps(tmp);
 }
 
@@ -1861,8 +1999,9 @@ PX_FORCE_INLINE Vec4V V4Sin(const Vec4V a)
     //Vec4V S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11;
     Vec4V Result;
 
-	const Vec4V twoPi = Vec4V_From_F32Array_Aligned(g_PXReciprocalTwoPi.f);
-	const Vec4V tmp = V4Mul(a, twoPi);
+	const Vec4V recipTwoPi = V4LoadA(g_PXReciprocalTwoPi.f);
+	const Vec4V twoPi = V4LoadA(g_PXTwoPi.f);
+	const Vec4V tmp = V4Mul(a, recipTwoPi);
     const Vec4V b = V4Round(tmp);
     const Vec4V V1 = V4NegMulSub(twoPi, b, a);
 
@@ -1881,9 +2020,9 @@ PX_FORCE_INLINE Vec4V V4Sin(const Vec4V a)
     const Vec4V V21 = V4Mul(V19, V2);
     const Vec4V V23 = V4Mul(V21, V2);
 
-	const Vec4V sinCoefficients0 = Vec4V_From_F32Array_Aligned(g_PXSinCoefficients0.f);
-	const Vec4V sinCoefficients1 = Vec4V_From_F32Array_Aligned(g_PXSinCoefficients1.f);
-	const Vec4V sinCoefficients2 = Vec4V_From_F32Array_Aligned(g_PXSinCoefficients2.f);
+	const Vec4V sinCoefficients0 = V4LoadA(g_PXSinCoefficients0.f);
+	const Vec4V sinCoefficients1 = V4LoadA(g_PXSinCoefficients1.f);
+	const Vec4V sinCoefficients2 = V4LoadA(g_PXSinCoefficients2.f);
 
     const FloatV S1  = V4GetY(sinCoefficients0);
     const FloatV S2  = V4GetZ(sinCoefficients0);
@@ -1919,8 +2058,9 @@ PX_FORCE_INLINE Vec4V V4Cos(const Vec4V a)
     //XMVECTOR C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11;
     Vec4V Result;
 	
-	const Vec4V twoPi = Vec4V_From_F32Array_Aligned(g_PXReciprocalTwoPi.f);
-	const Vec4V tmp = V4Mul(a, twoPi);
+	const Vec4V recipTwoPi = V4LoadA(g_PXReciprocalTwoPi.f);
+	const FloatV twoPi = V4LoadA(g_PXTwoPi.f);
+	const Vec4V tmp = V4Mul(a, recipTwoPi);
     const Vec4V b = V4Round(tmp);
     const Vec4V V1 = V4NegMulSub(twoPi, b, a);
 
@@ -1939,9 +2079,9 @@ PX_FORCE_INLINE Vec4V V4Cos(const Vec4V a)
     const Vec4V V20 = V4Mul(V10, V10);
     const Vec4V V22 = V4Mul(V12, V10);
 
-	const Vec4V cosCoefficients0 = Vec4V_From_F32Array_Aligned(g_PXCosCoefficients0.f);
-	const Vec4V cosCoefficients1 = Vec4V_From_F32Array_Aligned(g_PXCosCoefficients1.f);
-	const Vec4V cosCoefficients2 = Vec4V_From_F32Array_Aligned(g_PXCosCoefficients2.f);
+	const Vec4V cosCoefficients0 = V4LoadA(g_PXCosCoefficients0.f);
+	const Vec4V cosCoefficients1 = V4LoadA(g_PXCosCoefficients1.f);
+	const Vec4V cosCoefficients2 = V4LoadA(g_PXCosCoefficients2.f);
 
     const FloatV C1  = V4GetY(cosCoefficients0);
     const FloatV C2  = V4GetZ(cosCoefficients0);
@@ -1986,7 +2126,7 @@ PX_FORCE_INLINE BoolV BFFFT()
 	/*const PX_ALIGN(16, PxU32 f[4])={0,0,0,0xFFFFFFFF};
 	const __m128 ffft=_mm_load_ps((float*)&f);
 	return ffft;*/
-	return m128_I2F(_mm_set_epi32(-1, 0, 0, 0));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(-1, 0, 0, 0));
 }
 
 PX_FORCE_INLINE BoolV BFFTF() 
@@ -1994,7 +2134,7 @@ PX_FORCE_INLINE BoolV BFFTF()
 	/*const PX_ALIGN(16, PxU32 f[4])={0,0,0xFFFFFFFF,0};
 	const __m128 fftf=_mm_load_ps((float*)&f);
 	return fftf;*/
-	return m128_I2F(_mm_set_epi32(0, -1, 0, 0));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(0, -1, 0, 0));
 }						
 
 PX_FORCE_INLINE BoolV BFFTT() 
@@ -2002,7 +2142,7 @@ PX_FORCE_INLINE BoolV BFFTT()
 	/*const PX_ALIGN(16, PxU32 f[4])={0,0,0xFFFFFFFF,0xFFFFFFFF};
 	const __m128 fftt=_mm_load_ps((float*)&f);
 	return fftt;*/
-	return m128_I2F(_mm_set_epi32(-1, -1, 0, 0));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(-1, -1, 0, 0));
 }
 
 PX_FORCE_INLINE BoolV BFTFF() 
@@ -2010,7 +2150,7 @@ PX_FORCE_INLINE BoolV BFTFF()
 	/*const PX_ALIGN(16, PxU32 f[4])={0,0xFFFFFFFF,0,0};
 	const __m128 ftff=_mm_load_ps((float*)&f);
 	return ftff;*/
-	return m128_I2F(_mm_set_epi32(0, 0, -1, 0));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(0, 0, -1, 0));
 }						
 
 PX_FORCE_INLINE BoolV BFTFT() 
@@ -2018,7 +2158,7 @@ PX_FORCE_INLINE BoolV BFTFT()
 	/*const PX_ALIGN(16, PxU32 f[4])={0,0xFFFFFFFF,0,0xFFFFFFFF};
 	const __m128 ftft=_mm_load_ps((float*)&f);
 	return ftft;*/
-	return m128_I2F(_mm_set_epi32(-1, 0, -1, 0));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(-1, 0, -1, 0));
 }					
 
 PX_FORCE_INLINE BoolV BFTTF() 
@@ -2026,7 +2166,7 @@ PX_FORCE_INLINE BoolV BFTTF()
 	/*const PX_ALIGN(16, PxU32 f[4])={0,0xFFFFFFFF,0xFFFFFFFF,0};
 	const __m128 fttf=_mm_load_ps((float*)&f);
 	return fttf;*/
-	return m128_I2F(_mm_set_epi32(0, -1, -1, 0));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(0, -1, -1, 0));
 }				
 
 PX_FORCE_INLINE BoolV BFTTT() 
@@ -2034,7 +2174,7 @@ PX_FORCE_INLINE BoolV BFTTT()
 	/*const PX_ALIGN(16, PxU32 f[4])={0,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF};
 	const __m128 fttt=_mm_load_ps((float*)&f);
 	return fttt;*/
-	return m128_I2F(_mm_set_epi32(-1, -1, -1, 0));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(-1, -1, -1, 0));
 }			
 
 PX_FORCE_INLINE BoolV BTFFF() 
@@ -2042,7 +2182,7 @@ PX_FORCE_INLINE BoolV BTFFF()
 	//const PX_ALIGN(16, PxU32 f[4])={0xFFFFFFFF,0,0,0};
 	//const __m128 tfff=_mm_load_ps((float*)&f);
 	//return tfff;
-	return m128_I2F(_mm_set_epi32(0, 0, 0, -1));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(0, 0, 0, -1));
 }						
 
 PX_FORCE_INLINE BoolV BTFFT() 
@@ -2050,7 +2190,7 @@ PX_FORCE_INLINE BoolV BTFFT()
 	/*const PX_ALIGN(16, PxU32 f[4])={0xFFFFFFFF,0,0,0xFFFFFFFF};
 	const __m128 tfft=_mm_load_ps((float*)&f);
 	return tfft;*/
-	return m128_I2F(_mm_set_epi32(-1, 0, 0, -1));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(-1, 0, 0, -1));
 }					
 
 PX_FORCE_INLINE BoolV BTFTF() 
@@ -2058,7 +2198,7 @@ PX_FORCE_INLINE BoolV BTFTF()
 	/*const PX_ALIGN(16, PxU32 f[4])={0xFFFFFFFF,0,0xFFFFFFFF,0};
 	const __m128 tftf=_mm_load_ps((float*)&f);
 	return tftf;*/
-	return m128_I2F(_mm_set_epi32(0, -1, 0, -1));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(0, -1, 0, -1));
 }				
 
 PX_FORCE_INLINE BoolV BTFTT()
@@ -2066,7 +2206,7 @@ PX_FORCE_INLINE BoolV BTFTT()
 	/*const PX_ALIGN(16, PxU32 f[4])={0xFFFFFFFF,0,0xFFFFFFFF,0xFFFFFFFF};
 	const __m128 tftt=_mm_load_ps((float*)&f);
 	return tftt;*/
-	return m128_I2F(_mm_set_epi32(-1, -1, 0, -1));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(-1, -1, 0, -1));
 }			
 
 PX_FORCE_INLINE BoolV BTTFF() 
@@ -2075,7 +2215,7 @@ PX_FORCE_INLINE BoolV BTTFF()
 	const __m128 ttff=_mm_load_ps((float*)&f);
 	return ttff;*/
 
-	return m128_I2F(_mm_set_epi32(0, 0, -1, -1));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(0, 0, -1, -1));
 }				
 
 PX_FORCE_INLINE BoolV BTTFT() 
@@ -2083,7 +2223,7 @@ PX_FORCE_INLINE BoolV BTTFT()
 	/*const PX_ALIGN(16, PxU32 f[4])={0xFFFFFFFF,0xFFFFFFFF,0,0xFFFFFFFF};
 	const __m128 ttft=_mm_load_ps((float*)&f);
 	return ttft;*/
-	return m128_I2F(_mm_set_epi32(-1, 0, -1, -1));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(-1, 0, -1, -1));
 }		
 
 PX_FORCE_INLINE BoolV BTTTF()
@@ -2091,7 +2231,7 @@ PX_FORCE_INLINE BoolV BTTTF()
 	/*const PX_ALIGN(16, PxU32 f[4])={0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0};
 	const __m128 tttf=_mm_load_ps((float*)&f);
 	return tttf;*/
-	return m128_I2F(_mm_set_epi32(0, -1, -1, -1));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(0, -1, -1, -1));
 }		
 
 PX_FORCE_INLINE BoolV BTTTT()
@@ -2099,7 +2239,7 @@ PX_FORCE_INLINE BoolV BTTTT()
 	/*const PX_ALIGN(16, PxU32 f[4])={0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF};
 	const __m128 tttt=_mm_load_ps((float*)&f);
 	return tttt;*/
-	return m128_I2F(_mm_set_epi32(-1, -1, -1, -1));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(-1, -1, -1, -1));
 }	
 
 PX_FORCE_INLINE BoolV BXMask()
@@ -2107,7 +2247,7 @@ PX_FORCE_INLINE BoolV BXMask()
 	/*const PX_ALIGN(16, PxU32 f[4])={0xFFFFFFFF,0,0,0};
 	const __m128 tfff=_mm_load_ps((float*)&f);
 	return tfff;*/
-	return m128_I2F(_mm_set_epi32(0, 0, 0, -1));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(0, 0, 0, -1));
 }
 
 PX_FORCE_INLINE BoolV BYMask()
@@ -2115,7 +2255,7 @@ PX_FORCE_INLINE BoolV BYMask()
 	/*const PX_ALIGN(16, PxU32 f[4])={0,0xFFFFFFFF,0,0};
 	const __m128 ftff=_mm_load_ps((float*)&f);
 	return ftff;*/
-	return m128_I2F(_mm_set_epi32(0, 0, -1, 0));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(0, 0, -1, 0));
 }
 
 PX_FORCE_INLINE BoolV BZMask()
@@ -2123,7 +2263,7 @@ PX_FORCE_INLINE BoolV BZMask()
 	/*const PX_ALIGN(16, PxU32 f[4])={0,0,0xFFFFFFFF,0};
 	const __m128 fftf=_mm_load_ps((float*)&f);
 	return fftf;*/
-	return m128_I2F(_mm_set_epi32(0, -1, 0, 0));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(0, -1, 0, 0));
 }
 
 PX_FORCE_INLINE BoolV BWMask()
@@ -2131,7 +2271,7 @@ PX_FORCE_INLINE BoolV BWMask()
 	/*const PX_ALIGN(16, PxU32 f[4])={0,0,0,0xFFFFFFFF};
 	const __m128 ffft=_mm_load_ps((float*)&f);
 	return ffft;*/
-	return m128_I2F(_mm_set_epi32(-1, 0, 0, 0));
+	return internalWindowsSimd::m128_I2F(_mm_set_epi32(-1, 0, 0, 0));
 }
 
 
@@ -2175,6 +2315,11 @@ PX_FORCE_INLINE BoolV BSetW(const BoolV v, const BoolV f)
 	return V4Sel(BTTTF(),v,f);
 }
 
+template<int index> BoolV BSplatElement(BoolV a)
+{
+	return internalWindowsSimd::m128_I2F(_mm_shuffle_epi32(internalWindowsSimd::m128_F2I(a), _MM_SHUFFLE(index, index, index, index)));
+}
+
 PX_FORCE_INLINE BoolV BAnd(const BoolV a, const BoolV b)	
 {
 	return (_mm_and_ps(a,b));
@@ -2188,7 +2333,7 @@ PX_FORCE_INLINE BoolV BNot(const BoolV a)
 
 PX_FORCE_INLINE BoolV BAndNot(const BoolV a, const BoolV b)	
 {
-	return (_mm_andnot_ps(a,b));
+	return (_mm_andnot_ps(b, a));
 }
 
 PX_FORCE_INLINE BoolV BOr(const BoolV a, const BoolV b)	
@@ -2222,8 +2367,8 @@ PX_FORCE_INLINE BoolV BAnyTrue3(const BoolV a)
 
 PX_FORCE_INLINE PxU32 BAllEq(const BoolV a, const BoolV b)
 {
-	const BoolV bTest = m128_I2F(_mm_cmpeq_epi32(m128_F2I(a), m128_F2I(b)));
-	return BAllTrue4_R(bTest);
+	const BoolV bTest = internalWindowsSimd::m128_I2F(_mm_cmpeq_epi32(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
+	return internalWindowsSimd::BAllTrue4_R(bTest);
 }
 
 
@@ -2510,6 +2655,8 @@ PX_FORCE_INLINE Mat44V M44Inverse(const Mat44V& a)
 	__m128 det, tmp1;
 
 	tmp1=V4Zero();
+	row1=V4Zero();
+	row3=V4Zero();
 
 	row0=a.col0;
 	row1=_mm_shuffle_ps(a.col1,a.col1,_MM_SHUFFLE(1,0,3,2));
@@ -2587,11 +2734,12 @@ PX_FORCE_INLINE Mat44V M44Inverse(const Mat44V& a)
 	return M44Trnsps(invTrans);
 }
 
-PX_FORCE_INLINE Vec4V Vec4V_From_XYZW(const PxF32& x, const PxF32& y, const PxF32& z, const PxF32& w)
+PX_FORCE_INLINE Vec4V Vec4VLoadXYZW(const PxF32& x, const PxF32& y, const PxF32& z, const PxF32& w)
 {
 	return _mm_set_ps(w, z, y, x);
 }
 
+/*
 // AP: work in progress - use proper SSE intrinsics where possible
 PX_FORCE_INLINE VecU16V V4U32PK(VecU32V a, VecU32V b)
 {
@@ -2606,71 +2754,106 @@ PX_FORCE_INLINE VecU16V V4U32PK(VecU32V a, VecU32V b)
 	result.m128_u16[7] = PxU16(PxClamp<PxU32>((b).m128_u32[3], 0, 0xFFFF));
 	return result;
 }
+*/
 
+PX_FORCE_INLINE VecU32V V4U32Sel(const BoolV c, const VecU32V a, const VecU32V b)	
+{
+	 return internalWindowsSimd::m128_I2F(_mm_or_si128(
+	 _mm_andnot_si128(internalWindowsSimd::m128_F2I(c), internalWindowsSimd::m128_F2I(b)),
+	 _mm_and_si128(internalWindowsSimd::m128_F2I(c), internalWindowsSimd::m128_F2I(a))
+	 ));
+}  
 
 PX_FORCE_INLINE VecU32V V4U32or(VecU32V a, VecU32V b)
 {
-	return m128_I2F(_mm_or_si128(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_or_si128(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
 
 PX_FORCE_INLINE VecU32V V4U32and(VecU32V a, VecU32V b)
 {
-	return m128_I2F(_mm_and_si128(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_and_si128(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
 
 PX_FORCE_INLINE VecU32V V4U32Andc(VecU32V a, VecU32V b)
 {
-	return m128_I2F(_mm_andnot_si128(m128_F2I(b), m128_F2I(a)));
+	return internalWindowsSimd::m128_I2F(_mm_andnot_si128(internalWindowsSimd::m128_F2I(b), internalWindowsSimd::m128_F2I(a)));
 }
 
+/*
 PX_FORCE_INLINE VecU16V V4U16Or(VecU16V a, VecU16V b)
 {
-	return m128_I2F(_mm_or_si128(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_or_si128(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
+*/
 
+/*
 PX_FORCE_INLINE VecU16V V4U16And(VecU16V a, VecU16V b)
 {
-	return m128_I2F(_mm_and_si128(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_and_si128(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
+*/
 
+/*
 PX_FORCE_INLINE VecU16V V4U16Andc(VecU16V a, VecU16V b)
 {
-	return m128_I2F(_mm_andnot_si128(m128_F2I(b), m128_F2I(a)));
+	return internalWindowsSimd::m128_I2F(_mm_andnot_si128(internalWindowsSimd::m128_F2I(b), internalWindowsSimd::m128_F2I(a)));
 }
+*/
 
-PX_FORCE_INLINE VecI32V VecI32V_From_I32(const PxI32 i)
+PX_FORCE_INLINE VecI32V U4Load(const PxU32 i)
 {
 	return (_mm_load1_ps((PxF32*)&i));
 }
 
-PX_FORCE_INLINE VecI32V VecI32V_From_I32Array(const PxI32* i)
+PX_FORCE_INLINE VecU32V U4LoadU(const PxU32* i)
 {
 	return _mm_loadu_ps((PxF32*)i);
 }
 
-PX_FORCE_INLINE VecI32V VecI32V_From_I32Array_Aligned(const PxI32* i)
+PX_FORCE_INLINE VecU32V U4LoadA(const PxU32* i)
+{
+	VECMATHAOS_ASSERT(0==((size_t)i & 0x0f));
+	return _mm_load_ps((PxF32*)i);
+}
+
+PX_FORCE_INLINE VecI32V I4Load(const PxI32 i)
+{
+	return (_mm_load1_ps((PxF32*)&i));
+}
+
+PX_FORCE_INLINE VecI32V I4LoadU(const PxI32* i)
+{
+	return _mm_loadu_ps((PxF32*)i);
+}
+
+PX_FORCE_INLINE VecI32V I4LoadA(const PxI32* i)
 {
 	return _mm_load_ps((PxF32*)i);
 }
 
 PX_FORCE_INLINE VecI32V VecI32V_Add(const VecI32VArg a, const VecI32VArg b)
 {
-	return m128_I2F(_mm_add_epi32(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_add_epi32(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
 
 PX_FORCE_INLINE VecI32V VecI32V_Sub(const VecI32VArg a, const VecI32VArg b)
 {
-	return m128_I2F(_mm_sub_epi32(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_sub_epi32(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
 
 PX_FORCE_INLINE BoolV VecI32V_IsGrtr(const VecI32VArg a, const VecI32VArg b)
 {
-	return m128_I2F(_mm_cmpgt_epi32(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_cmpgt_epi32(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
 
 PX_FORCE_INLINE BoolV VecI32V_IsEq(const VecI32VArg a, const VecI32VArg b)
 {
-	return m128_I2F(_mm_cmpeq_epi32(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_cmpeq_epi32(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
+}
+
+PX_FORCE_INLINE VecI32V V4I32Sel(const BoolV c, const VecI32V a, const VecI32V b)	
+{
+	return V4U32Sel(c, a, b);
 }
 
 PX_FORCE_INLINE VecI32V VecI32V_Zero()
@@ -2680,12 +2863,32 @@ PX_FORCE_INLINE VecI32V VecI32V_Zero()
 
 PX_FORCE_INLINE VecI32V VecI32V_One()
 {
-	return VecI32V_From_I32(1);
+	return I4Load(1);
 }
 
 PX_FORCE_INLINE VecI32V VecI32V_Two()
 {
-	return VecI32V_From_I32(2);
+	return I4Load(2);
+}
+
+PX_FORCE_INLINE VecI32V VecI32V_MinusOne()
+{
+	return I4Load(-1);
+}
+
+PX_FORCE_INLINE VecU32V U4Zero()
+{
+	return U4Load(0);
+}
+
+PX_FORCE_INLINE VecU32V U4One()
+{
+	return U4Load(1);
+}
+
+PX_FORCE_INLINE VecU32V U4Two()
+{
+	return U4Load(2);
 }
 
 PX_FORCE_INLINE VecI32V VecI32V_Sel(const BoolV c, const VecI32VArg a, const VecI32VArg b)
@@ -2694,15 +2897,21 @@ PX_FORCE_INLINE VecI32V VecI32V_Sel(const BoolV c, const VecI32VArg a, const Vec
 	return _mm_or_ps(_mm_andnot_ps(c, b), _mm_and_ps(c, a));
 }
 
-
-PX_FORCE_INLINE VecI32V VecI32V_PrepareShift(const VecI32VArg shift)
+PX_FORCE_INLINE VecShiftV VecI32V_PrepareShift(const VecI32VArg shift)
 {
-	return VecI32V_Sel(BTFFF(), shift, VecI32V_Zero());
+	VecShiftV preparedShift;
+	preparedShift.shift = VecI32V_Sel(BTFFF(), shift, VecI32V_Zero());
+	return preparedShift;
 }
 
-PX_FORCE_INLINE VecI32V VecI32V_LeftShift(const VecI32VArg a, const VecI32VArg count)
+PX_FORCE_INLINE VecI32V VecI32V_LeftShift(const VecI32VArg a, const VecShiftVArg count)
 {
-	return m128_I2F(_mm_sll_epi32(m128_F2I(a), m128_F2I(count)));
+	return internalWindowsSimd::m128_I2F(_mm_sll_epi32(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(count.shift)));
+}
+
+PX_FORCE_INLINE VecI32V VecI32V_RightShift(const VecI32VArg a, const VecShiftVArg count)
+{
+	return internalWindowsSimd::m128_I2F(_mm_srl_epi32(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(count.shift)));
 }
 
 PX_FORCE_INLINE VecI32V VecI32V_And(const VecI32VArg a, const VecI32VArg b)
@@ -2735,14 +2944,20 @@ PX_FORCE_INLINE VecI32V VecI32V_GetW(const VecI32VArg a)
 	return _mm_shuffle_ps(a, a, _MM_SHUFFLE(3,3,3,3));
 }
 
+
+PX_FORCE_INLINE void PxI32_From_VecI32V(const VecI32VArg a, PxI32* i)
+{
+	_mm_store_ss((PxF32*)i,a);
+}
+
 PX_FORCE_INLINE VecI32V VecI32V_From_BoolV(const BoolVArg a)
 {
 	return a;
 }
 
-PX_FORCE_INLINE void PxI32_From_VecI32V(const VecI32VArg a, PxI32* i)
+PX_FORCE_INLINE VecU32V VecU32V_From_BoolV(const BoolVArg a)
 {
-	_mm_store_ss((PxF32*)i,a);
+	return a;
 }
 
 PX_FORCE_INLINE VecI32V VecI32V_Merge(const VecI32VArg a, const VecI32VArg b, const VecI32VArg c, const VecI32VArg d)
@@ -2750,6 +2965,7 @@ PX_FORCE_INLINE VecI32V VecI32V_Merge(const VecI32VArg a, const VecI32VArg b, co
 	return V4Merge(a, b, c, d);
 }
 
+/*
 template<int a> PX_FORCE_INLINE VecI32V V4ISplat()
 {
 	VecI32V result;
@@ -2769,25 +2985,18 @@ template<PxU32 a> PX_FORCE_INLINE VecU32V V4USplat()
 	result.m128_u32[3] = a;
 	return result;
 }
+*/
 
+/*
 PX_FORCE_INLINE void V4U16StoreAligned(VecU16V val, VecU16V* address)
 {
 	*address = val;
 }
+*/
 
 PX_FORCE_INLINE void V4U32StoreAligned(VecU32V val, VecU32V* address)
 {
 	*address = val;
-}
-
-PX_FORCE_INLINE Vec4V V4LoadAligned(Vec4V* addr)
-{
-	return *addr;
-}
-
-PX_FORCE_INLINE Vec4V V4LoadUnaligned(Vec4V* addr)
-{
-	return Vec4V_From_F32Array((float*)addr);
 }
 
 PX_FORCE_INLINE Vec4V V4Andc(const Vec4V a, const VecU32V b)
@@ -2816,31 +3025,46 @@ PX_FORCE_INLINE VecU16V V4U16LoadUnaligned(VecU16V* addr)
 PX_FORCE_INLINE VecU16V V4U16CompareGt(VecU16V a, VecU16V b)
 {
 	// _mm_cmpgt_epi16 doesn't work for unsigned values unfortunately
-	// return m128_I2F(_mm_cmpgt_epi16(m128_F2I(a), m128_F2I(b)));
+	// return m128_I2F(_mm_cmpgt_epi16(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 	VecU16V result;
-	result.m128_u16[0] = (a).m128_u16[0]>(b).m128_u16[0];
-	result.m128_u16[1] = (a).m128_u16[1]>(b).m128_u16[1];
-	result.m128_u16[2] = (a).m128_u16[2]>(b).m128_u16[2];
-	result.m128_u16[3] = (a).m128_u16[3]>(b).m128_u16[3];
-	result.m128_u16[4] = (a).m128_u16[4]>(b).m128_u16[4];
-	result.m128_u16[5] = (a).m128_u16[5]>(b).m128_u16[5];
-	result.m128_u16[6] = (a).m128_u16[6]>(b).m128_u16[6];
-	result.m128_u16[7] = (a).m128_u16[7]>(b).m128_u16[7];
+	result.m128_u16[0] = PxU16((a).m128_u16[0]>(b).m128_u16[0]);
+	result.m128_u16[1] = PxU16((a).m128_u16[1]>(b).m128_u16[1]);
+	result.m128_u16[2] = PxU16((a).m128_u16[2]>(b).m128_u16[2]);
+	result.m128_u16[3] = PxU16((a).m128_u16[3]>(b).m128_u16[3]);
+	result.m128_u16[4] = PxU16((a).m128_u16[4]>(b).m128_u16[4]);
+	result.m128_u16[5] = PxU16((a).m128_u16[5]>(b).m128_u16[5]);
+	result.m128_u16[6] = PxU16((a).m128_u16[6]>(b).m128_u16[6]);
+	result.m128_u16[7] = PxU16((a).m128_u16[7]>(b).m128_u16[7]);
 	return result;
 }
 
 PX_FORCE_INLINE VecU16V V4I16CompareGt(VecU16V a, VecU16V b)
 {
-	return m128_I2F(_mm_cmpgt_epi16(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_cmpgt_epi16(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
 
 PX_FORCE_INLINE Vec4V Vec4V_From_VecU32V(VecU32V a)
 {
-	Vec4V result = Vec4V_From_XYZW(PxF32(a.m128_u32[0]), PxF32(a.m128_u32[1]), PxF32(a.m128_u32[2]), PxF32(a.m128_u32[3]));
+	Vec4V result = Vec4VLoadXYZW(PxF32(a.m128_u32[0]), PxF32(a.m128_u32[1]), PxF32(a.m128_u32[2]), PxF32(a.m128_u32[3]));
 	return result;
 }
 
+PX_FORCE_INLINE Vec4V Vec4V_From_VecI32V(VecI32V a)
+{
+	return _mm_cvtepi32_ps(internalWindowsSimd::m128_F2I(a));	
+}
+
+PX_FORCE_INLINE VecI32V VecI32V_From_Vec4V(Vec4V a)
+{
+	return internalWindowsSimd::m128_I2F(_mm_cvttps_epi32(a));
+}
+
 PX_FORCE_INLINE Vec4V Vec4V_ReinterpretFrom_VecU32V(VecU32V a)
+{
+	return Vec4V(a);
+}
+
+PX_FORCE_INLINE Vec4V Vec4V_ReinterpretFrom_VecI32V(VecI32V a)
 {
 	return Vec4V(a);
 }
@@ -2850,17 +3074,19 @@ PX_FORCE_INLINE VecU32V VecU32V_ReinterpretFrom_Vec4V(Vec4V a)
 	return VecU32V(a);
 }
 
+PX_FORCE_INLINE VecI32V VecI32V_ReinterpretFrom_Vec4V(Vec4V a)
+{
+	return VecI32V(a);
+}
+
 template<int index> PX_FORCE_INLINE VecU32V V4U32SplatElement(VecU32V a)
 {
-	VecU32V result;
-	result.m128_u32[0] = result.m128_u32[1] = result.m128_u32[2] = result.m128_u32[3] = a.m128_u32[index];
-	return result;
+	return internalWindowsSimd::m128_I2F(_mm_shuffle_epi32(internalWindowsSimd::m128_F2I(a), _MM_SHUFFLE(index, index, index, index)));
 }
 
 template<int index> PX_FORCE_INLINE Vec4V V4SplatElement(Vec4V a)
 {
-	float* data = (float*)&a;
-	return Vec4V_From_F32(data[index]);
+	return internalWindowsSimd::m128_I2F(_mm_shuffle_epi32(internalWindowsSimd::m128_F2I(a), _MM_SHUFFLE(index, index, index, index)));
 }
 
 template<int index> PX_FORCE_INLINE VecU16V V4U16SplatElement(VecU16V a)
@@ -2901,12 +3127,12 @@ template<PxU16 imm> PX_FORCE_INLINE VecU16V V4U16SplatImmediate()
 
 PX_FORCE_INLINE VecU16V V4U16SubtractModulo(VecU16V a, VecU16V b)
 {
-	return m128_I2F(_mm_sub_epi16(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_sub_epi16(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
 
 PX_FORCE_INLINE VecU16V V4U16AddModulo(VecU16V a, VecU16V b)
 {
-	return m128_I2F(_mm_add_epi16(m128_F2I(a), m128_F2I(b)));
+	return internalWindowsSimd::m128_I2F(_mm_add_epi16(internalWindowsSimd::m128_F2I(a), internalWindowsSimd::m128_F2I(b)));
 }
 
 PX_FORCE_INLINE VecU32V V4U16GetLo16(VecU16V a)
@@ -2929,7 +3155,7 @@ PX_FORCE_INLINE VecU32V V4U16GetHi16(VecU16V a)
 	return result;
 }
 
-PX_FORCE_INLINE VecU32V VecU32V_From_XYZW(PxU32 x, PxU32 y, PxU32 z, PxU32 w)
+PX_FORCE_INLINE VecU32V VecU32VLoadXYZW(PxU32 x, PxU32 y, PxU32 z, PxU32 w)
 {
 	VecU32V result;
 	result.m128_u32[0] = x;
@@ -2939,20 +3165,51 @@ PX_FORCE_INLINE VecU32V VecU32V_From_XYZW(PxU32 x, PxU32 y, PxU32 z, PxU32 w)
 	return result;
 }
 
+
+
+PX_FORCE_INLINE Vec4V V4ConvertFromI32V(const VecI32V in)
+{
+	return _mm_cvtepi32_ps(internalWindowsSimd::m128_F2I(in));
+}
+
+
+
+//not used
+
+
+/*
+PX_FORCE_INLINE Vec4V V4LoadAligned(Vec4V* addr)
+{
+	return *addr;
+}
+*/
+
+/*
+PX_FORCE_INLINE Vec4V V4LoadUnaligned(Vec4V* addr)
+{
+	return Vec4V_From_F32Array((float*)addr);
+}
+*/
+
+/*
 PX_FORCE_INLINE Vec4V V4Ceil(const Vec4V a)
 {
 	return Vec4V_From_XYZW(PxCeil(a.m128_f32[0]), PxCeil(a.m128_f32[1]), PxCeil(a.m128_f32[2]), PxCeil(a.m128_f32[3]));
 }
+*/
 
+/*
 PX_FORCE_INLINE Vec4V V4Floor(const Vec4V a)
 {
 	return Vec4V_From_XYZW(PxFloor(a.m128_f32[0]), PxFloor(a.m128_f32[1]), PxFloor(a.m128_f32[2]), PxFloor(a.m128_f32[3]));
 }
+*/
 
+/*
 PX_FORCE_INLINE VecU32V V4ConvertToU32VSaturate(const Vec4V a, PxU32 power)
 {
 	PX_ASSERT(power == 0 && "Non-zero power not supported in convertToU32VSaturate");
-	PX_FORCE_PARAMETER_REFERENCE(power); // prevent warning in release builds
+	PX_UNUSED(power); // prevent warning in release builds
 	PxF32 ffffFFFFasFloat = PxF32(0xFFFF0000);
 	VecU32V result;
 	result.m128_u32[0] = PxU32(PxClamp<PxF32>((a).m128_f32[0], 0.0f, ffffFFFFasFloat));
@@ -2961,6 +3218,7 @@ PX_FORCE_INLINE VecU32V V4ConvertToU32VSaturate(const Vec4V a, PxU32 power)
 	result.m128_u32[3] = PxU32(PxClamp<PxF32>((a).m128_f32[3], 0.0f, ffffFFFFasFloat));
 	return result;
 }
+*/
 
 
 #endif //PS_WINDOWS_INLINE_AOS_H

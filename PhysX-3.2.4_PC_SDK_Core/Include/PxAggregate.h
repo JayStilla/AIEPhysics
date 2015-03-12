@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,8 +35,8 @@
 @{
 */
 
-#include "PxPhysX.h"
-#include "common/PxSerialFramework.h"
+#include "PxPhysXConfig.h"
+#include "common/PxBase.h"
 
 
 #ifndef PX_DOXYGEN
@@ -62,10 +62,10 @@ broad-phase structures. This has 3 main benefits:
    filtering once and for all, for the aggregate containing the ragdoll, rather than filtering
    out each bone-bone collision in the filter shader.
 
-@see PxActor
+@see PxActor, PxPhysics.createAggregate
 */
 
-class PxAggregate : public PxSerializable
+class PxAggregate : public PxBase
 {
 public:
 
@@ -187,13 +187,13 @@ public:
 	*/
 	virtual	bool		getSelfCollision()	const	= 0;
 
-	virtual	const char*			getConcreteTypeName() const				{	return "PxAggregate"; }
+	virtual	const char*	getConcreteTypeName() const	{ return "PxAggregate"; }
 
 protected:
-						PxAggregate(PxRefResolver& v) : PxSerializable(v) {}
-						PxAggregate()	{}
-	virtual				~PxAggregate()	{}
-	virtual	bool		isKindOf(const char* name)	const		{	return !strcmp("PxAggregate", name) || PxSerializable::isKindOf(name); }
+	PX_INLINE			PxAggregate(PxType concreteType, PxBaseFlags baseFlags) : PxBase(concreteType, baseFlags) {}
+	PX_INLINE			PxAggregate(PxBaseFlags baseFlags) : PxBase(baseFlags) {}
+	virtual				~PxAggregate() {}
+	virtual	bool		isKindOf(const char* name) const { return !strcmp("PxAggregate", name) || PxBase::isKindOf(name); }
 };
 
 #ifndef PX_DOXYGEN

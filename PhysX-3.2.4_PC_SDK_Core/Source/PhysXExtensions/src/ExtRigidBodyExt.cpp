@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -37,6 +37,7 @@
 #include "PsAlloca.h"
 
 #include "PxShape.h"
+#include "PxScene.h"
 
 #include "PxBoxGeometry.h"
 #include "PxSphereGeometry.h"
@@ -57,7 +58,7 @@
 using namespace physx;
 
 static bool computeMassAndDiagInertia(Ext::InertiaTensorComputer& inertiaComp, 
-		PxVec3& diagTensor, PxQuat& orient, PxReal& massOut, PxVec3& coM, bool lockCOM)
+		PxVec3& diagTensor, PxQuat& orient, PxReal& massOut, PxVec3& coM, bool lockCOM, const PxRigidBody& body, const char* errorStr)
 {
 	// The inertia tensor and center of mass is relative to the actor at this point. Transform to the
 	// body frame directly if CoM is specified, else use computed center of mass
@@ -77,212 +78,30 @@ static bool computeMassAndDiagInertia(Ext::InertiaTensorComputer& inertiaComp,
 	
 	massOut = inertiaComp.getMass();
 	diagTensor = PxDiagonalize(inertiaComp.getInertia(), orient);
-	return true;
-}
 
-static void sweepRigidBody(PxRigidBody& body, PxBatchQuery& batchQuery, bool closestObject, const PxVec3& unitDir, const PxReal distance, PxSceneQueryFilterFlags filterFlags, 
-		bool useShapeFilterData, PxFilterData* filterDataList, PxU32 filterDataCount, void* userData, const PxSweepCache* sweepCache)
-{
-	if (body.getNbShapes() == 0)
-		return;
-
-	const char* outOfMemMsg = "PxRigidBodyExt: LinearSweep: Out of memory, call failed.";
-	bool succeeded = true;
-
-	PX_ALLOCA(shapes, PxShape*, body.getNbShapes());
-	if (!shapes)
+	if ((diagTensor.x > 0.0f) && (diagTensor.y > 0.0f) && (diagTensor.z > 0.0f))
+		return true;
+	else
 	{
-		Ps::getFoundation().error(PxErrorCode::eOUT_OF_MEMORY, __FILE__, __LINE__, outOfMemMsg);
-		succeeded = false;
-	}
-	PxU32 nbShapes = body.getShapes(shapes, body.getNbShapes());
-	
-	PX_ALLOCA(geoms, const PxGeometry*, nbShapes);
-	if (!geoms)
-	{
-		Ps::getFoundation().error(PxErrorCode::eOUT_OF_MEMORY, __FILE__, __LINE__, outOfMemMsg);
-		succeeded = false;
-	}
+		Ps::getFoundation().error(PxErrorCode::eDEBUG_WARNING, __FILE__, __LINE__, 
+								"%s: inertia tensor has negative components (ill-conditioned input expected). Approximation for inertia tensor will be used instead.", errorStr);
 
-	PX_ALLOCA(poses, PxTransform, nbShapes);
-	if (!poses)
-	{
-		Ps::getFoundation().error(PxErrorCode::eOUT_OF_MEMORY, __FILE__, __LINE__, outOfMemMsg);
-		succeeded = false;
-	}
+		// keep center of mass but use the AABB as a crude approximation for the inertia tensor
+		PxBounds3 bounds = body.getWorldBounds();
+		PxTransform pose = body.getGlobalPose();
+		bounds = PxBounds3::transformFast(pose.getInverse(), bounds);
+		Ext::InertiaTensorComputer it(false);
+		it.setBox(bounds.getExtents());
+		it.scaleDensity(massOut / it.getMass());
+		PxMat33 inertia = it.getInertia();
+		diagTensor = PxVec3(inertia.column0.x, inertia.column1.y, inertia.column2.z);
+		orient = PxQuat(PxIdentity);
 
-	PxFilterData* filterData = NULL;
-	PX_ALLOCA(filterDataBuffer, PxFilterData, nbShapes);
-	if (useShapeFilterData)
-	{
-		filterData = filterDataBuffer;
-
-		if (!filterDataBuffer)
-		{
-			Ps::getFoundation().error(PxErrorCode::eOUT_OF_MEMORY, __FILE__, __LINE__, outOfMemMsg);
-			succeeded = false;
-		}
-	}
-	else if (filterDataList)
-	{
-		if (filterDataCount == nbShapes)
-		{
-			filterData = filterDataList;
-		}
-		else
-		{
-			Ps::getFoundation().error(PxErrorCode::eINVALID_PARAMETER, __FILE__, __LINE__, "PxRigidBodyExt: LinearSweep: Number of filter data entries does not match number of shapes, call failed.");
-			succeeded = false;
-		}
-	}
-
-	if (succeeded)
-	{
-		PxU32 geomByteSize = 0;
-
-		for(PxU32 i=0; i < nbShapes; i++)
-		{
-			poses[i] = PxShapeExt::getGlobalPose(*shapes[i]);
-
-			if (useShapeFilterData)
-				filterData[i] = shapes[i]->getSimulationFilterData();
-
-			// Copy the non-supported geometry types too, to make sure the closest geometry index maps to the shapes
-			switch(shapes[i]->getGeometryType())
-			{
-				case PxGeometryType::eSPHERE : 
-				{
-					geomByteSize += sizeof(PxSphereGeometry);
-				}
-				break;
-
-				case PxGeometryType::eBOX : 
-				{
-					geomByteSize += sizeof(PxBoxGeometry);
-				}
-				break;
-
-				case PxGeometryType::eCAPSULE : 
-				{
-					geomByteSize += sizeof(PxCapsuleGeometry);
-				}
-				break;
-
-				case PxGeometryType::eCONVEXMESH : 
-				{
-					geomByteSize += sizeof(PxConvexMeshGeometry);
-				}
-				break;
-
-				case PxGeometryType::ePLANE : 
-				{
-					geomByteSize += sizeof(PxPlaneGeometry);
-				}
-				break;
-
-				case PxGeometryType::eTRIANGLEMESH : 
-				{
-					geomByteSize += sizeof(PxTriangleMeshGeometry);
-				}
-				break;
-
-				case PxGeometryType::eHEIGHTFIELD : 
-				{
-					geomByteSize += sizeof(PxHeightFieldGeometry);
-				}
-				break;
-				default:
-				break;
-			}
-		}
-
-		PX_ALLOCA(geomBuffer, PxU8, geomByteSize);
-
-		if (geomBuffer)
-		{
-			PxU8* currBufferPos = geomBuffer;
-
-			for(PxU32 i=0; i < nbShapes; i++)
-			{
-				// Copy the non-supported geometry types too, to make sure the closest geometry index maps to the shapes
-				switch(shapes[i]->getGeometryType())
-				{
-					case PxGeometryType::eSPHERE : 
-					{
-						PxSphereGeometry* g = reinterpret_cast<PxSphereGeometry*>(currBufferPos);
-						geoms[i] = g;
-						shapes[i]->getSphereGeometry(*g);
-						currBufferPos += sizeof(PxSphereGeometry);
-					}
-					break;
-
-					case PxGeometryType::eBOX : 
-					{
-						PxBoxGeometry* g = reinterpret_cast<PxBoxGeometry*>(currBufferPos);
-						geoms[i] = g;
-						shapes[i]->getBoxGeometry(*g);
-						currBufferPos += sizeof(PxBoxGeometry);
-					}
-					break;
-
-					case PxGeometryType::eCAPSULE : 
-					{
-						PxCapsuleGeometry* g = reinterpret_cast<PxCapsuleGeometry*>(currBufferPos);
-						geoms[i] = g;
-						shapes[i]->getCapsuleGeometry(*g);
-						currBufferPos += sizeof(PxCapsuleGeometry);
-					}
-					break;
-
-					case PxGeometryType::eCONVEXMESH : 
-					{
-						PxConvexMeshGeometry* g = reinterpret_cast<PxConvexMeshGeometry*>(currBufferPos);
-						geoms[i] = g;
-						shapes[i]->getConvexMeshGeometry(*g);
-						currBufferPos += sizeof(PxConvexMeshGeometry);
-					}
-					break;
-
-					case PxGeometryType::ePLANE : 
-					{
-						PxPlaneGeometry* g = reinterpret_cast<PxPlaneGeometry*>(currBufferPos);
-						geoms[i] = g;
-						shapes[i]->getPlaneGeometry(*g);
-						currBufferPos += sizeof(PxPlaneGeometry);
-					}
-					break;
-
-					case PxGeometryType::eTRIANGLEMESH : 
-					{
-						PxTriangleMeshGeometry* g = reinterpret_cast<PxTriangleMeshGeometry*>(currBufferPos);
-						geoms[i] = g;
-						shapes[i]->getTriangleMeshGeometry(*g);
-						currBufferPos += sizeof(PxTriangleMeshGeometry);
-					}
-					break;
-
-					case PxGeometryType::eHEIGHTFIELD : 
-					{
-						PxHeightFieldGeometry* g = reinterpret_cast<PxHeightFieldGeometry*>(currBufferPos);
-						geoms[i] = g;
-						shapes[i]->getHeightFieldGeometry(*g);
-						currBufferPos += sizeof(PxHeightFieldGeometry);
-					}
-					break;
-					default:
-					break;
-				}
-			}
-
-			if (closestObject)
-				batchQuery.linearCompoundGeometrySweepSingle(geoms, poses, filterData, nbShapes, unitDir, distance, filterFlags, PxSceneQueryFlag::eIMPACT|PxSceneQueryFlag::eNORMAL|PxSceneQueryFlag::eDISTANCE|PxSceneQueryFlag::eUV, userData, sweepCache);
-			else
-				batchQuery.linearCompoundGeometrySweepMultiple(geoms, poses, filterData, nbShapes, unitDir, distance, filterFlags, PxSceneQueryFlag::eIMPACT|PxSceneQueryFlag::eNORMAL|PxSceneQueryFlag::eDISTANCE|PxSceneQueryFlag::eUV, userData, sweepCache);
-		}
+		return true;
 	}
 }
 
-static bool computeMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body, const PxReal* densities, const PxReal* masses, PxU32 densityOrMassCount, Ext::InertiaTensorComputer& computer)
+static bool computeMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body, const PxReal* densities, const PxReal* masses, PxU32 densityOrMassCount, bool includeNonSimShapes, Ext::InertiaTensorComputer& computer)
 {
 	PX_ASSERT(!densities || !masses);
 	PX_ASSERT((densities || masses) && (densityOrMassCount > 0));
@@ -315,7 +134,7 @@ static bool computeMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body,
 
 	for(PxU32 i=0; i < shapes.size(); i++)
 	{
-		if (!(shapes[i]->getFlags() & PxShapeFlag::eSIMULATION_SHAPE))
+		if ((!(shapes[i]->getFlags() & PxShapeFlag::eSIMULATION_SHAPE)) && (!includeNonSimShapes))
 			continue; 
 
 		if (multipleMassOrDensity)
@@ -334,7 +153,7 @@ static bool computeMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body,
 			else
 			{
 				Ps::getFoundation().error(PxErrorCode::eINVALID_PARAMETER, __FILE__, __LINE__, 
-					"computeMassAndInertia: Not enough mass/density values provided for all simulation shapes");
+					"computeMassAndInertia: Not enough mass/density values provided for all (simulation) shapes");
 				return false;
 			}
 		}
@@ -392,16 +211,23 @@ static bool computeMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body,
 				PxVec3 convCoM;
 				convMesh.getMassInformation(convMass, reinterpret_cast<PxMat33&>(convInertia), convCoM);
 
-				//scale the mass:
-				convMass *= (g.scale.scale.x * g.scale.scale.y * g.scale.scale.z);
-				convCoM = g.scale.rotation.rotateInv(g.scale.scale.multiply(g.scale.rotation.rotate(convCoM)));
-				convInertia = Ext::MassProps::scaleInertia(convInertia, g.scale.rotation, g.scale.scale);
+				if (!g.scale.isIdentity())
+				{
+					//scale the mass properties
+					convMass *= (g.scale.scale.x * g.scale.scale.y * g.scale.scale.z);
+					convCoM = g.scale.rotation.rotateInv(g.scale.scale.multiply(g.scale.rotation.rotate(convCoM)));
+					convInertia = Ext::MassProps::scaleInertia(convInertia, g.scale.rotation, g.scale.scale);
+				}
 
 				it = Ext::InertiaTensorComputer(convInertia, convCoM, convMass);
 				it.transform(shapes[i]->getLocalPose());
 			}
 			break;
-
+		case PxGeometryType::eHEIGHTFIELD:
+		case PxGeometryType::ePLANE:
+		case PxGeometryType::eTRIANGLEMESH:
+		case PxGeometryType::eINVALID:
+		case PxGeometryType::eGEOMETRY_COUNT:
 		default :
 			{
 
@@ -430,23 +256,24 @@ static bool computeMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body,
 	return true;
 }
 
-static bool updateMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body, const PxReal* densities, PxU32 densityCount, const PxVec3* massLocalPose)
+static bool updateMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body, const PxReal* densities, PxU32 densityCount, const PxVec3* massLocalPose, bool includeNonSimShapes)
 {
 	bool success;
 
 	// default values in case there were no shapes
 	PxReal massOut = 1.0f;
-	PxVec3 diagTensor(1,1,1);
-	PxQuat orient = PxQuat::createIdentity();
+	PxVec3 diagTensor(1.f,1.f,1.f);
+	PxQuat orient = PxQuat(PxIdentity);
 	bool lockCom = massLocalPose != NULL;
 	PxVec3 com = lockCom ? *massLocalPose : PxVec3(0);
+	const char* errorStr = "PxRigidBodyExt::updateMassAndInertia";
 
 	if (densities && densityCount)
 	{
 		Ext::InertiaTensorComputer inertiaComp(true);
-		if(computeMassAndInertia(multipleMassOrDensity, body, densities, NULL, densityCount, inertiaComp))
+		if(computeMassAndInertia(multipleMassOrDensity, body, densities, NULL, densityCount, includeNonSimShapes, inertiaComp))
 		{
-			if(inertiaComp.getMass()!=0 && computeMassAndDiagInertia(inertiaComp, diagTensor, orient, massOut, com, lockCom))
+			if(inertiaComp.getMass()!=0 && computeMassAndDiagInertia(inertiaComp, diagTensor, orient, massOut, com, lockCom, body, errorStr))
 				success = true;
 			else
 				success = false;  // body with no shapes provided or computeMassAndDiagInertia() failed
@@ -454,7 +281,7 @@ static bool updateMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body, 
 		else
 		{
 			Ps::getFoundation().error(PxErrorCode::eINVALID_PARAMETER, __FILE__, __LINE__, 
-				"PxRigidBodyExt::updateMassAndInertia: Mass and inertia computation failed, setting mass to 1 and inertia to (1,1,1)");
+				"%s: Mass and inertia computation failed, setting mass to 1 and inertia to (1,1,1)", errorStr);
 
 			success = false;
 		}
@@ -462,7 +289,7 @@ static bool updateMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body, 
 	else
 	{
 		Ps::getFoundation().error(PxErrorCode::eINVALID_PARAMETER, __FILE__, __LINE__, 
-			"PxRigidBodyExt::updateMassAndInertia: No density specified, setting mass to 1 and inertia to (1,1,1)");
+			"%s: No density specified, setting mass to 1 and inertia to (1,1,1)", errorStr);
 
 		success = false;
 	}
@@ -478,35 +305,36 @@ static bool updateMassAndInertia(bool multipleMassOrDensity, PxRigidBody& body, 
 	return success;
 }
 
-bool PxRigidBodyExt::updateMassAndInertia(PxRigidBody& body, const PxReal* densities, PxU32 densityCount, const PxVec3* massLocalPose)
+bool PxRigidBodyExt::updateMassAndInertia(PxRigidBody& body, const PxReal* densities, PxU32 densityCount, const PxVec3* massLocalPose, bool includeNonSimShapes)
 {
-	return ::updateMassAndInertia(true, body, densities, densityCount, massLocalPose);
+	return ::updateMassAndInertia(true, body, densities, densityCount, massLocalPose, includeNonSimShapes);
 }
 
-bool PxRigidBodyExt::updateMassAndInertia(PxRigidBody& body, PxReal density, const PxVec3* massLocalPose)
+bool PxRigidBodyExt::updateMassAndInertia(PxRigidBody& body, PxReal density, const PxVec3* massLocalPose, bool includeNonSimShapes)
 {
-	return ::updateMassAndInertia(false, body, &density, 1, massLocalPose);
+	return ::updateMassAndInertia(false, body, &density, 1, massLocalPose, includeNonSimShapes);
 }
 
-bool static setMassAndUpdateInertia(bool multipleMassOrDensity, PxRigidBody& body, const PxReal* masses, PxU32 massCount, const PxVec3* massLocalPose)
+static bool setMassAndUpdateInertia(bool multipleMassOrDensity, PxRigidBody& body, const PxReal* masses, PxU32 massCount, const PxVec3* massLocalPose, bool includeNonSimShapes)
 {
 	bool success;
 
 	// default values in case there were no shapes
 	PxReal massOut = 1.0f;
-	PxVec3 diagTensor(1,1,1);
-	PxQuat orient = PxQuat::createIdentity();
+	PxVec3 diagTensor(1.0f,1.0f,1.0f);
+	PxQuat orient = PxQuat(PxIdentity);
 	bool lockCom = massLocalPose != NULL;
 	PxVec3 com = lockCom ? *massLocalPose : PxVec3(0);
+	const char* errorStr = "PxRigidBodyExt::setMassAndUpdateInertia";
 
 	if(masses && massCount)
 	{
 		Ext::InertiaTensorComputer inertiaComp(true);
-		if(computeMassAndInertia(multipleMassOrDensity, body, NULL, masses, massCount, inertiaComp))
+		if(computeMassAndInertia(multipleMassOrDensity, body, NULL, masses, massCount, includeNonSimShapes, inertiaComp))
 		{
 			success = true;
 
-			if (inertiaComp.getMass()!=0 && !computeMassAndDiagInertia(inertiaComp, diagTensor, orient, massOut, com, lockCom))
+			if (inertiaComp.getMass()!=0 && !computeMassAndDiagInertia(inertiaComp, diagTensor, orient, massOut, com, lockCom, body, errorStr))
 				success = false;  // computeMassAndDiagInertia() failed (mass zero?)
 
 			if (massCount == 1)
@@ -515,7 +343,7 @@ bool static setMassAndUpdateInertia(bool multipleMassOrDensity, PxRigidBody& bod
 		else
 		{
 			Ps::getFoundation().error(PxErrorCode::eINVALID_PARAMETER, __FILE__, __LINE__, 
-				"PxRigidBodyExt::setMassAndUpdateInertia: Mass and inertia computation failed, setting mass to 1 and inertia to (1,1,1)");
+				"%s: Mass and inertia computation failed, setting mass to 1 and inertia to (1,1,1)", errorStr);
 
 			success = false;
 		}
@@ -523,7 +351,7 @@ bool static setMassAndUpdateInertia(bool multipleMassOrDensity, PxRigidBody& bod
 	else
 	{
 		Ps::getFoundation().error(PxErrorCode::eINVALID_PARAMETER, __FILE__, __LINE__, 
-			"PxRigidBodyExt::setMassAndUpdateInertia: No mass specified, setting mass to 1 and inertia to (1,1,1)");
+			"%s: No mass specified, setting mass to 1 and inertia to (1,1,1)", errorStr);
 		success = false;
 	}
 
@@ -537,14 +365,14 @@ bool static setMassAndUpdateInertia(bool multipleMassOrDensity, PxRigidBody& bod
 	return success;
 }
 
-bool PxRigidBodyExt::setMassAndUpdateInertia(PxRigidBody& body, const PxReal* masses, PxU32 massCount, const PxVec3* massLocalPose)
+bool PxRigidBodyExt::setMassAndUpdateInertia(PxRigidBody& body, const PxReal* masses, PxU32 massCount, const PxVec3* massLocalPose, bool includeNonSimShapes)
 {
-	return ::setMassAndUpdateInertia(true, body, masses, massCount, massLocalPose);
+	return ::setMassAndUpdateInertia(true, body, masses, massCount, massLocalPose, includeNonSimShapes);
 }
 
-bool PxRigidBodyExt::setMassAndUpdateInertia(PxRigidBody& body, PxReal mass, const PxVec3* massLocalPose)
+bool PxRigidBodyExt::setMassAndUpdateInertia(PxRigidBody& body, PxReal mass, const PxVec3* massLocalPose, bool includeNonSimShapes)
 {
-	return ::setMassAndUpdateInertia(false, body, &mass, 1, massLocalPose);
+	return ::setMassAndUpdateInertia(false, body, &mass, 1, massLocalPose, includeNonSimShapes);
 }
 
 PX_INLINE void addForceAtPosInternal(PxRigidBody& body, const PxVec3& force, const PxVec3& pos, PxForceMode::Enum mode, bool wakeup)
@@ -628,15 +456,190 @@ PxVec3 PxRigidBodyExt::getVelocityAtOffset(const PxRigidBody& body, const PxVec3
 	return getVelocityAtPosInternal(body, rpoint);
 }
 
-void PxRigidBodyExt::linearSweepSingle(PxRigidBody& body, PxBatchQuery& batchQuery, const PxVec3& unitDir, const PxReal distance,  PxSceneQueryFilterFlags filterFlags, bool useShapeFilterData, PxFilterData* filterDataList, PxU32 filterDataCount, void* userData, const PxSweepCache* sweepCache)
+static void transformInertiaTensor(const PxVec3& invD, const PxMat33& M, PxMat33& mIInv)
 {
-	sweepRigidBody(body, batchQuery, true, unitDir, distance, filterFlags, useShapeFilterData, filterDataList, filterDataCount, userData, sweepCache);
+	const float	axx = invD.x*M(0,0), axy = invD.x*M(1,0), axz = invD.x*M(2,0);
+	const float	byx = invD.y*M(0,1), byy = invD.y*M(1,1), byz = invD.y*M(2,1);
+	const float	czx = invD.z*M(0,2), czy = invD.z*M(1,2), czz = invD.z*M(2,2);
+
+	mIInv(0,0) = axx*M(0,0) + byx*M(0,1) + czx*M(0,2);
+	mIInv(1,1) = axy*M(1,0) + byy*M(1,1) + czy*M(1,2);
+	mIInv(2,2) = axz*M(2,0) + byz*M(2,1) + czz*M(2,2);
+
+	mIInv(0,1) = mIInv(1,0)	= axx*M(1,0) + byx*M(1,1) + czx*M(1,2);
+	mIInv(0,2) = mIInv(2,0)	= axx*M(2,0) + byx*M(2,1) + czx*M(2,2);
+	mIInv(1,2) = mIInv(2,1)	= axy*M(2,0) + byy*M(2,1) + czy*M(2,2);
 }
 
-void PxRigidBodyExt::linearSweepMultiple(PxRigidBody& body, PxBatchQuery& batchQuery, const PxVec3& unitDir, const PxReal distance,  PxSceneQueryFilterFlags filterFlags, bool useShapeFilterData, PxFilterData* filterDataList, PxU32 filterDataCount, void* userData, const PxSweepCache* sweepCache)
+
+void PxRigidBodyExt::computeVelocityDeltaFromImpulse(const PxRigidBody& body, const PxTransform& globalPose, const PxVec3& point, const PxVec3& impulse, const PxReal invMassScale, 
+														const PxReal invInertiaScale, PxVec3& linearVelocityChange, PxVec3& angularVelocityChange)
 {
-	sweepRigidBody(body, batchQuery, false, unitDir, distance, filterFlags, useShapeFilterData, filterDataList, filterDataCount, userData, sweepCache);
+	const PxVec3 centerOfMass = globalPose.transform(body.getCMassLocalPose().p);
+	const PxReal invMass = body.getInvMass() * invMassScale;
+	const PxVec3 invInertiaMS = body.getMassSpaceInvInertiaTensor() * invInertiaScale;
+
+	PxMat33 invInertia;
+	transformInertiaTensor(invInertiaMS, PxMat33(globalPose.q), invInertia);
+	linearVelocityChange = impulse * invMass;
+	const PxVec3 rXI = (point - centerOfMass).cross(impulse);
+	angularVelocityChange = invInertia * rXI;
 }
 
+void PxRigidBodyExt::computeLinearAngularImpulse(const PxRigidBody& body, const PxTransform& globalPose, const PxVec3& point, const PxVec3& impulse, const PxReal invMassScale, 
+														const PxReal invInertiaScale, PxVec3& linearImpulse, PxVec3& angularImpulse)
+{
+	const PxVec3 centerOfMass = globalPose.transform(body.getCMassLocalPose().p);
+	linearImpulse = impulse * invMassScale;
+	angularImpulse = (point - centerOfMass).cross(impulse) * invInertiaScale;
+}
+
+
+
+//=================================================================================
+// Single closest hit compound sweep
+bool PxRigidBodyExt::linearSweepSingle(
+	PxRigidBody& body, PxScene& scene, const PxVec3& unitDir, const PxReal distance,
+	PxHitFlags outputFlags, PxSweepHit& closestHit, PxU32& shapeIndex,
+	const PxQueryFilterData& filterData, PxQueryFilterCallback* filterCall,
+	const PxQueryCache* cache, const PxReal inflation)
+{
+	shapeIndex = 0xFFFFffff;
+	PxReal closestDist = distance;
+	PxU32 nbShapes = body.getNbShapes();
+	for(PxU32 i=0; i < nbShapes; i++)
+	{
+		PxShape* shape = NULL;
+		body.getShapes(&shape, 1, i);
+		PX_ASSERT(shape != NULL);
+		PxTransform pose = PxShapeExt::getGlobalPose(*shape, body);
+		PxQueryFilterData fd;
+		fd.flags = filterData.flags;
+		PxU32 or4 = (filterData.data.word0 | filterData.data.word1 | filterData.data.word2 | filterData.data.word3);
+		fd.data = or4 ? filterData.data : shape->getQueryFilterData();
+		PxGeometryHolder anyGeom = shape->getGeometry();
+
+		PxSweepBuffer subHit; // touching hits are not allowed to be returned from the filters
+		scene.sweep(anyGeom.any(), pose, unitDir, distance, subHit, outputFlags, fd, filterCall, cache, inflation);
+		if (subHit.hasBlock && subHit.block.distance < closestDist)
+		{
+			closestDist = subHit.block.distance;
+			closestHit = subHit.block;
+			shapeIndex = i;
+		}
+	}
+
+	return (shapeIndex != 0xFFFFffff);
+}
+
+//=================================================================================
+// Multiple hits compound sweep
+// AP: we might be able to improve the return results API but no time for it in 3.3
+PxU32 PxRigidBodyExt::linearSweepMultiple(
+	PxRigidBody& body, PxScene& scene, const PxVec3& unitDir, const PxReal distance, PxHitFlags outputFlags,
+	PxSweepHit* hitBuffer, PxU32* hitShapeIndices, PxU32 hitBufferSize, PxSweepHit& block, PxI32& blockingHitShapeIndex,
+	bool& overflow, const PxQueryFilterData& filterData, PxQueryFilterCallback* filterCall,
+	const PxQueryCache* cache, const PxReal inflation)
+{
+	overflow = false;
+	blockingHitShapeIndex = -1;
+
+	for (PxU32 i = 0; i < hitBufferSize; i++)
+		hitShapeIndices[i] = 0xFFFFffff;
+
+	PxI32 sumNbResults = 0;
+
+	PxU32 nbShapes = body.getNbShapes();
+	PxF32 shrunkMaxDistance = distance;
+	for(PxU32 i=0; i < nbShapes; i++)
+	{
+		PxShape* shape = NULL;
+		body.getShapes(&shape, 1, i);
+		PX_ASSERT(shape != NULL);
+		PxTransform pose = PxShapeExt::getGlobalPose(*shape, body);
+		PxQueryFilterData fd;
+		fd.flags = filterData.flags;
+		PxU32 or4 = (filterData.data.word0 | filterData.data.word1 | filterData.data.word2 | filterData.data.word3);
+		fd.data = or4 ? filterData.data : shape->getQueryFilterData();
+		PxGeometryHolder anyGeom = shape->getGeometry();
+
+		PxU32 bufSizeLeft = hitBufferSize-sumNbResults;
+		PxSweepHit extraHit;
+		PxSweepBuffer buffer(bufSizeLeft == 0 ? &extraHit : hitBuffer+sumNbResults, bufSizeLeft == 0 ? 1 : hitBufferSize-sumNbResults);
+		scene.sweep(anyGeom.any(), pose, unitDir, shrunkMaxDistance, buffer, outputFlags, fd, filterCall, cache, inflation);
+
+		// Check and abort on overflow. Assume overflow if result count is bufSize.
+		PxU32 nbNewResults = buffer.getNbTouches();
+		overflow |= (nbNewResults >= bufSizeLeft);
+		if (bufSizeLeft == 0) // this is for when we used the extraHit buffer
+			nbNewResults = 0;
+
+		// set hitShapeIndices for each new non-blocking hit
+		for (PxU32 j = 0; j < nbNewResults; j++)
+			if (sumNbResults + PxU32(j) < hitBufferSize)
+				hitShapeIndices[sumNbResults+j] = i;
+
+		if (buffer.hasBlock) // there's a blocking hit in the most recent sweepMultiple results
+		{
+			// overwrite the return result blocking hit with the new blocking hit if under
+			if (blockingHitShapeIndex == -1 || buffer.block.distance < block.distance)
+			{
+				blockingHitShapeIndex = (PxI32)i;
+				block = buffer.block;
+			}
+
+			// Remove all the old touching hits below the new maxDist
+			// sumNbResults is not updated yet at this point
+			//   and represents the count accumulated so far excluding the very last query
+			PxI32 nbNewResultsSigned = PxI32(nbNewResults); // need a signed version, see nbNewResultsSigned-- below
+			for (PxI32 j = sumNbResults-1; j >= 0; j--) // iterate over "old" hits (up to shapeIndex-1)
+				if (buffer.block.distance < hitBuffer[j].distance)
+				{
+					// overwrite with last "new" hit
+					PxI32 sourceIndex = PxI32(sumNbResults)+nbNewResultsSigned-1; PX_ASSERT(sourceIndex >= j);
+					hitBuffer[j] = hitBuffer[sourceIndex];
+					hitShapeIndices[j] = hitShapeIndices[sourceIndex];
+					nbNewResultsSigned--; // can get negative, that means we are shifting the last results array
+				}
+
+			sumNbResults += nbNewResultsSigned;
+		} else // if there was no new blocking hit we don't need to do anything special, simply append all results to touch array
+			sumNbResults += nbNewResults;
+
+		PX_ASSERT(sumNbResults >= 0 && sumNbResults <= PxI32(hitBufferSize));
+	}
+
+	return (PxU32)sumNbResults;
+}
+
+void PxRigidBodyExt::computeVelocityDeltaFromImpulse(const PxRigidBody& body, const PxVec3& impulsiveForce, const PxVec3& impulsiveTorque, PxVec3& deltaLinearVelocity, PxVec3& deltaAngularVelocity)
+{
+	{
+		const PxF32 recipMass = body.getInvMass();
+		deltaLinearVelocity = impulsiveForce*recipMass;
+	}
+
+	{
+		const PxTransform globalPose = body.getGlobalPose();
+		const PxTransform cmLocalPose = body.getCMassLocalPose();
+		const PxTransform body2World = globalPose*cmLocalPose;
+		PxMat33 M(body2World.q);
+
+		const PxVec3 recipInertiaBodySpace = body.getMassSpaceInvInertiaTensor();
+
+		PxMat33 recipInertiaWorldSpace;
+		const float	axx = recipInertiaBodySpace.x*M(0,0), axy = recipInertiaBodySpace.x*M(1,0), axz = recipInertiaBodySpace.x*M(2,0);
+		const float	byx = recipInertiaBodySpace.y*M(0,1), byy = recipInertiaBodySpace.y*M(1,1), byz = recipInertiaBodySpace.y*M(2,1);
+		const float	czx = recipInertiaBodySpace.z*M(0,2), czy = recipInertiaBodySpace.z*M(1,2), czz = recipInertiaBodySpace.z*M(2,2);
+		recipInertiaWorldSpace(0,0) = axx*M(0,0) + byx*M(0,1) + czx*M(0,2);
+		recipInertiaWorldSpace(1,1) = axy*M(1,0) + byy*M(1,1) + czy*M(1,2);
+		recipInertiaWorldSpace(2,2) = axz*M(2,0) + byz*M(2,1) + czz*M(2,2);
+		recipInertiaWorldSpace(0,1) = recipInertiaWorldSpace(1,0) = axx*M(1,0) + byx*M(1,1) + czx*M(1,2);
+		recipInertiaWorldSpace(0,2) = recipInertiaWorldSpace(2,0) = axx*M(2,0) + byx*M(2,1) + czx*M(2,2);
+		recipInertiaWorldSpace(1,2) = recipInertiaWorldSpace(2,1) = axy*M(2,0) + byy*M(2,1) + czy*M(2,2);
+
+		deltaAngularVelocity = recipInertiaWorldSpace*(impulsiveTorque);
+	}
+}
 
 

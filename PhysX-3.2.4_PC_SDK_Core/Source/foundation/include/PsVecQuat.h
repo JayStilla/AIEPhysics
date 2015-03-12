@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -40,28 +40,28 @@
 //////////////////////////////////
 //QuatV
 //////////////////////////////////
-PX_FORCE_INLINE QuatV QuatV_From_XYZW(const PxF32 x, const PxF32 y, const PxF32 z, const PxF32 w)
+PX_FORCE_INLINE QuatV QuatVLoadXYZW(const PxF32 x, const PxF32 y, const PxF32 z, const PxF32 w)
 {
-	return Vec4V_From_XYZW(x, y, z, w);
+	return Vec4VLoadXYZW(x, y, z, w);
 }
 
-PX_FORCE_INLINE QuatV QuatV_From_F32Array(const PxF32* v)
+PX_FORCE_INLINE QuatV QuatVLoadU(const PxF32* v)
 {
-	return Vec4V_From_F32Array(v);
+	return V4LoadU(v);
 }
 
-PX_FORCE_INLINE QuatV QuatV_From_F32Array_Aligned(const PxF32* v)
+PX_FORCE_INLINE QuatV QuatVLoadA(const PxF32* v)
 {
-	return Vec4V_From_F32Array_Aligned(v);
+	return V4LoadA(v);
 }
 
 
 PX_FORCE_INLINE QuatV QuatV_From_RotationAxisAngle(const Vec3V u, const FloatV a)
 {
 	//q = cos(a/2) + u*sin(a/2) 
-	const FloatV half = FloatV_From_F32(0.5f);
+	const FloatV half = FLoad(0.5f);
 	const FloatV hangle = FMul(a, half);
-	const FloatV piByTwo(FloatV_From_F32(PX_PIDIV2));
+	const FloatV piByTwo(FLoad(PX_PIDIV2));
 	const FloatV PiByTwoMinHangle(FSub(piByTwo, hangle));
 	const Vec4V hangle2(Vec4V_From_Vec3V(V3Merge(hangle, PiByTwoMinHangle, hangle)));
 
@@ -117,7 +117,7 @@ PX_FORCE_INLINE Vec3V QuatGetBasisVector0(const QuatV q)
 					(z * w2)        + y*x2,
 					(-y * w2)       + z*x2);*/
 
-	const FloatV two = FloatV_From_F32(2.f);
+	const FloatV two = FLoad(2.f);
 	const FloatV w = V4GetW(q);
 	const Vec3V u = Vec3V_From_Vec4V(q);
 
@@ -141,7 +141,7 @@ PX_FORCE_INLINE Vec3V QuatGetBasisVector1(const QuatV q)
 					(w * w2) - 1.0f + y*y2,
 					(x * w2)        + z*y2);*/
 
-	const FloatV two = FloatV_From_F32(2.f);
+	const FloatV two = FLoad(2.f);
 	const FloatV w = V4GetW(q);
 	const Vec3V u = Vec3V_From_Vec4V(q);
 
@@ -168,7 +168,7 @@ PX_FORCE_INLINE Vec3V QuatGetBasisVector2(const QuatV q)
 					(w * w2) - 1.0f + z*z2);*/
 
 	
-	const FloatV two = FloatV_From_F32(2.f);
+	const FloatV two = FLoad(2.f);
 	const FloatV w = V4GetW(q);
 	const Vec3V u = Vec3V_From_Vec4V(q);
 
@@ -192,9 +192,9 @@ PX_FORCE_INLINE Vec3V QuatRotate(const QuatV q, const Vec3V v)
 	return (v*(w*w-0.5f) + (qv.cross(v))*w + qv*(qv.dot(v)))*2;
 	*/
 	
-	const FloatV two = FloatV_From_F32(2.f);
+	const FloatV two = FLoad(2.f);
 	//const FloatV half = FloatV_From_F32(0.5f);
-	const FloatV nhalf = FloatV_From_F32(-0.5f);
+	const FloatV nhalf = FLoad(-0.5f);
 	const Vec3V u = Vec3V_From_Vec4V(q);
 	const FloatV w = V4GetW(q);
 	//const FloatV w2 = FSub(FMul(w, w), half);
@@ -211,9 +211,9 @@ PX_FORCE_INLINE Vec3V QuatRotate(const QuatV q, const Vec3V v)
 PX_FORCE_INLINE Vec3V QuatTransform(const QuatV q, const Vec3V p, const Vec3V v)
 {
 	//p + q.rotate(v)
-	const FloatV two = FloatV_From_F32(2.f);
+	const FloatV two = FLoad(2.f);
 	//const FloatV half = FloatV_From_F32(0.5f);
-	const FloatV nhalf = FloatV_From_F32(-0.5f);
+	const FloatV nhalf = FLoad(-0.5f);
 	const Vec3V u = Vec3V_From_Vec4V(q);
 	const FloatV w = V4GetW(q);
 	//const FloatV w2 = FSub(FMul(w, w), half);
@@ -234,8 +234,8 @@ PX_FORCE_INLINE  Vec3V QuatRotateInv(const QuatV q, const Vec3V v)
 //	const PxVec3 qv(x,y,z);
 //	return (v*(w*w-0.5f) - (qv.cross(v))*w + qv*(qv.dot(v)))*2;
 
-	const FloatV two = FloatV_From_F32(2.f);
-	const FloatV nhalf = FloatV_From_F32(-0.5f);
+	const FloatV two = FLoad(2.f);
+	const FloatV nhalf = FLoad(-0.5f);
 	const Vec3V u = Vec3V_From_Vec4V(q);
 	const FloatV w = V4GetW(q);
 	const FloatV w2 = FScaleAdd(w, w, nhalf);
@@ -261,7 +261,7 @@ PX_FORCE_INLINE QuatV QuatMul(const QuatV a, const QuatV b)
 	const Vec3V v2 = V3Cross(imagA, imagB);
 	const Vec3V imag = V3Add(V3Add(v0, v1), v2);
 
-	return V4SetW(imag, real);
+	return V4SetW(Vec4V_From_Vec3V(imag), real);
 }
 
 PX_FORCE_INLINE QuatV QuatAdd(const QuatV a, const QuatV b)
@@ -281,7 +281,7 @@ PX_FORCE_INLINE QuatV QuatSub(const QuatV a, const QuatV b)
 
 PX_FORCE_INLINE QuatV QuatScale(const QuatV a, const FloatV b)
 {
-	return V4Mul(a, b);
+	return V4Scale(a, b);
 }
 
 PX_FORCE_INLINE QuatV QuatMerge(const FloatV* const floatVArray)
@@ -296,7 +296,7 @@ PX_FORCE_INLINE QuatV QuatMerge(const FloatVArg x, const FloatVArg y, const Floa
 
 PX_FORCE_INLINE QuatV QuatIdentity()
 {
-	return V4SetW(V3Zero(), FOne());
+	return V4SetW(V4Zero(), FOne());
 }
 
 PX_FORCE_INLINE bool isFiniteQuatV(const QuatV q)
@@ -306,7 +306,7 @@ PX_FORCE_INLINE bool isFiniteQuatV(const QuatV q)
 
 PX_FORCE_INLINE bool isValidQuatV(const QuatV q)
 {
-	const FloatV unitTolerance = FloatV_From_F32((PxF32)1e-4);
+	const FloatV unitTolerance = FLoad((PxF32)1e-4);
 	const FloatV tmp = FAbs(FSub(QuatLength(q), FOne()));
 	const BoolV con = FIsGrtr(unitTolerance, tmp);
 	return isFiniteVec4V(q) & (BAllEq(con, BTTTT())==1);
@@ -315,7 +315,7 @@ PX_FORCE_INLINE bool isValidQuatV(const QuatV q)
 
 PX_FORCE_INLINE bool isSaneQuatV(const QuatV q)
 {
-	const FloatV unitTolerance = FloatV_From_F32((PxF32)1e-2);
+	const FloatV unitTolerance = FLoad((PxF32)1e-2);
 	const FloatV tmp = FAbs(FSub(QuatLength(q), FOne()));
 	const BoolV con = FIsGrtr(unitTolerance, tmp);
 	return isFiniteVec4V(q) & (BAllEq(con, BTTTT())==1);
@@ -435,9 +435,9 @@ PX_FORCE_INLINE QuatV Mat33GetQuatV(const Mat33V& a)
 {
 	const FloatV one = FOne();
 	const FloatV zero = FZero();
-	const FloatV half = FloatV_From_F32(0.5f);
-	const FloatV two = FloatV_From_F32(2.f);
-	const FloatV scale = FloatV_From_F32(0.25f);
+	const FloatV half = FLoad(0.5f);
+	const FloatV two = FLoad(2.f);
+	const FloatV scale = FLoad(0.25f);
 	const FloatV a00 = V3GetX(a.col0);
 	const FloatV a11 = V3GetY(a.col1);
 	const FloatV a22 = V3GetZ(a.col2);

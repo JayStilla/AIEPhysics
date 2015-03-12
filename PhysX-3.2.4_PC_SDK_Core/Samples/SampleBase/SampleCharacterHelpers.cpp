@@ -23,9 +23,11 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
+
+#include <stdio.h>
 
 #include "SampleCharacterHelpers.h"
 
@@ -33,8 +35,6 @@
 #include "PsMathUtils.h"
 #include "SampleAllocatorSDKClasses.h"
 #include "SampleArray.h"
-
-#include <stdio.h>
 
 ///////////////////////////////////////////////////////////////////////////////
 static Acclaim::Bone* getBoneFromName(Acclaim::ASFData &data, const char *name)
@@ -51,9 +51,9 @@ static Acclaim::Bone* getBoneFromName(Acclaim::ASFData &data, const char *name)
 ///////////////////////////////////////////////////////////////////////////////
 inline PxQuat EulerAngleToQuat(const PxVec3 &rot)
 {
-	PxQuat qx(degToRad(rot.x), PxVec3(1.0f, 0.0f, 0.0f));
-	PxQuat qy(degToRad(rot.y), PxVec3(0.0f, 1.0f, 0.0f));
-	PxQuat qz(degToRad(rot.z), PxVec3(0.0f, 0.0f, 1.0f));
+	PxQuat qx(Ps::degToRad(rot.x), PxVec3(1.0f, 0.0f, 0.0f));
+	PxQuat qy(Ps::degToRad(rot.y), PxVec3(0.0f, 1.0f, 0.0f));
+	PxQuat qz(Ps::degToRad(rot.z), PxVec3(0.0f, 0.0f, 1.0f));
 	return qz * qy * qx;
 }
 
@@ -62,21 +62,21 @@ static PxTransform computeBoneTransform(PxTransform &rootTransform, Acclaim::Bon
 {		
 	using namespace Acclaim;
 
-	//PxTransform rootTransform(PxVec3(0.0f), PxQuat::createIdentity());
+	//PxTransform rootTransform(PxVec3(0.0f), PxQuat(PxIdentity));
 	PxTransform parentTransform = (bone.mParent) ? 
 		computeBoneTransform(rootTransform, *bone.mParent, boneFrameData) : rootTransform;
 		
 	PxQuat qWorld = EulerAngleToQuat(bone.mAxis);
 	PxVec3 offset = bone.mLength * bone.mDirection;
-	PxQuat qDelta = PxQuat::createIdentity();
+	PxQuat qDelta = PxQuat(PxIdentity);
 	PxVec3 boneData = boneFrameData[bone.mID-1];
 	
 	if (bone.mDOF & BoneDOFFlag::eRX)
-		qDelta = PxQuat(degToRad(boneData.x), PxVec3(1.0f, 0.0f, 0.0f)) * qDelta;
+		qDelta = PxQuat(Ps::degToRad(boneData.x), PxVec3(1.0f, 0.0f, 0.0f)) * qDelta;
 	if (bone.mDOF & BoneDOFFlag::eRY)
-		qDelta = PxQuat(degToRad(boneData.y), PxVec3(0.0f, 1.0f, 0.0f)) * qDelta;
+		qDelta = PxQuat(Ps::degToRad(boneData.y), PxVec3(0.0f, 1.0f, 0.0f)) * qDelta;
 	if (bone.mDOF & BoneDOFFlag::eRZ)
-		qDelta = PxQuat(degToRad(boneData.z), PxVec3(0.0f, 0.0f, 1.0f)) * qDelta;
+		qDelta = PxQuat(Ps::degToRad(boneData.z), PxVec3(0.0f, 0.0f, 1.0f)) * qDelta;
 
 	PxQuat boneOrientation = qWorld * qDelta * qWorld.getConjugate();
 
@@ -91,11 +91,11 @@ static PxTransform computeBoneTransformRest(Acclaim::Bone &bone)
 	using namespace Acclaim;
 
 	PxTransform parentTransform = (bone.mParent) ? 
-		computeBoneTransformRest(*bone.mParent) : PxTransform(PxVec3(0.0f), PxQuat::createIdentity());
+		computeBoneTransformRest(*bone.mParent) : PxTransform(PxVec3(0.0f), PxQuat(PxIdentity));
 		
 	PxVec3 offset = bone.mLength * bone.mDirection;
 
-	PxTransform boneTransform(offset, PxQuat::createIdentity());
+	PxTransform boneTransform(offset, PxQuat(PxIdentity));
 
 	return parentTransform.transform(boneTransform);
 }
@@ -108,7 +108,7 @@ Character::Character() :
 	mBlendCounter(0),
 	mCharacterScale(1.0f),
 	mASFData(NULL), 
-	mCharacterPose(PxVec3(0.0f), PxQuat::createIdentity()),
+	mCharacterPose(PxVec3(0.0f), PxQuat(PxIdentity)),
 	mFrameTime(0.0f)
 {
 	
@@ -187,6 +187,7 @@ bool Character::buildMotion(Acclaim::AMCData &amcData, Motion &motion, PxU32 sta
 	motion.mDistance = mCharacterScale * (lastFrame.mRootPosition - firstFrame.mRootPosition).magnitude();
 
 	PxVec3 firstPosition = firstFrame.mRootPosition;
+	PX_UNUSED(firstPosition);
 	PxVec3 firstAngles = firstFrame.mRootOrientation;
 	PxQuat firstOrientation = EulerAngleToQuat(PxVec3(0, firstAngles.y, 0));
 
@@ -208,7 +209,7 @@ bool Character::buildMotion(Acclaim::AMCData &amcData, Motion &motion, PxU32 sta
 		}
 
 		//PxReal y = mCharacterScale * (frameData.mRootPosition.y - firstPosition.y) - bounds.minimum.y;
-		motionData.mRootTransform = PxTransform(PxVec3(0.0f, -bounds.minimum.y, 0.0f), PxQuat::createIdentity());
+		motionData.mRootTransform = PxTransform(PxVec3(0.0f, -bounds.minimum.y, 0.0f), PxQuat(PxIdentity));
 	}
 
 	// now make the motion cyclic by linear interpolating root position and joint angles
@@ -534,7 +535,7 @@ bool Character::setForward(void)
 
 ///////////////////////////////////////////////////////////////////////////////
 bool
-Skin::bindToCharacter(Character &character, SampleArray<PxVec3> &positions)
+Skin::bindToCharacter(Character &character, SampleArray<PxVec4> &positions)
 {
 	// currently we just bind everything to the 'thorax' (between neck and clavicles).
 	// Modify this if you need to do more elaborate skin binding
@@ -550,7 +551,10 @@ Skin::bindToCharacter(Character &character, SampleArray<PxVec3> &positions)
 	mBoneID = bone->mID - 1;
 
 	for (PxU32 i = 0; i < positions.size(); i++)
-		mBindPos[i] = boneTransformInv.transform(positions[i]);
+	{
+		mBindPos[i] = boneTransformInv.transform(
+			reinterpret_cast<const PxVec3&>(positions[i]));
+	}
 
 	return true;
 }

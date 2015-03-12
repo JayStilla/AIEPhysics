@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,8 +35,8 @@
 
 #include "foundation/PxVec3.h"
 #include "foundation/PxBounds3.h"
-#include "geometry/PxPhysXGeomUtils.h"
-#include "common/PxSerialFramework.h"
+#include "common/PxPhysXCommonConfig.h"
+#include "common/PxBase.h"
 
 #ifndef PX_DOXYGEN
 namespace physx
@@ -50,11 +50,14 @@ Used in ::PxTriangleMeshFlags.
 */
 struct PxTriangleMeshFlag
 {
-	enum Enum
-	{
-		eHAS_16BIT_TRIANGLE_INDICES	= (1<<1),	//!< The triangle mesh has 16bits triangle indices.
-		eHAS_ADJACENCY_INFO				= (1<<2)	//!< The triangle mesh has adjacency information build.
-	};
+      enum Enum
+      {
+            e16_BIT_INDICES	= (1<<1),   //!< The triangle mesh has 16bits vertex indices.
+            eADJACENCY_INFO	= (1<<2),   //!< The triangle mesh has adjacency information build.
+
+            PX_DEPRECATED	eHAS_16BIT_TRIANGLE_INDICES	= e16_BIT_INDICES,
+			PX_DEPRECATED	eHAS_ADJACENCY_INFO			= eADJACENCY_INFO
+      };
 };
 
 /**
@@ -63,7 +66,7 @@ struct PxTriangleMeshFlag
 @see PxTriangleMeshFlag
 */
 typedef PxFlags<PxTriangleMeshFlag::Enum,PxU8> PxTriangleMeshFlags;
-PX_FLAGS_OPERATORS(PxTriangleMeshFlag::Enum,PxU8);
+PX_FLAGS_OPERATORS(PxTriangleMeshFlag::Enum,PxU8)
 
 /**
 
@@ -94,7 +97,7 @@ once you have released all of its PxShape instances.
 @see PxTriangleMeshDesc PxTriangleMeshGeometry PxShape PxPhysics.createTriangleMesh()
 */
 
-class PxTriangleMesh : public PxSerializable
+class PxTriangleMesh : public PxBase
 {
 	public:
 	/**
@@ -114,7 +117,7 @@ class PxTriangleMesh : public PxSerializable
 	/**
 	\brief Returns the number of triangles.
 	\return	number of triangles
-	@see getTriangles() has16BitTriangleIndices() getTrianglesRemap()
+	@see getTriangles() getTrianglesRemap()
 	*/
 	PX_PHYSX_COMMON_API virtual	PxU32				getNbTriangles()								const	= 0;
 
@@ -122,24 +125,14 @@ class PxTriangleMesh : public PxSerializable
 	\brief Returns the triangle indices.
 
 	The indices can be 16 or 32bit depending on the number of triangles in the mesh.
-	Call has16BitTriangleIndices() to know if the indices are 16 or 32 bits.
+	Call getTriangleMeshFlags() to know if the indices are 16 or 32 bits.
 
 	The number of indices is the number of triangles * 3.
 
 	\return	array of triangles
-	@see getNbTriangles() has16BitTriangleIndices() getTrianglesRemap()
+	@see getNbTriangles() getTriangleMeshFlags() getTrianglesRemap()
 	*/
 	PX_PHYSX_COMMON_API virtual	const void*			getTriangles()									const	= 0;
-
-	/**
-	\brief Returns whether the triangle indices are 16 or 32bits.
-
-	Deprecated in future releases, getTriangleMeshFlags() should be used.
-
-	\return	true for 16bit indices, false for 32bit indices
-	@see getNbTriangles() getTriangles() getTrianglesRemap()
-	*/
-	PX_DEPRECATED PX_PHYSX_COMMON_API virtual	bool				has16BitTriangleIndices()		const	= 0;
 
 	/**
 	\brief Reads the PxTriangleMesh flags.
@@ -150,7 +143,7 @@ class PxTriangleMesh : public PxSerializable
 
 	@see PxTriangleMesh
 	*/
-	PX_PHYSX_COMMON_API	virtual		PxTriangleMeshFlags				getTriangleMeshFlags()			const = 0;
+	PX_PHYSX_COMMON_API	virtual	PxTriangleMeshFlags	getTriangleMeshFlags()							const = 0;
 
 	/**
 	\brief Returns the triangle remapping table.
@@ -162,22 +155,19 @@ class PxTriangleMesh : public PxSerializable
 		remapTable[ internalTriangleIndex ] = originalTriangleIndex
 
 	\return	the remapping table
-	@see getNbTriangles() getTriangles() has16BitTriangleIndices()
+	@see getNbTriangles() getTriangles() PxCookingParams::suppressTriangleMeshRemapTable
 	*/
-	PX_PHYSX_COMMON_API virtual	const PxU32*		getTrianglesRemap()								const	= 0;
+	PX_PHYSX_COMMON_API virtual	const PxU32*			getTrianglesRemap()							const	= 0;
 
 
-	/**
-	\brief Destroys the triangle mesh.
-
-	\note This will decrease the reference count by one.
-
-	Releases the application's reference to the triangle mesh.
+	/**	
+	\brief Decrements the reference count of a triangle mesh and releases it if the new reference count is zero.	
+	
 	The mesh is destroyed when the application's reference is released and all shapes referencing the mesh are destroyed.
 	
 	@see PxPhysics.createTriangleMesh()
 	*/
-	PX_PHYSX_COMMON_API virtual void				release() = 0;
+	PX_PHYSX_COMMON_API virtual void					release()											= 0;
 
 	/**
 	\brief Returns material table index of given triangle
@@ -194,7 +184,7 @@ class PxTriangleMesh : public PxSerializable
 
 	\return	local-space bounds
 	*/
-	PX_PHYSX_COMMON_API virtual	PxBounds3			getLocalBounds()	const	= 0;
+	PX_PHYSX_COMMON_API virtual	PxBounds3				getLocalBounds()							const	= 0;
 
 	/**
 	\brief Returns the reference count for shared meshes.
@@ -204,16 +194,15 @@ class PxTriangleMesh : public PxSerializable
 
 	\return the current reference count.
 	*/
-	PX_PHYSX_COMMON_API virtual PxU32				getReferenceCount()			const	= 0;
+	PX_PHYSX_COMMON_API virtual PxU32					getReferenceCount()							const	= 0;
 
-	PX_INLINE virtual	const char*			getConcreteTypeName() const					{	return "PxTriangleMesh"; }
+	PX_PHYSX_COMMON_API	virtual const char*				getConcreteTypeName()						const	{ return "PxTriangleMesh"; }
 
 protected:
-	PxTriangleMesh()										{}
-	PxTriangleMesh(PxRefResolver& v)	: PxSerializable(v)	{}
-
-	virtual ~PxTriangleMesh(){}
-	virtual	bool				isKindOf(const char* name)	const		{	return !strcmp("PxTriangleMesh", name) || PxSerializable::isKindOf(name); }
+						PX_INLINE						PxTriangleMesh(PxType concreteType, PxBaseFlags baseFlags) : PxBase(concreteType, baseFlags) {}
+						PX_INLINE						PxTriangleMesh(PxBaseFlags baseFlags) : PxBase(baseFlags) {}
+	PX_PHYSX_COMMON_API virtual							~PxTriangleMesh() {}
+	PX_PHYSX_COMMON_API virtual	bool					isKindOf(const char* name) const { return !strcmp("PxTriangleMesh", name) || PxBase::isKindOf(name); }
 };
 
 #ifndef PX_DOXYGEN

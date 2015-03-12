@@ -23,31 +23,29 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-
-#ifndef PX_PHYSICS_GEOMUTILS_BOX
-#define PX_PHYSICS_GEOMUTILS_BOX
+#ifndef GU_BOX_H
+#define GU_BOX_H
 
 /** \addtogroup geomutils
 @{
 */
 
-#include "PxPhysXCommon.h"  // needed for dll export
-#include "CmMatrix34.h"
+#include "PxPhysXCommonConfig.h"
 #include "PxTransform.h"
+#include "CmPhysXCommon.h"
+#include "foundation/PxMat33.h"
 
 namespace physx
 {
 namespace Gu
 {
 	class Capsule;
-	//class CapsuleV;
 
-	void computeOBBPoints(PxVec3* PX_RESTRICT pts, const PxVec3& center, const PxVec3& extents, const PxVec3& base0, const PxVec3& base1, const PxVec3& base2);
-	//void computeOBBPoints(Ps::aos::Vec3V* PX_RESTRICT pts, const Ps::aos::Vec3VArg center, const Ps::aos::Vec3VArg extents, const Ps::aos::Vec3VArg base0, const Ps::aos::Vec3VArg base1, const Ps::aos::Vec3VArg base2);
+	void PX_PHYSX_COMMON_API computeOBBPoints(PxVec3* PX_RESTRICT pts, const PxVec3& center, const PxVec3& extents, const PxVec3& base0, const PxVec3& base1, const PxVec3& base2);
 
 
 	/**
@@ -68,13 +66,17 @@ namespace Gu
 	Transformation to local space is: localPoint = T(rot) * (worldPoint - center)
 	Where T(M) denotes the transpose of M.
 	*/
+#if defined(PX_VC) 
+    #pragma warning(push)
+	#pragma warning( disable : 4251 ) // class needs to have dll-interface to be used by clients of class
+#endif
 	class PX_PHYSX_COMMON_API Box
 	{
 	public:
 		/**
 		\brief Constructor
 		*/
-		PX_INLINE Box()
+		PX_FORCE_INLINE Box()
 		{
 		}
 
@@ -86,26 +88,22 @@ namespace Gu
 		\param _rot rotation to apply to the obb.
 		*/
 		//! Construct from center, extent and rotation
-		PX_INLINE Box(const PxVec3& origin, const PxVec3& extent, const PxMat33& base) : rot(base), center(origin), extents(extent)
-		{}
-
-		//! construct from a matrix(center and rotation) + extent
-		PX_INLINE Box(const Cm::Matrix34& mat, const PxVec3& extent) : rot(PxMat33(mat.base0, mat.base1, mat.base2)), center(mat.base3), extents(extent)
+		PX_FORCE_INLINE Box(const PxVec3& origin, const PxVec3& extent, const PxMat33& base) : rot(base), center(origin), extents(extent)
 		{}
 
 		//! Copy constructor
-		PX_INLINE Box(const Box& other) : rot(other.rot), center(other.center), extents(other.extents)
+		PX_FORCE_INLINE Box(const Box& other) : rot(other.rot), center(other.center), extents(other.extents)
 		{}
 
 		/**
 		\brief Destructor
 		*/
-		PX_INLINE ~Box()
+		PX_FORCE_INLINE ~Box()
 		{
 		}
 
 		//! Assignment operator
-		PX_INLINE const Box& operator=(const Box& other)
+		PX_FORCE_INLINE const Box& operator=(const Box& other)
 		{
 			rot		= other.rot;
 			center	= other.center;
@@ -120,7 +118,7 @@ namespace Gu
 		{
 			center = PxVec3(0);
 			extents = PxVec3(-PX_MAX_REAL, -PX_MAX_REAL, -PX_MAX_REAL);
-			rot = PxMat33::createIdentity();
+			rot = PxMat33(PxIdentity);
 		}
 
 		/**
@@ -145,22 +143,22 @@ namespace Gu
 			rot.column2 = axis2;
 		}
 
-		PX_INLINE	PxVec3	rotate(const PxVec3& src)	const
+		PX_FORCE_INLINE	PxVec3	rotate(const PxVec3& src)	const
 		{
 			return rot * src;
 		}
 
-		PX_INLINE	PxVec3	rotateInv(const PxVec3& src)	const
+		PX_FORCE_INLINE	PxVec3	rotateInv(const PxVec3& src)	const
 		{
 			return rot.transformTranspose(src);
 		}
 
-		PX_INLINE	PxVec3	transform(const PxVec3& src)	const
+		PX_FORCE_INLINE	PxVec3	transform(const PxVec3& src)	const
 		{
 			return rot * src + center;
 		}
 
-		PX_INLINE	PxTransform getTransform()	const
+		PX_FORCE_INLINE	PxTransform getTransform()	const
 		{
 			return PxTransform(center, PxQuat(rot));
 		}
@@ -193,33 +191,13 @@ namespace Gu
 		\param		pts	[out] 8 box points
 		\return		true if success
 		*/
+		// AP: ok on SPU - doesn't seem to inline with PX_INLINE
 		PX_INLINE void computeBoxPoints(PxVec3* PX_RESTRICT pts) const
 		{
 			Gu::computeOBBPoints(pts, center, extents, rot.column0, rot.column1, rot.column2);
 		}
 
-		/**
-		\brief recomputes the OBB after an arbitrary transform by a 4x4 matrix.
-		\param	mtx		[in] the transform matrix
-		\param	obb		[out] the transformed OBB
-		*/
-		PX_INLINE	void rotate(const Cm::Matrix34& mtx, Box& obb)	const
-		{
-			// The extents remain constant
-			obb.extents = extents;
-			// The center gets x-formed
-			obb.center = mtx.transform(center);
-			// Combine rotations
-			obb.rot = PxMat33(mtx.base0, mtx.base1, mtx.base2) * rot;
-		}
-
 		void create(const Gu::Capsule& capsule);
-
-		/**
-		\brief checks the OBB is inside another OBB.
-		\param		box		[in] the other OBB
-		*/
-		physx::shdfnd::IntBool isInside(const Box& box)	const;
 
 		PxMat33	rot;
 		PxVec3	center;
@@ -227,268 +205,10 @@ namespace Gu
 	};
 	PX_COMPILE_TIME_ASSERT(sizeof(Gu::Box) == 60);
 
+#if defined(PX_VC) 
+     #pragma warning(pop) 
+#endif
 
-//	class BoxV : public ConvexV
-//	{
-//	public:
-//		/**
-//		\brief Constructor
-//		*/
-//		PX_INLINE BoxV() : ConvexV(E_BOX)
-//		{
-//		}
-//
-//		/**
-//		\brief Constructor
-//
-//		\param _center Center of the OBB
-//		\param _extents Extents/radii of the obb.
-//		\param _rot rotation to apply to the obb.
-//		*/
-//		PX_INLINE BoxV(const Ps::aos::Vec3VArg _center, const Ps::aos::Vec3VArg _extents, const PxMat33Legacy& _rot) : ConvexV(E_BOX, _center), extents(_extents)
-//		{
-//			PxMat33 pxRot;
-//			_rot.getColumnMajor(&pxRot.column0.x);
-//			rot.col0 = Ps::aos::Vec3V_From_PxVec3(pxRot.column0);
-//			rot.col1 = Ps::aos::Vec3V_From_PxVec3(pxRot.column1);
-//			rot.col2 = Ps::aos::Vec3V_From_PxVec3(pxRot.column2);
-//		}
-//
-//
-//		//! Construct from center, extent and rotation
-//		PX_INLINE BoxV(const Ps::aos::Vec3VArg origin, const Ps::aos::Vec3VArg extent, const Ps::aos::Mat33V& base) : 
-//																											ConvexV(E_BOX, origin), rot(base), extents(extent)
-//		{}
-//
-//		PX_INLINE BoxV(const Ps::aos::Vec3VArg origin, const Ps::aos::Vec3VArg extent, const Ps::aos::Mat33V& base, const PxF32 _margin) : 
-//																											ConvexV(E_BOX, origin, _margin), rot(base), extents(extent)
-//		{}
-//
-//		PX_INLINE BoxV(const Ps::aos::Vec3VArg origin, const Ps::aos::Vec3VArg extent, const Ps::aos::Mat33V& base, const PxF32 _margin, const PxF32 _eps) : 
-//																											ConvexV(E_BOX, origin, _margin, _eps), rot(base), extents(extent)
-//		{}
-//
-//		//! construct from a matrix(center and rotation) + extent
-//		PX_INLINE BoxV(const Ps::aos::Mat34V& mat, const Ps::aos::Vec3VArg extent) : ConvexV(E_BOX, mat.col3), rot(Ps::aos::Mat33V(mat.col0, mat.col1, mat.col2)), extents(extent)
-//		{}
-//
-//		//! Copy constructor
-//		PX_INLINE BoxV(const BoxV& other) : ConvexV(E_BOX, other.center, other.margin, other.eps), rot(other.rot), extents(other.extents)
-//		{}
-//
-//		/*PX_INLINE BoxV(const Box& other)
-//		{
-//			using namespace Ps::aos;
-//			rot = Mat33V_From_PxMat33(other.rot);
-//			center = Vec3V_From_PxVec3(other.center);
-//			extents = Vec3V_From_PxVec3(other.extents);
-//		}*/
-//
-//		/**
-//		\brief Destructor
-//		*/
-//		PX_INLINE ~BoxV()
-//		{
-//		}
-//
-//		//! Assignment operator
-//		PX_INLINE const BoxV& operator=(const BoxV& other)
-//		{
-//			rot		= other.rot;
-//			center	= other.center;
-//			extents	= other.extents;
-//			return *this;
-//		}
-//
-//		/**
-//		\brief Setups an empty box.
-//		*/
-//		PX_INLINE void setEmpty()
-//		{
-//			using namespace Ps::aos;
-//			center = V3Zero();
-//			extents = FloatV_From_F32(-PX_MAX_REAL);
-//			rot = M33Identity();
-//		}
-//
-//		/**
-//		\brief Checks the box is valid.
-//
-//		\return	true if the box is valid
-//		*/
-//		PX_INLINE bool isValid() const
-//		{
-//			// Consistency condition for (Center, Extents) boxes: Extents >= 0.0f
-//			/*if(extents.x < 0.0f)	return false;
-//			if(extents.y < 0.0f)	return false;
-//			if(extents.z < 0.0f)	return false;
-//		
-//			return true;*/
-//
-//			using namespace Ps::aos;
-//			const Vec3V zero = V3Zero();
-//			return BAllEq(V3IsGrtrOrEq(extents, zero), BTTTT()) == 1;
-//		}
-//
-///////////////
-//		PX_FORCE_INLINE	void	setAxes(const Ps::aos::Vec3VArg axis0, const Ps::aos::Vec3VArg axis1, const Ps::aos::Vec3VArg axis2)
-//		{
-//			rot.col0 = axis0;
-//			rot.col1 = axis1;
-//			rot.col2 = axis2;
-//		}
-//
-//		PX_INLINE	PxMat33Legacy			getRotLegacy()	const
-//		{
-//			using namespace Ps::aos;
-//			PxVec3 c0, c1, c2;
-//			PxVec3_From_Vec3V(rot.col0, c0);
-//			PxVec3_From_Vec3V(rot.col1, c1);
-//			PxVec3_From_Vec3V(rot.col2, c2);
-//
-//			PxMat33Legacy legacy;
-//			legacy.setColumn(0, c0);
-//			legacy.setColumn(1, c1);
-//			legacy.setColumn(2, c2);
-//			return legacy;			
-//		}
-//
-//		PX_INLINE	void					setRotLegacy(const PxMat33Legacy& legacy)
-//		{
-//			using namespace Ps::aos;
-//			PxVec3 c0, c1, c2;
-//			legacy.getColumn(0, c0);
-//			legacy.getColumn(1, c1);
-//			legacy.getColumn(2, c2);
-//
-//			rot.col0 = Ps::aos::Vec3V_From_PxVec3(c0);
-//			rot.col1 = Ps::aos::Vec3V_From_PxVec3(c1);
-//			rot.col2 = Ps::aos::Vec3V_From_PxVec3(c2);
-//		}
-//
-//		
-//		PX_INLINE	Ps::aos::Vec3V	rotate(const Ps::aos::Vec3VArg src)	const
-//		{
-//			//return rot * src;
-//			return Ps::aos::M33MulV3(rot, src);
-//		}
-//
-//		PX_INLINE	Ps::aos::Vec3V	rotateInv(const Ps::aos::Vec3VArg src)	const
-//		{
-//			//return rot.transformTranspose(src);
-//			return Ps::aos::M33TrnspsMulV3(rot, src);
-//		}
-//
-//		//get the world space point from the local space
-//		PX_INLINE	Ps::aos::Vec3V	transformFromLocalToWorld(const Ps::aos::Vec3VArg src)	const
-//		{
-//			//return rot * src + center;
-//			return Ps::aos::V3Add(Ps::aos::M33MulV3(rot, src), center);
-//		}
-//
-//		PX_INLINE	Ps::aos::Vec3V	transformFromWorldToLocal(const Ps::aos::Vec3VArg src)	const
-//		{
-//			//return Inv(rot) * (src - center);
-//			return Ps::aos::M33TrnspsMulV3(rot, Ps::aos::V3Sub(src, center));
-//		}
-//
-//		PX_INLINE	PxTransform getTransform()	const
-//		{
-//			using namespace Ps::aos;
-//			PX_ALIGN(16, PxMat33 pxMat);
-//			PxMat33_From_Mat33V(rot, pxMat);
-//			PxVec3 c;
-//			PxVec3_From_Vec3V(center, c);
-//			return PxTransform(c, PxQuat(pxMat));
-//		}
-//
-//
-//		PX_INLINE Ps::aos::Vec3V computeAABBExtent() const
-//		{
-//			using namespace Ps::aos;
-//			return M33TrnspsMulV3(rot, extents);
-//		}
-//
-//		/**
-//		Computes the obb points.
-//		\param		pts	[out] 8 box points
-//		\return		true if success
-//		*/
-//		PX_INLINE void computeBoxPoints(Ps::aos::Vec3V* PX_RESTRICT pts) const
-//		{
-//			return Gu::computeOBBPoints(pts, center, extents, rot.col0, rot.col1, rot.col2);
-//		}
-//
-//		/**
-//		\brief recomputes the OBB after an arbitrary transform by a 4x4 matrix.
-//		\param	mtx		[in] the transform matrix
-//		\param	obb		[out] the transformed OBB
-//		*/
-//		PX_INLINE	void rotate(const Ps::aos::Mat34V& mtx, BoxV& obb)	const
-//		{
-//			using namespace Ps::aos;
-//			// The extents remain constant
-//			obb.extents = extents;
-//			// The center gets x-formed
-//			obb.center =M34MulV3(mtx, obb.center);
-//			// Combine rotations
-//			const Mat33V mtxR = Mat33V(mtx.col0, mtx.col1, mtx.col2);
-//			obb.rot =M33MulM33(mtxR, rot);
-//		}
-//
-//		void create(const Gu::CapsuleV& capsule);
-//
-//		/**
-//		\brief checks the OBB is inside another OBB.
-//		\param		box		[in] the other OBB
-//		*/
-//		PxU32 isInside(const BoxV& box)	const;
-//
-//
-//		Ps::aos::Vec3V support(const Ps::aos::Vec3VArg dir)const
-//		{
-//
-//			using namespace Ps::aos;
-//			const Vec3V zero = V3Zero();
-//			//transfer dir into the local space of the box
-//			const Vec3V _dir = M33TrnspsMulV3(rot, dir);
-//			const Vec3V p = V3Sel(V3IsGrtrOrEq(_dir, zero), extents, V3Neg(extents));
-//			//transfer p into the world space
-//			return V3Add(center, M33MulV3(rot, p));
-//			
-//		}
-//
-//		
-//		PX_FORCE_INLINE Ps::aos::Vec3V support(const Ps::aos::Vec3VArg dir, const Ps::aos::FloatVArg _margin)const
-//		{
-//
-//			using namespace Ps::aos;
-//			const Vec3V zero = V3Zero();
-//			const Vec3V _extents = V3Add(extents, _margin);
-//			//transfer dir into the local space of the box
-//			const Vec3V _dir = M33TrnspsMulV3(rot, dir);
-//			const Vec3V p = V3Sel(V3IsGrtrOrEq(_dir, zero), _extents, V3Neg(_extents));
-//			//transfer p into the world space
-//			return V3Add(center, M33MulV3(rot, p));			
-//		}
-//
-//		PX_FORCE_INLINE Ps::aos::Vec3V supportMargin(const Ps::aos::Vec3VArg dir, const Ps::aos::FloatVArg _margin)const
-//		{
-//			
-//			using namespace Ps::aos;
-//			const Vec3V zero = V3Zero();
-//			const Vec3V _extents = V3Sub(extents, _margin);
-//			//transfer dir into the local space of the box
-//			const Vec3V _dir = M33TrnspsMulV3(rot, dir);
-//			const Vec3V p = V3Sel(V3IsGrtr(_dir, zero), _extents, V3Neg(_extents));
-//			//transfer p into the world space
-//			return V3Add(center, M33MulV3(rot, p));
-//		}
-//
-//		Ps::aos::Mat33V rot;
-//		Ps::aos::Vec3V extents;
-//	};
-	//PX_COMPILE_TIME_ASSERT(sizeof(Gu::BoxV) == 96);
 }
 
 }

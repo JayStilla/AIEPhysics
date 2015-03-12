@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -33,7 +33,7 @@ using namespace PxToolkit;
 
 void PxToolkit::setRotX(PxMat33& m, PxReal angle)
 {
-	m = PxMat33::createIdentity();
+	m = PxMat33(PxIdentity);
 
 	const PxReal cos = cosf(angle);
 	const PxReal sin = sinf(angle);
@@ -45,7 +45,7 @@ void PxToolkit::setRotX(PxMat33& m, PxReal angle)
 
 void PxToolkit::setRotY(PxMat33& m, PxReal angle)
 {
-	m = PxMat33::createIdentity();
+	m = PxMat33(PxIdentity);
 
 	const PxReal cos = cosf(angle);
 	const PxReal sin = sinf(angle);
@@ -57,7 +57,7 @@ void PxToolkit::setRotY(PxMat33& m, PxReal angle)
 
 void PxToolkit::setRotZ(PxMat33& m, PxReal angle)
 {
-	m = PxMat33::createIdentity();
+	m = PxMat33(PxIdentity);
 
 	const PxReal cos = cosf(angle);
 	const PxReal sin = sinf(angle);
@@ -65,4 +65,25 @@ void PxToolkit::setRotZ(PxMat33& m, PxReal angle)
 	m[0][0] = m[1][1] = cos;
 	m[0][1] = sin;
 	m[1][0] = -sin;
+}
+
+PxQuat PxToolkit::getRotXQuat(float angle)
+{
+	PxMat33 m;
+	setRotX(m, angle);
+	return PxQuat(m);
+}
+
+PxQuat PxToolkit::getRotYQuat(float angle)
+{
+	PxMat33 m;
+	setRotY(m, angle);
+	return PxQuat(m);
+}
+
+PxQuat PxToolkit::getRotZQuat(float angle)
+{
+	PxMat33 m;
+	setRotZ(m, angle);
+	return PxQuat(m);
 }

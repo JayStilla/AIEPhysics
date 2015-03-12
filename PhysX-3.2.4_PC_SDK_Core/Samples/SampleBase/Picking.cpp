@@ -23,12 +23,12 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #include "PxScene.h"
-#include "PxSceneQueryReport.h"
+#include "PxQueryReport.h"
 #include "PxBatchQueryDesc.h"
 #include "extensions/PxJoint.h"
 #include "PxRigidDynamic.h"
@@ -49,6 +49,7 @@ Picking::Picking(PhysXSample& frame) :
 	mSelectedActor		(NULL),
 	mMouseJoint			(NULL),
 	mMouseActor			(NULL),
+	mMouseActorToDelete	(NULL),
 	mDistanceToPicked	(0.0f),
 	mMouseScreenX		(0),
 	mMouseScreenY		(0),
@@ -83,6 +84,9 @@ void Picking::tick()
 {
 	if(mMouseJoint)
 		moveActor(mMouseScreenX,mMouseScreenY);
+
+	// PT: delete mouse actor one frame later to avoid crashes
+	SAFE_RELEASE(mMouseActorToDelete);
 }
 
 void Picking::computeCameraRay(PxVec3& orig, PxVec3& dir, PxI32 x, PxI32 y) const
@@ -106,29 +110,37 @@ bool Picking::pick(int x, int y)
 	computeCameraRay(rayOrig, rayDir, x, y);
 
 	// raycast rigid bodies in scene
-	PxRaycastHit hit;
-	scene.raycastSingle(rayOrig, rayDir, PX_MAX_F32, PxSceneQueryFlag::eIMPACT, hit, PxSceneQueryFilterData());
+	PxRaycastHit hit; hit.shape = NULL;
+	PxRaycastBuffer hit1;
+	scene.raycast(rayOrig, rayDir, PX_MAX_F32, hit1, PxHitFlag::ePOSITION);
+	hit = hit1.block;
 
 	if(hit.shape)
 	{ 
 		const char* shapeName = hit.shape->getName();
 		if(shapeName)
-			printf("Picked shape name: %s\n", shapeName);
-		
-		PxRigidActor& actor = hit.shape->getActor();
-		mSelectedActor = static_cast<PxRigidActor*>(hit.shape->getActor().is<PxRigidDynamic>());
+			shdfnd::printFormatted("Picked shape name: %s\n", shapeName);
+
+		PxRigidActor* actor = hit.actor;
+		PX_ASSERT(actor);
+		mSelectedActor = static_cast<PxRigidActor*>(actor->is<PxRigidDynamic>());
 		if(!mSelectedActor)
-			mSelectedActor = static_cast<PxRigidActor*>(hit.shape->getActor().is<PxArticulationLink>());
+			mSelectedActor = static_cast<PxRigidActor*>(actor->is<PxArticulationLink>());
+
+		//ML::this is very useful to debug some collision problem
+		PxTransform t = actor->getGlobalPose();
+		PX_UNUSED(t);
+	//	shdfnd::printFormatted("id = %i\n PxTransform transform(PxVec3(%f, %f, %f), PxQuat(%f, %f, %f, %f))\n", (int)actor->userData, t.p.x, t.p.y, t.p.z, t.q.x, t.q.y, t.q.z, t.q.w);
 	}
 	else
 		mSelectedActor = 0;
 
 	if(mSelectedActor)
 	{
-		printf("Actor '%s' picked! (userData: %p)\n", mSelectedActor->getName(), mSelectedActor->userData);
+		shdfnd::printFormatted("Actor '%s' picked! (userData: %p)\n", mSelectedActor->getName(), mSelectedActor->userData);
 
 		//if its a dynamic rigid body, joint it for dragging purposes:
-		grabActor(hit.impact, rayOrig);
+		grabActor(hit.position, rayOrig);
 	}
 
 #ifdef VISUALIZE_PICKING_RAYS
@@ -152,8 +164,8 @@ PxActor* Picking::letGo()
         mMouseJoint = NULL;
        
         //	SAFE_RELEASE(mMouseActor);			// PT: releasing immediately crashes
-		mFrame.removeActor(mMouseActor);
-		mMouseActor = NULL;
+        PX_ASSERT(!mMouseActorToDelete);
+		mMouseActorToDelete = mMouseActor;	// PT: instead, we mark for deletion next frame
 	}
 
 	PxActor* returnedActor = mSelectedActor;
@@ -177,33 +189,31 @@ void Picking::grabActor(const PxVec3& worldImpact, const PxVec3& rayOrigin)
 
 	//create a shape less actor for the mouse
 	{
-		mMouseActor = physics.createRigidDynamic(PxTransform(worldImpact, PxQuat::createIdentity()));
-		mMouseActor->setRigidDynamicFlag(PxRigidDynamicFlag::eKINEMATIC, true); 
+		mMouseActor = physics.createRigidDynamic(PxTransform(worldImpact, PxQuat(PxIdentity)));
+		mMouseActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true); 
 		mMouseActor->setMass(1.0f);
 		mMouseActor->setMassSpaceInertiaTensor(PxVec3(1.0f, 1.0f, 1.0f));
 
 		scene.addActor(*mMouseActor);
-
-		mFrame.addPhysicsActors(mMouseActor);
 	}
 	PxRigidActor* pickedActor = static_cast<PxRigidActor*>(mSelectedActor);
 
 #if USE_D6_JOINT_FOR_MOUSE
 	mMouseJoint = PxD6JointCreate(		physics,
 										mMouseActor,
-										PxTransform::createIdentity(),
+										PxTransform(PxIdentity),
 										pickedActor,
 										PxTransform(pickedActor->getGlobalPose().transformInv(worldImpact)));
 #elif USE_SPHERICAL_JOINT_FOR_MOUSE
 	mMouseJoint = PxSphericalJointCreate(physics,
 										mMouseActor,
-										PxTransform::createIdentity(),
+										PxTransform(PxIdentity),
 										pickedActor,
 										PxTransform(pickedActor->getGlobalPose().transformInv(worldImpact)));
 #else
 	mMouseJoint = PxDistanceJointCreate(physics, 
 										mMouseActor, 
-										PxTransform::createIdentity(),
+										PxTransform(PxIdentity),
 										pickedActor,
 										PxTransform(pickedActor->getGlobalPose().transformInv(worldImpact)));
 	mMouseJoint->setMaxDistance(0.0f);
@@ -226,7 +236,7 @@ void Picking::moveActor(int x, int y)
 
 	const PxVec3 pos = rayOrig + mDistanceToPicked * rayDir;
 
-	mMouseActor->setKinematicTarget(PxTransform(pos, PxQuat::createIdentity()));
+	mMouseActor->setKinematicTarget(PxTransform(pos, PxQuat(PxIdentity)));
 }
 
 //----------------------------------------------------------------------------//

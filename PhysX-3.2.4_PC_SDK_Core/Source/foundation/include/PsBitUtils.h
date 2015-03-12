@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -45,12 +45,12 @@ namespace shdfnd
 		// from http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
 		PxU32 const w = v - ((v >> 1) & 0x55555555);
 		PxU32 const x = (w & 0x33333333) + ((w >> 2) & 0x33333333);
-		return ((x + (x >> 4) & 0xF0F0F0F) * 0x1010101) >> 24;
+		return (((x + (x >> 4)) & 0xF0F0F0F) * 0x1010101) >> 24;
 	}
 	
 	PX_INLINE bool isPowerOfTwo(PxU32 x)
 	{
-		return x!=0 && (x & x-1) == 0;
+		return x!=0 && (x & (x-1)) == 0;
 	}
 
 	// "Next Largest Power of 2

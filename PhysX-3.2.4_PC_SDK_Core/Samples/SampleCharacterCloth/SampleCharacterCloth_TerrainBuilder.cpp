@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,8 @@
 
 using namespace PxToolkit;
 
-///////////////////////////////////////////////////////////////////////////////
+//#define USE_MESH
+
 static PxToolkit::BasicRandom gClothRandom;
 
 static PxReal randomScaled(PxReal value)
@@ -43,7 +44,6 @@ static PxReal randomScaled(PxReal value)
 	return val;
 }
 
-///////////////////////////////////////////////////////////////////////////////
 static void computeTerrain(bool* done, PxReal* pVB, PxU32 x0, PxU32 y0, PxU32 currentSize, PxReal value, PxU32 initSize)
 {
 	// Compute new size
@@ -75,7 +75,6 @@ static void computeTerrain(bool* done, PxReal* pVB, PxU32 x0, PxU32 y0, PxU32 cu
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////
 static void fractalize(PxReal* heights, const PxU32 size, const PxReal roughness)
 {
 	PxU32 num = size*size;
@@ -86,7 +85,6 @@ static void fractalize(PxReal* heights, const PxU32 size, const PxReal roughness
 	SAMPLE_FREE(done);
 }
 
-///////////////////////////////////////////////////////////////////////////////
 PxRigidStatic* SampleCharacterCloth::buildHeightField()
 {
 	// create a height map
@@ -98,6 +96,7 @@ PxRigidStatic* SampleCharacterCloth::buildHeightField()
 	const PxReal hfScale = 8.0f; // this is how wide one heightfield square is
 
 	PxReal* heightmap = (PxReal*)SAMPLE_ALLOC(sizeof(PxReal)*hfNumVerts);
+//	memset(heightmap,0,hfNumVerts*sizeof(PxReal));
 	for(PxU32 i = 0; i < hfNumVerts; i++)
 		heightmap[i] = -9.0f;
 
@@ -116,7 +115,7 @@ PxRigidStatic* SampleCharacterCloth::buildHeightField()
 
  		RAWMesh data;
 		data.mName = "terrain";
-		data.mTransform = PxTransform::createIdentity();
+		data.mTransform = PxTransform(PxIdentity);
 		data.mTransform.p = PxVec3(-(hfSize/2*hfScale),0,-(hfSize/2*hfScale));
  		data.mNbVerts = hfNumVerts;
 		data.mVerts = (PxVec3*)hfVerts;
@@ -144,7 +143,6 @@ PxRigidStatic* SampleCharacterCloth::buildHeightField()
 	return hfActor;
 }
 
-///////////////////////////////////////////////////////////////////////////////
 void SampleCharacterCloth::createLandscape(PxReal* heightmap, PxU32 width, PxReal hfScale, PxReal* outVerts, PxReal* outNorms, PxU32* outTris)
 {
 	for(PxU32 y=0; y<width; y++)
@@ -217,7 +215,6 @@ void SampleCharacterCloth::createLandscape(PxReal* heightmap, PxU32 width, PxRea
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////
 PxRigidStatic* SampleCharacterCloth::createHeightField(PxReal* heightmap, PxReal hfScale, PxU32 hfSize)
 {
 	const PxReal heightScale = 0.01f;
@@ -249,7 +246,7 @@ PxRigidStatic* SampleCharacterCloth::createHeightField(PxReal* heightmap, PxReal
 	if(!heightField)
 		fatalError("creating the heightfield failed");
 
-	PxTransform pose = PxTransform::createIdentity();
+	PxTransform pose = PxTransform(PxIdentity);
 	pose.p = PxVec3(-(hfSize/2*hfScale),0,-(hfSize/2*hfScale));
 	mHFPose = pose;
 

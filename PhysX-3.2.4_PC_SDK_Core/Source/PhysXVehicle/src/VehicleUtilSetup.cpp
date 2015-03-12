@@ -23,227 +23,226 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #include "PxVehicleSDK.h"
 #include "PxVehicleUtilSetup.h"
 #include "PxVehicleDrive4W.h"
+#include "PxVehicleDriveNW.h"
+#include "PxVehicleDriveTank.h"
+#include "PxVehicleNoDrive.h"
 #include "PxVehicleWheels.h"
+#include "PxVehicleUtil.h"
 #include "PxVehicleLinearMath.h"
+#include "PxVehicleUpdate.h"
+#include "PxMath.h"
 #include "PsFoundation.h"
 #include "PsUtilities.h"
+#include "CmPhysXCommon.h"
 
 namespace physx
 {
 
-void PxVehicle4WEnable3WMode(const bool removeFrontWheel, PxVehicleWheelsSimData& wheelsSimData, PxVehicleDriveSimData4W& driveSimData)
+void enable3WMode(const PxU32 rightDirection, const PxU32 upDirection, const bool removeFrontWheel, PxVehicleWheelsSimData& wheelsSimData, PxVehicleWheelsDynData& wheelsDynData, PxVehicleDriveSimData4W& driveSimData);
+
+void computeDirection(PxU32& rightDirection, PxU32& upDirection);
+
+void PxVehicle4WEnable3WTadpoleMode(PxVehicleWheelsSimData& wheelsSimData, PxVehicleWheelsDynData& wheelsDynData, PxVehicleDriveSimData4W& driveSimData)
 {
-	const PxU32 wheelToRemove = removeFrontWheel ? PxVehicleDrive4W::eFRONT_LEFT_WHEEL : PxVehicleDrive4W::eREAR_LEFT_WHEEL;
-	const PxU32 wheelToModify =  removeFrontWheel ? PxVehicleDrive4W::eFRONT_RIGHT_WHEEL : PxVehicleDrive4W::eREAR_RIGHT_WHEEL;
+	PX_CHECK_AND_RETURN
+		(!wheelsSimData.getIsWheelDisabled(PxVehicleDrive4WWheelOrder::eFRONT_LEFT) &&
+		 !wheelsSimData.getIsWheelDisabled(PxVehicleDrive4WWheelOrder::eFRONT_RIGHT) &&
+		 !wheelsSimData.getIsWheelDisabled(PxVehicleDrive4WWheelOrder::eREAR_LEFT) &&
+		 !wheelsSimData.getIsWheelDisabled(PxVehicleDrive4WWheelOrder::eREAR_RIGHT), "PxVehicle4WEnable3WTadpoleMode requires no wheels to be disabled");
 
-	//Disable the front left wheel.
-	wheelsSimData.disableWheel(wheelToRemove);
+	PxU32 rightDirection=0xffffffff;
+	PxU32 upDirection=0xffffffff;
+	computeDirection(rightDirection, upDirection);
+	PX_CHECK_AND_RETURN(rightDirection<3 && upDirection<3, "PxVehicle4WEnable3WTadpoleMode requires the vectors set in PxVehicleSetBasisVectors to be axis-aligned");
 
-	//Now reposition the front-right wheel so that it lies at the centre of the front axle.
-	{
-		PxVec3 offsets[4]={
-			wheelsSimData.getWheelCentreOffset(PxVehicleDrive4W::eFRONT_LEFT_WHEEL),
-			wheelsSimData.getWheelCentreOffset(PxVehicleDrive4W::eFRONT_RIGHT_WHEEL),
-			wheelsSimData.getWheelCentreOffset(PxVehicleDrive4W::eREAR_LEFT_WHEEL),
-			wheelsSimData.getWheelCentreOffset(PxVehicleDrive4W::eREAR_RIGHT_WHEEL)};
-
-			offsets[wheelToModify].x=0;
-
-			wheelsSimData.setWheelCentreOffset(PxVehicleDrive4W::eFRONT_LEFT_WHEEL,offsets[PxVehicleDrive4W::eFRONT_LEFT_WHEEL]);
-			wheelsSimData.setWheelCentreOffset(PxVehicleDrive4W::eFRONT_RIGHT_WHEEL,offsets[PxVehicleDrive4W::eFRONT_RIGHT_WHEEL]);
-			wheelsSimData.setWheelCentreOffset(PxVehicleDrive4W::eREAR_LEFT_WHEEL,offsets[PxVehicleDrive4W::eREAR_LEFT_WHEEL]);
-			wheelsSimData.setWheelCentreOffset(PxVehicleDrive4W::eREAR_RIGHT_WHEEL,offsets[PxVehicleDrive4W::eREAR_RIGHT_WHEEL]);
-	}
-	{
-		PxVec3 suspOffset=wheelsSimData.getSuspForceAppPointOffset(wheelToModify);
-		suspOffset.x=0;
-		wheelsSimData.setSuspForceAppPointOffset(wheelToModify,suspOffset);
-	}
-	{
-		PxVec3 tireOffset=wheelsSimData.getTireForceAppPointOffset(wheelToModify);
-		tireOffset.x=0;
-		wheelsSimData.setTireForceAppPointOffset(wheelToModify,tireOffset);
-	}
-
-	if(PxVehicleDrive4W::eFRONT_RIGHT_WHEEL==wheelToModify)
-	{
-		//Disable the ackermann steer correction because we only have a single steer wheel now.
-		PxVehicleAckermannGeometryData ackermannData=driveSimData.getAckermannGeometryData();
-		ackermannData.mAccuracy=0.0f;
-		driveSimData.setAckermannGeometryData(ackermannData);
-	}
-
-	//We need to set up the differential to make sure that the missing wheel is ignored.
-	PxVehicleDifferential4WData diffData =driveSimData.getDiffData();
-	if(PxVehicleDrive4W::eFRONT_RIGHT_WHEEL==wheelToModify)	
-	{
-		diffData.mFrontBias=PX_MAX_F32;
-		diffData.mFrontLeftRightSplit=0.0f;
-	}
-	else
-	{
-		diffData.mRearBias=PX_MAX_F32;
-		diffData.mRearLeftRightSplit=0.0f;
-	}
-	driveSimData.setDiffData(diffData);
-
-	//The front-right wheel needs to support the mass that was supported by the disabled front-left wheel.
-	//Update the suspension data to preserve both the natural frequency and damping ratio.
-	PxVehicleSuspensionData suspData=wheelsSimData.getSuspensionData(wheelToModify);
-	suspData.mSprungMass*=2.0f;
-	suspData.mSpringStrength*=2.0f;
-	suspData.mSpringDamperRate*=2.0f;
-	wheelsSimData.setSuspensionData(wheelToModify,suspData);
+	enable3WMode(rightDirection, upDirection, false, wheelsSimData, wheelsDynData, driveSimData);
 }
 
-void PxVehicle4WEnable3WTadpoleMode(PxVehicleWheelsSimData& wheelsSimData, PxVehicleDriveSimData4W& driveSimData)
+void PxVehicle4WEnable3WDeltaMode(PxVehicleWheelsSimData& wheelsSimData, PxVehicleWheelsDynData& wheelsDynData, PxVehicleDriveSimData4W& driveSimData)
 {
-	PxVehicle4WEnable3WMode(false,wheelsSimData,driveSimData);
+	PX_CHECK_AND_RETURN
+		(!wheelsSimData.getIsWheelDisabled(PxVehicleDrive4WWheelOrder::eFRONT_LEFT) &&
+		!wheelsSimData.getIsWheelDisabled(PxVehicleDrive4WWheelOrder::eFRONT_RIGHT) &&
+		!wheelsSimData.getIsWheelDisabled(PxVehicleDrive4WWheelOrder::eREAR_LEFT) &&
+		!wheelsSimData.getIsWheelDisabled(PxVehicleDrive4WWheelOrder::eREAR_RIGHT), "PxVehicle4WEnable3WDeltaMode requires no wheels to be disabled");
+
+	PxU32 rightDirection=0xffffffff;
+	PxU32 upDirection=0xffffffff;
+	computeDirection(rightDirection, upDirection);
+	PX_CHECK_AND_RETURN(rightDirection<3 && upDirection<3, "PxVehicle4WEnable3WTadpoleMode requires the vectors set in PxVehicleSetBasisVectors to be axis-aligned");
+
+	enable3WMode(rightDirection, upDirection, true, wheelsSimData, wheelsDynData, driveSimData);
 }
 
-void PxVehicle4WEnable3WDeltaMode(PxVehicleWheelsSimData& wheelsSimData, PxVehicleDriveSimData4W& driveSimData)
-{
-	PxVehicle4WEnable3WMode(true,wheelsSimData,driveSimData);
-}
+void computeSprungMasses(const PxU32 numSprungMasses, const PxVec3* sprungMassCoordinates, const PxVec3& centreOfMass, const PxReal totalMass, const PxU32 gravityDirection, PxReal* sprungMasses);
 
 void PxVehicleComputeSprungMasses(const PxU32 numSprungMasses, const PxVec3* sprungMassCoordinates, const PxVec3& centreOfMass, const PxReal totalMass, const PxU32 gravityDirection, PxReal* sprungMasses)
 {
-	if(1==numSprungMasses)
+	computeSprungMasses(numSprungMasses, sprungMassCoordinates, centreOfMass, totalMass, gravityDirection, sprungMasses);
+}
+
+void PxVehicleCopyDynamicsData(const PxVehicleCopyDynamicsMap& wheelMap, const PxVehicleWheels& src, PxVehicleWheels* trg)
+{
+	PX_CHECK_AND_RETURN(trg, "PxVehicleCopyDynamicsData requires that trg is a valid vehicle pointer");
+
+	PX_CHECK_AND_RETURN(src.getVehicleType() == trg->getVehicleType(), "PxVehicleCopyDynamicsData requires that both src and trg are the same type of vehicle");
+
+#ifdef PX_CHECKED
 	{
-		sprungMasses[0]=totalMass;
+		const PxU32 numWheelsSrc = src.mWheelsSimData.getNbWheels();
+		const PxU32 numWheelsTrg = trg->mWheelsSimData.getNbWheels();
+		PxU8 copiedWheelsSrc[PX_MAX_NB_WHEELS];
+		PxMemZero(copiedWheelsSrc, sizeof(PxU8) * PX_MAX_NB_WHEELS);
+		PxU8 setWheelsTrg[PX_MAX_NB_WHEELS];
+		PxMemZero(setWheelsTrg, sizeof(PxU8) * PX_MAX_NB_WHEELS);
+		for(PxU32 i = 0; i < PxMin(numWheelsSrc, numWheelsTrg); i++)
+		{
+			const PxU32 srcWheelId = wheelMap.sourceWheelIds[i];
+			PX_CHECK_AND_RETURN(srcWheelId < numWheelsSrc, "PxVehicleCopyDynamicsData - wheelMap contains illegal source wheel id");
+			PX_CHECK_AND_RETURN(0 == copiedWheelsSrc[srcWheelId], "PxVehicleCopyDynamicsData - wheelMap contains illegal source wheel id");
+			copiedWheelsSrc[srcWheelId] = 1;
+
+			const PxU32 trgWheelId = wheelMap.targetWheelIds[i];
+			PX_CHECK_AND_RETURN(trgWheelId < numWheelsTrg, "PxVehicleCopyDynamicsData - wheelMap contains illegal target wheel id");
+			PX_CHECK_AND_RETURN(0 == setWheelsTrg[trgWheelId], "PxVehicleCopyDynamicsData - wheelMap contains illegal target wheel id");
+			setWheelsTrg[trgWheelId]=1;
+		}
 	}
-	else if(2==numSprungMasses)
+#endif
+
+
+	const PxU32 numWheelsSrc = src.mWheelsSimData.getNbWheels();
+	const PxU32 numWheelsTrg = trg->mWheelsSimData.getNbWheels();
+
+	//Set all dynamics data on the target to zero.
+	//Be aware that setToRestState sets the rigid body to 
+	//rest so set the momentum back after calling setToRestState.
+	PxRigidDynamic* actorTrg = trg->getRigidDynamicActor();
+	PxVec3 linVel = actorTrg->getLinearVelocity();
+	PxVec3 angVel = actorTrg->getAngularVelocity();
+	switch(src.getVehicleType())
 	{
-		PxVec3 v=sprungMassCoordinates[0];
-		v[gravityDirection]=0;
-		PxVec3 w=sprungMassCoordinates[1]-sprungMassCoordinates[0];
-		w[gravityDirection]=0;
-		w.normalize();
-
-		PxVec3 cm=centreOfMass;
-		cm[gravityDirection]=0;
-		PxF32 t=w.dot(cm-v);
-		PxVec3 p=v+w*t;
-
-		PxVec3 x0=sprungMassCoordinates[0];
-		x0[gravityDirection]=0;
-		PxVec3 x1=sprungMassCoordinates[1];
-		x1[gravityDirection]=0;
-		const PxF32 r0=(x0-p).dot(w);
-		const PxF32 r1=(x1-p).dot(w);
-
-		const PxF32 m0=totalMass*r1/(r1-r0);
-		const PxF32 m1=totalMass-m0;
-
-		sprungMasses[0]=m0;
-		sprungMasses[1]=m1;
+	case PxVehicleTypes::eDRIVE4W:
+		((PxVehicleDrive4W*)trg)->setToRestState();
+		break;
+	case PxVehicleTypes::eDRIVENW:
+		((PxVehicleDriveNW*)trg)->setToRestState();
+		break;
+	case PxVehicleTypes::eDRIVETANK:
+		((PxVehicleDriveTank*)trg)->setToRestState();
+		break;
+	case PxVehicleTypes::eNODRIVE:
+		((PxVehicleNoDrive*)trg)->setToRestState();
+		break;
+	default:
+		break;
 	}
-	else if(3==numSprungMasses)
+	actorTrg->setLinearVelocity(linVel);
+	actorTrg->setAngularVelocity(angVel);
+
+
+	//Keep a track of the wheels on trg that have their dynamics data set as a copy from src.
+	PxU8 setWheelsTrg[PX_MAX_NB_WHEELS];
+	PxMemZero(setWheelsTrg, sizeof(PxU8) * PX_MAX_NB_WHEELS);
+
+	//Keep a track of the average wheel rotation speed of all enabled wheels on src.
+	PxU32 numEnabledWheelsSrc = 0;
+	PxF32 accumulatedWheelRotationSpeedSrc = 0.0f;
+
+	//Copy wheel dynamics data from src wheels to trg wheels.
+	//Track the target wheels that have been given dynamics data from src wheels.
+	//Compute the accumulated wheel rotation speed of all enabled src wheels.
+	const PxU32 numMappedWheels = PxMin(numWheelsSrc, numWheelsTrg);
+	for(PxU32 i = 0; i < numMappedWheels; i++)
 	{
-		const PxU32 d0=(gravityDirection+1)%3;
-		const PxU32 d1=(gravityDirection+2)%3;
+		const PxU32 srcWheelId = wheelMap.sourceWheelIds[i];
+		const PxU32 trgWheelId = wheelMap.targetWheelIds[i];
 
-		MatrixNN A(3);
-		VectorN b(3);
-		A.set(0,0,sprungMassCoordinates[0][d0]);
-		A.set(0,1,sprungMassCoordinates[1][d0]);
-		A.set(0,2,sprungMassCoordinates[2][d0]);
-		A.set(1,0,sprungMassCoordinates[0][d1]);
-		A.set(1,1,sprungMassCoordinates[1][d1]);
-		A.set(1,2,sprungMassCoordinates[2][d1]);
-		A.set(2,0,1);
-		A.set(2,1,1);
-		A.set(2,2,1);
-		b[0]=totalMass*centreOfMass[d0];
-		b[1]=totalMass*centreOfMass[d1];
-		b[2]=totalMass;
+		trg->mWheelsDynData.copy(src.mWheelsDynData, srcWheelId, trgWheelId);
 
-		VectorN result(3);
-		MatrixNNLUSolver solver;
-		solver.decomposeLU(A);
-		solver.solve(b,result);
+		setWheelsTrg[trgWheelId] = 1;
 
-		sprungMasses[0]=result[0];
-		sprungMasses[1]=result[1];
-		sprungMasses[2]=result[2];
+		if(!src.mWheelsSimData.getIsWheelDisabled(srcWheelId))
+		{
+			numEnabledWheelsSrc++;
+			accumulatedWheelRotationSpeedSrc += src.mWheelsDynData.getWheelRotationSpeed(srcWheelId);
+		}
 	}
-	else if(numSprungMasses>=4)
+
+	//Compute the average wheel rotation speed of src.
+	PxF32 averageWheelRotationSpeedSrc = 0;
+	if(numEnabledWheelsSrc > 0)
 	{
-		const PxU32 d0=(gravityDirection+1)%3;
-		const PxU32 d1=(gravityDirection+2)%3;
+		averageWheelRotationSpeedSrc = (accumulatedWheelRotationSpeedSrc/ (1.0f * numEnabledWheelsSrc));
+	}
 
-		const PxF32 mbar = totalMass/(numSprungMasses*1.0f);
-
-		//See http://en.wikipedia.org/wiki/Lagrange_multiplier
-		//particularly the section on multiple constraints.
-
-		//3 Constraint equations.
-		//g0 = sum_ xi*mi=xcm	
-		//g1 = sum_ zi*mi=zcm	
-		//g2 = sum_ mi = totalMass		
-		//Minimisation function to achieve solution with minimum mass variance.
-		//f = sum_ (mi - mave)^2 
-		//Lagrange terms (N equations, N+3 unknowns)
-		//2*mi  - xi*lambda0 - zi*lambda1 - 1*lambda2 = 2*mave
-
-		MatrixNN A(numSprungMasses+3);
-		VectorN b(numSprungMasses+3);
-
-	
-		//g0, g1, g2
-		for(PxU32 i=0;i<numSprungMasses;i++)
+	//For wheels on trg that have not had their dynamics data copied from src just set
+	//their wheel rotation speed to the average wheel rotation speed.
+	for(PxU32 i = 0; i < numWheelsTrg; i++)
+	{
+		if(0 == setWheelsTrg[i] && !trg->mWheelsSimData.getIsWheelDisabled(i))
 		{
-			A.set(0,i,sprungMassCoordinates[i][d0]);	//g0
-			A.set(1,i,sprungMassCoordinates[i][d1]);	//g1
-			A.set(2,i,1.0f);							//g2
+			trg->mWheelsDynData.setWheelRotationSpeed(i, averageWheelRotationSpeedSrc);
 		}
-		for(PxU32 i=numSprungMasses;i<numSprungMasses+3;i++)
+	}
+
+	//Copy the engine rotation speed/gear states/autobox states/etc.
+	switch(src.getVehicleType())
+	{
+	case PxVehicleTypes::eDRIVE4W:
+	case PxVehicleTypes::eDRIVENW:
+	case PxVehicleTypes::eDRIVETANK:
 		{
-			A.set(0,i,0);								//g0 independent of lambda0,lambda1,lambda2
-			A.set(1,i,0);								//g1 independent of lambda0,lambda1,lambda2
-			A.set(2,i,0);								//g2 independent of lambda0,lambda1,lambda2
+			const PxVehicleDriveDynData& driveDynDataSrc = ((const PxVehicleDrive&)src).mDriveDynData;
+			PxVehicleDriveDynData* driveDynDataTrg = &((PxVehicleDrive*)trg)->mDriveDynData;
+			*driveDynDataTrg = driveDynDataSrc;
 		}
-		b[0] = totalMass*(centreOfMass[d0]);			//g0
-		b[1] = totalMass*(centreOfMass[d1]);			//g1
-		b[2] = totalMass;								//g2
+		break;
+	default:
+		break;
+	}
+}
 
-		//Lagrange terms.
-		for(PxU32 i=0;i<numSprungMasses;i++)
-		{
-			//Off-diagonal terms from the derivative of f
-			for(PxU32 j=0;j<numSprungMasses;j++)
-			{
-				A.set(i+3,j,0);
-			}
-			//Diagonal term from the derivative of f
-			A.set(i+3,i,2);
+bool areEqual(const PxQuat& q0, const PxQuat& q1)
+{
+	return ((q0.x == q1.x) && (q0.y == q1.y) && (q0.z == q1.z) && (q0.w == q1.w)); 
+}
 
-			//Derivative of g
-			A.set(i+3,numSprungMasses+0,sprungMassCoordinates[i][d0]);
-			A.set(i+3,numSprungMasses+1,sprungMassCoordinates[i][d1]);
-			A.set(i+3,numSprungMasses+2,1.0f);
+void PxVehicleUpdateCMassLocalPose(const PxTransform& oldCMassLocalPose, const PxTransform& newCMassLocalPose, const PxU32 gravityDirection, PxVehicleWheels* vehicle)
+{
+	PX_CHECK_AND_RETURN(areEqual(PxQuat::createIdentity(), oldCMassLocalPose.q), "Only center of mass poses with identity rotation are supported");
+	PX_CHECK_AND_RETURN(areEqual(PxQuat::createIdentity(), newCMassLocalPose.q), "Only center of mass poses with identity rotation are supported");
+	PX_CHECK_AND_RETURN(0==gravityDirection || 1==gravityDirection || 2==gravityDirection, "gravityDirection must be 0 or 1 or 2.");
 
-			//rhs.
-			b[i+3] = 2*mbar;
-		}
+	//Update the offsets from the rigid body center of mass.
+	PxVec3 wheelCenterCMOffsets[PX_MAX_NB_WHEELS];
+	const PxU32 nbWheels = vehicle->mWheelsSimData.getNbWheels();
+	for(PxU32 i = 0; i < nbWheels; i++)
+	{
+		wheelCenterCMOffsets[i] = vehicle->mWheelsSimData.getWheelCentreOffset(i) + oldCMassLocalPose.p - newCMassLocalPose.p;
+		vehicle->mWheelsSimData.setWheelCentreOffset(i, vehicle->mWheelsSimData.getWheelCentreOffset(i) + oldCMassLocalPose.p - newCMassLocalPose.p);
+		vehicle->mWheelsSimData.setSuspForceAppPointOffset(i, vehicle->mWheelsSimData.getSuspForceAppPointOffset(i) + oldCMassLocalPose.p - newCMassLocalPose.p);
+		vehicle->mWheelsSimData.setTireForceAppPointOffset(i, vehicle->mWheelsSimData.getTireForceAppPointOffset(i) + oldCMassLocalPose.p - newCMassLocalPose.p);
+	}
 
-		//Solve Ax=b
-		VectorN result(numSprungMasses+3);
-		MatrixNNLUSolver solver;
-		solver.decomposeLU(A);
-		solver.solve(b,result);
-
-		for(PxU32 i=0;i<numSprungMasses;i++)
-		{
-			sprungMasses[i]=result[i];
-		}
+	//Now update the sprung masses.
+	PxF32 sprungMasses[PX_MAX_NB_WHEELS];
+	PxVehicleComputeSprungMasses(nbWheels, wheelCenterCMOffsets, PxVec3(0,0,0), vehicle->getRigidDynamicActor()->getMass(), gravityDirection, sprungMasses);
+	for(PxU32 i = 0; i < nbWheels; i++)
+	{
+		PxVehicleSuspensionData suspData = vehicle->mWheelsSimData.getSuspensionData(i);
+		const PxF32 massRatio = sprungMasses[i]/suspData.mSprungMass;
+		suspData.mSprungMass = sprungMasses[i];
+		suspData.mSpringStrength *= massRatio;
+		suspData.mSpringDamperRate *= massRatio;
+		vehicle->mWheelsSimData.setSuspensionData(i, suspData);
 	}
 }
 

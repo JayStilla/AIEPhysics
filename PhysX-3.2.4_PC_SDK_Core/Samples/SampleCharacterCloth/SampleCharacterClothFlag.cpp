@@ -23,39 +23,44 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
-#include "PxPhysX.h"
-
+#include "PxPhysXConfig.h"
 #if PX_USE_CLOTH_API
 
 #include "SampleCharacterClothFlag.h"
 #include "SampleCharacterCloth.h"
 
 #include "TestClothHelpers.h"
-#include "cloth/PxClothReadData.h"
+#include "cloth/PxClothParticleData.h"
 
 using namespace PxToolkit;
 
-
 ////////////////////////////////////////////////////////////////////////////////
-SampleCharacterClothFlag::SampleCharacterClothFlag(SampleCharacterCloth& sample, const PxTransform &pose, PxReal sizeX, PxReal sizeY, PxReal height)
+SampleCharacterClothFlag::SampleCharacterClothFlag(SampleCharacterCloth& sample, const PxTransform &pose, PxU32 resX, PxU32 resY, PxReal sizeX, PxReal sizeY, PxReal height)
     :
+	mRenderActor(NULL),
+	mSample(sample),
     mWindDir(1.0f, 0.0f, 0.0f),
     mWindRange(1.0f),
 	mWindStrength(1.0f),
-	mTime(0.0f)
+	mTime(0.0f),
+	mCapsuleActor(NULL)
 {
-	PxScene& scene = sample.getActiveScene();
+	PxScene& scene = mSample.getActiveScene();
+	PxPhysics& physics = mSample.getPhysics();
 
 	// adjust placement position for the flag with ray casting so that we can put each flag properly on the terrain
 	PxVec3 pos = pose.p;
-	PxRaycastHit hit;
-	scene.raycastSingle(PxVec3(pos.x,100,pos.z), PxVec3(0,-1,0), 500.0f, PxSceneQueryFlags(0xffffffff), hit);
-	pos = hit.impact + PxVec3(0,0.2f,0.0);
+	PxRaycastBuffer hit;
+	scene.raycast(PxVec3(pos.x,100,pos.z), PxVec3(0,-1,0), 500.0f, hit, PxHitFlags(0xffff));
+	bool didHit = hit.hasBlock;
+	PX_ASSERT(didHit); PX_UNUSED(didHit);
+	pos = hit.block.position + PxVec3(0,0.2f,0.0);
 
+	// settings to adjust flag and pole position on the ground
     PxTransform clothPose(pos, pose.q);
 
 	PxReal halfSizeX = sizeX * 0.5f;
@@ -65,6 +70,32 @@ SampleCharacterClothFlag::SampleCharacterClothFlag(SampleCharacterCloth& sample,
 
     PxReal clothHeight = height - halfSizeY;
     clothPose.p.y += clothHeight;
+
+	// create the cloth flag mesh
+	SampleArray<PxVec4> vertices;
+	SampleArray<PxU32> primitives;
+	PxClothMeshDesc meshDesc = Test::ClothHelpers::createMeshGrid(
+		PxVec3(sizeX,0,0), PxVec3(0,-sizeY,0), resX, resY, vertices, primitives, mUVs);
+
+	// attach two corners on the left
+	for (PxU32 i = 0; i < meshDesc.points.count; i++)
+	{
+		PxReal u = mUVs[i].x, v = mUVs[i].y;
+		bool constrain = ( (u < 0.01) && (v < 0.01) ) || (( u < 0.01) && (v > 0.99));
+		vertices[i].w = constrain ? 0.0f : 1.0f;
+	}
+	
+	// create cloth fabric
+	PxClothFabric* clothFabric = PxClothFabricCreate(physics, meshDesc, PxVec3(0,-1,0));
+	PX_ASSERT(meshDesc.points.stride == sizeof(PxVec4));
+
+	// create the cloth actor
+	const PxClothParticle* particles = (const PxClothParticle*)meshDesc.points.data;
+	PxCloth* cloth = physics.createCloth( clothPose, *clothFabric, particles, PxClothFlags());
+	PX_ASSERT(cloth);	
+
+	// add this cloth into the scene
+	scene.addActor(*cloth);
 
 	// create collision capsule for the pole
 	SampleArray<PxClothCollisionSphere> spheres(2);
@@ -76,71 +107,49 @@ SampleCharacterClothFlag::SampleCharacterClothFlag(SampleCharacterCloth& sample,
 	SampleArray<PxU32> indexPairs;
 	indexPairs.pushBack(0);
 	indexPairs.pushBack(1);
+	cloth->setCollisionSpheres(spheres.begin(), 2);
+	cloth->addCollisionCapsule(indexPairs[0], indexPairs[1]);
 
-	PxClothCollisionData collisionData;
-	collisionData.numSpheres = 2;
-	collisionData.spheres = spheres.begin();
-	collisionData.numPairs = 1;
-	collisionData.pairIndexBuffer = indexPairs.begin();
-
-	// create the cloth flag mesh
-	PxClothMeshDesc meshDesc;
-	SampleArray<PxVec3> vertices;
-	SampleArray<PxU32> primitives;
-
-	mUVs.clear();
-
-	Test::ClothHelpers::createMeshGrid(sizeX, sizeY, 15, 10, PxVec3(1,0,0), PxVec3(0,-1,0), vertices, primitives, mUVs, meshDesc);
-
-	// create the cloth
-	PxCloth& cloth = *sample.createClothFromMeshDesc(
-		meshDesc, clothPose, &collisionData, PxVec3(0,-1,0),
-		mUVs.begin(), "nvidia_flag_d.bmp"
-		, PxVec3(0.5f, 0.5f, 0.5f), 0.5f);
-
-	// attach two corners on the left
-	PxClothReadData* readData = cloth.lockClothReadData();
-	PX_ASSERT(readData);
-	PxU32 numParticles = cloth.getNbParticles();
-	SampleArray<PxClothParticle> particles(numParticles);
-    for(PxU32 i = 0; i < numParticles; i++)
-	{
-		particles[i].pos = readData->particles[i].pos;
-		PxReal u = mUVs[i*2], v = mUVs[i*2+1];
-		bool constrain = ( (u < 0.01) && (v < 1.01) ) || (( u < 0.01) && (v > 0.99));
-		particles[i].invWeight = constrain ? 0.0f : readData->particles[i].invWeight;
-	}
-	readData->unlock();
+	// create render material
+	RenderMaterial* clothMaterial = mSample.mFlagMaterial;
+	mRenderActor = SAMPLE_NEW (RenderClothActor)(*mSample.getRenderer(), *cloth, meshDesc,
+		mUVs.begin(), 0.5f);
+    mRenderActor->setRenderMaterial(clothMaterial);
+	mSample.mRenderClothActors.push_back(mRenderActor);
+	mSample.mRenderActors.push_back(mRenderActor);
 
 	// set solver settings
-	cloth.setParticles(particles.begin(), particles.begin());
-	cloth.setSolverFrequency(120);
-	cloth.setDampingCoefficient(0.0f);
+	cloth->setSolverFrequency(120);
+	cloth->setDampingCoefficient(PxVec3(0.0f));
 
-	PxClothPhaseSolverConfig config;
+	cloth->setStretchConfig(PxClothFabricPhaseType::eBENDING, PxClothStretchConfig(0.1f));
+	cloth->setTetherConfig(PxClothTetherConfig(1.0f, 1.0f));
 
-	config = cloth.getPhaseSolverConfig(PxClothFabricPhaseType::eBENDING_ANGLE);
-	config.solverType = PxClothPhaseSolverConfig::eBENDING;
-	config.stiffness = 0.1f;
-	cloth.setPhaseSolverConfig(PxClothFabricPhaseType::eBENDING_ANGLE, config);
-
-    mCloth = &cloth;
+    mCloth = cloth;
 
 	// we create an invisible kinematic capsule so that the CCT avoids colliding character against the pole of this flag
+	// note that cloth collision capsule above has no effect on rigid body scenes.
 	PxTransform capsulePose(pos, PxQuat(PxHalfPi, PxVec3(0,0,1)));
 	capsulePose.p.x -= halfSizeX + offset;
 	capsulePose.p.y += halfHeight;
 	PxCapsuleGeometry geom(0.2f,halfHeight);
-	PxRigidDynamic* actor = sample.getPhysics().createRigidDynamic(capsulePose);
-	actor->setRigidDynamicFlag(PxRigidDynamicFlag::eKINEMATIC, true);
-	actor->createShape( geom, sample.getDefaultMaterial());
-	scene.addActor(*actor);
+
+	mCapsuleActor = sample.getPhysics().createRigidDynamic(capsulePose);
+	mCapsuleActor->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+	mCapsuleActor->createShape( geom, sample.getDefaultMaterial());
+	scene.addActor(*mCapsuleActor);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 void
 SampleCharacterClothFlag::release()
 {
+	mSample.removeRenderClothActor(*mRenderActor);
+	delete mRenderActor;
+
+	mCloth->release();
+	mCapsuleActor->release();
+
 	delete this;
 }
 
@@ -159,14 +168,21 @@ SampleCharacterClothFlag::update(PxReal dtime)
 {
     PX_ASSERT(mCloth);
     
-    mTime += dtime;
+	// implementation of a simple wind force that varies its direction, strength over time
+	mTime += dtime * PxToolkit::Rand(0.0f, 1.0f);
 
-	// global wind 
+	float st = 1.0f + (float)sin(mTime); 
+	float windStrength = PxToolkit::Rand(1.0f, st) * mWindStrength;	
+	float windRangeStrength = PxToolkit::Rand(0.0f, 2.0f);
+
 	PxVec3 offset( PxReal(PxToolkit::Rand(-1,1)), PxReal(PxToolkit::Rand(-1,1)), PxReal(PxToolkit::Rand(-1,1)));
-	PxVec3 windAcceleration = mWindStrength * mWindDir + mWindRange.multiply(offset);
+	float ct = 1.0f + (float)cos(mTime + 0.1);
+	offset *= ct;
+	PxVec3 windAcceleration = windStrength * mWindDir + windRangeStrength * mWindRange.multiply(offset);
+
 	mCloth->setExternalAcceleration(windAcceleration);
 
-	// per particle wind 
+#if 0
 	PxU32 nbParticles = mCloth->getNbParticles();
 	SampleArray<PxVec4> accel(nbParticles);
 
@@ -177,6 +193,7 @@ SampleCharacterClothFlag::update(PxReal dtime)
 		accel[i].z = PxToolkit::Rand(-1,1) * mWindRange.z;
 	}
 	mCloth->setParticleAccelerations(accel.begin());
+#endif
 }
 
 #endif // PX_USE_CLOTH_API

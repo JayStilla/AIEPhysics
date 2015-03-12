@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,7 +35,6 @@
 
 #include "PxControllerManager.h"
 #include "PxControllerObstacles.h"
-#include "GuGeomUtils.h"
 #include "PxMeshQuery.h"
 #include "CmRenderOutput.h"
 #include "CctUtils.h"
@@ -46,38 +45,54 @@ namespace physx
 namespace Cct
 {
 	class Controller;
+	class ObstacleContext;
 
 	//Implements the PxControllerManager interface, this class used to be called ControllerManager
-	class CharacterControllerManager : public PxControllerManager, public Ps::UserAllocated
+	class CharacterControllerManager : public PxControllerManager   , public Ps::UserAllocated
 	{
 	public:
-														CharacterControllerManager();
+														CharacterControllerManager(PxScene& scene);
 		virtual											~CharacterControllerManager();
 
 		// PxControllerManager
 		virtual			void							release();
+		virtual			PxScene&						getScene() const;
 		virtual			PxU32							getNbControllers()	const;
 		virtual			PxController*					getController(PxU32 index);
-		virtual			PxController*					createController(PxPhysics& sdk, PxScene* scene, const PxControllerDesc& desc);
+        virtual			PxController*					createController(const PxControllerDesc& desc);
+       
+        PX_DEPRECATED virtual PxController*		        createController(PxPhysics& physics, PxScene* scene, const PxControllerDesc& desc)
+	    {
+		    return PxControllerManager::createController(physics, scene, desc);
+	    }
 		virtual			void							purgeControllers();
 		virtual			PxRenderBuffer&					getRenderBuffer();
-		virtual			void							setDebugRenderingFlags(PxU32 flags);
+		virtual			void							setDebugRenderingFlags(PxControllerDebugRenderFlags flags);
+		virtual			PxU32							getNbObstacleContexts() const;
+		virtual			PxObstacleContext*				getObstacleContext(PxU32 index);
 		virtual			PxObstacleContext*				createObstacleContext();
 		virtual			void							computeInteractions(PxF32 elapsedTime, PxControllerFilterCallback* cctFilterCb);
 		virtual			void							setTessellation(bool flag, float maxEdgeLength);
+		virtual			void							setOverlapRecoveryModule(bool flag);
+		virtual			void							setPreciseSweeps(bool flag);
+		virtual			void							setPreventVerticalSlidingAgainstCeiling(bool flag);
+		virtual			void							shiftOrigin(const PxVec3& shift);
 		//~PxControllerManager
 
 		// ObstacleContextNotifications
-						void							onObstacleRemoved(ObstacleHandle index, ObstacleHandle movedIndex) const;
+						void							onObstacleRemoved(ObstacleHandle index) const;
 						void							onObstacleUpdated(ObstacleHandle index, const PxObstacleContext* ) const;
 						void							onObstacleAdded(ObstacleHandle index, const PxObstacleContext*) const;
 
 						void							releaseController(PxController& controller);
 						Controller**					getControllers();
+						void							releaseObstacleContext(ObstacleContext& oc);
 						void							resetObstaclesBuffers();
 
+						PxScene&						mScene;
+
 						Cm::RenderBuffer*				mRenderBuffer;
-						PxU32							mDebugRenderingFlags;
+						PxControllerDebugRenderFlags	mDebugRenderingFlags;
 		// Shared buffers for obstacles
 						Ps::Array<const void*>			mBoxUserData;
 						Ps::Array<PxExtendedBox>		mBoxes;
@@ -88,8 +103,16 @@ namespace Cct
 						Ps::Array<Controller*>			mControllers;
 						Ps::HashSet<PxShape*>			mCCTShapes;
 
+						Ps::Array<ObstacleContext*>		mObstacleContexts;
+
 						float							mMaxEdgeLength;
 						bool							mTessellation;
+
+						bool							mOverlapRecovery;
+						bool							mPreciseSweeps;
+						bool							mPreventVerticalSlidingAgainstCeiling;
+	protected:
+		CharacterControllerManager &operator=(const CharacterControllerManager &);
 	};
 
 } // namespace Cct

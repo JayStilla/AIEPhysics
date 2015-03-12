@@ -23,12 +23,14 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
 #ifndef PX_TOOLKIT_BMP_LOADER_H
 #define PX_TOOLKIT_BMP_LOADER_H
+
+	#include "extensions/PxDefaultStreams.h"
 
 	namespace PxToolkit
 	{
@@ -42,7 +44,7 @@
 
 		// returns true if success. Data is persists until the class is destructed.
 		bool loadBmp(const char* filename); 
-		bool loadBmp(FILE* f);
+		bool loadBmp(PxFileHandle f);
 
 		int				mWidth;
 		int				mHeight;

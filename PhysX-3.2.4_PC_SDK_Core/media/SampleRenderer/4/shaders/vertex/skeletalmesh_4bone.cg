@@ -61,7 +61,9 @@ VertexOut  vmain(__in(float4,     localSpacePosition, POSITION)
 	vout.params.texcoord0   = vertexTexcoord0;
 	vout.params.texcoord1   = vertexTexcoord1;
 	vout.params.texcoord2   = vertexTexcoord2;
+#if !defined (RENDERER_WIN8ARM)		
 	vout.params.texcoord3   = vertexTexcoord3;
+#endif	
 	vout.params.color       = swizzle(vertexColor);
 	
 	return vout;

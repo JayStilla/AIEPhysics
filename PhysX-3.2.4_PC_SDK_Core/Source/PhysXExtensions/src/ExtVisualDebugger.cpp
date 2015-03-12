@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -31,10 +31,11 @@
 #include "PxPreprocessor.h"
 PX_DUMMY_SYMBOL
 
-#if PX_SUPPORT_VISUAL_DEBUGGER
+#include "PxVisualDebugger.h"
 
-#include "PxVisualDebuggerExt.h"
+#if PX_SUPPORT_VISUAL_DEBUGGER
 #include "ExtVisualDebugger.h"
+#include "PxVisualDebuggerExt.h"
 #include "PxExtensionMetaDataObjects.h"
 
 #include "ExtD6Joint.h"
@@ -47,36 +48,9 @@ PX_DUMMY_SYMBOL
 #include "ExtJointMetaDataExtensions.h"
 #include "PvdMetaDataPropertyVisitor.h"
 #include "PvdMetaDataDefineProperties.h"
-#include "PvdObjectModelBaseTypes.h"
-#include "PvdTypeNames.h"
-
-
-namespace physx { namespace debugger {
-	#define DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP( type ) DEFINE_PVD_TYPE_NAME_MAP( type, "physx3", #type )
-
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxJoint);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxJointGeneratedValues);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxFixedJoint);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxFixedJointGeneratedValues);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxDistanceJoint);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxDistanceJointGeneratedValues);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxPrismaticJoint);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxPrismaticJointGeneratedValues);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxRevoluteJoint);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxRevoluteJointGeneratedValues);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxSphericalJoint);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxSphericalJointGeneratedValues);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxD6Joint);
-	DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP(PxD6JointGeneratedValues);
-
-#undef DEFINE_NATIVE_PVD_PHYSX3_TYPE_MAP
-
-}}
 
 namespace physx
 {
-
-
 namespace Ext
 {
 	using namespace Pvd;
@@ -97,7 +71,7 @@ namespace Ext
 
 	using namespace Pvd;
 
-	VisualDebugger::PvdNameSpace::PvdNameSpace(physx::debugger::comm::PvdDataStream& conn, const char* name)
+	VisualDebugger::PvdNameSpace::PvdNameSpace(physx::debugger::comm::PvdDataStream& conn, const char* /*name*/)
 		: mConnection(conn)
 	{
 	}
@@ -177,44 +151,6 @@ namespace Ext
 		const void* parent = newActor0 ? (const void*)newActor0 : (const void*) newActor1;
 		inStream.setPropertyValue( &inJoint, "Parent", parent );
 	}
-
-	template<typename TValueStructType, typename TObjType>
-	void sendAllProperties( PvdDataStream& inStream, const TObjType& inSource )
-	{
-		TValueStructType theValueStruct( &inSource );
-		inStream.setPropertyMessage( &inSource, theValueStruct );
-	}
-
-	template<typename TObjType>
-	void createInstance( PvdDataStream& inStream, const PxConstraint& c, const TObjType& inSource )
-	{
-		const PxJoint* theJoint = &inSource;
-		PxRigidActor* actor0, *actor1;
-		c.getActors( actor0, actor1 );
-		inStream.createInstance( &inSource );
-		inStream.pushBackObjectRef( c.getScene(), "Joints", (const void*)theJoint );
-		if ( actor0 && (actor0->getScene() != NULL ) )
-			inStream.pushBackObjectRef( (PxActor*)actor0, "Joints", theJoint );
-		if ( actor1 && (actor1->getScene() != NULL ))
-			inStream.pushBackObjectRef( (PxActor*)actor1, "Joints", theJoint );
-		const void* parent = actor0 ? (const void*)actor0 : (const void*) actor1;
-		inStream.setPropertyValue( theJoint, "Parent", parent );
-	}
-	
-#define IMPLEMENT_JOINT_PVD_OPERATIONS( jointtype ) \
-	void VisualDebugger::updatePvdProperties(physx::debugger::comm::PvdDataStream& pvdConnection, const jointtype& joint) { sendAllProperties<jointtype##GeneratedValues>( pvdConnection, joint ); }	\
-	void VisualDebugger::simUpdate(physx::debugger::comm::PvdDataStream&, const jointtype&) {}																											\
-	void VisualDebugger::createPvdInstance(physx::debugger::comm::PvdDataStream& pvdConnection, const PxConstraint& c, const jointtype& joint)															\
-	{																																																	\
-		createInstance( pvdConnection, c, joint );																																						\
-	}
-
-	IMPLEMENT_JOINT_PVD_OPERATIONS( PxD6Joint );
-	IMPLEMENT_JOINT_PVD_OPERATIONS( PxDistanceJoint );
-	IMPLEMENT_JOINT_PVD_OPERATIONS( PxFixedJoint );
-	IMPLEMENT_JOINT_PVD_OPERATIONS( PxPrismaticJoint );
-	IMPLEMENT_JOINT_PVD_OPERATIONS( PxRevoluteJoint );
-	IMPLEMENT_JOINT_PVD_OPERATIONS( PxSphericalJoint );
 }
 
 }

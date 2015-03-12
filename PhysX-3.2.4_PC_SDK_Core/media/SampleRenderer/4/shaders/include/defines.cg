@@ -3,7 +3,26 @@
 
 #define __in(argType, argName, argSemantic) argType argName : argSemantic
 
-#if !defined(RENDERER_D3D11)
+#ifdef RENDERER_GNM
+#define JOIN2(a, b) a##b
+#define JOIN(a, b) JOIN2(a, b)
+
+#define BEGIN_CBUFFER(name)
+#define END_CBUFFER(name)
+#define CONST_TYPE
+#define DECLARE_TEXTURE(textureName)        Texture2D textureName; SamplerState JOIN(textureName,SamplerState);
+#define DECLARE_TEXTURE_3D(textureName)     Texture3D textureName; SamplerState JOIN(textureName,SamplerState);
+#define tex2D(textureName,textureCoord)     textureName.Sample(JOIN(textureName,SamplerState), textureCoord)
+#define tex2Dproj(textureName,textureCoord) textureName.Sample(JOIN(textureName,SamplerState), textureCoord.xy).x <= 
+
+#define __in_opt(argType, argName, argSemantic) , __in(argType, argName, argSemantic)
+
+#define COLOR0 S_TARGET_OUTPUT
+#define half3 float3
+#define half4 float4
+#define half float
+
+#elif !defined(RENDERER_D3D11)
 
 #define BEGIN_CBUFFER(name)
 #define END_CBUFFER(name)

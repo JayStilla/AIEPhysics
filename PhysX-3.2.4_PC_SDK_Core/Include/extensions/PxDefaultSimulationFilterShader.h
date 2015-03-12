@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,28 +34,29 @@
   @{
 */
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 
 #include "PxFiltering.h"
-#include "PxRigidActor.h"
 
 #ifndef PX_DOXYGEN
 namespace physx
 {
 #endif
 
+class PxActor;
+
 /**
 \brief 64-bit mask used for collision filtering.
 
-The collision filtering equation for 2 shapes S0 and S1 is:
+The collision filtering equation for 2 objects o0 and o1 is:
 
 <pre> (G0 op0 K0) op2 (G1 op1 K1) == b </pre>
 
 with
 
 <ul>
-<li> G0 = PxGroupsMask for shape S0. See PxSetGroupsMask </li>
-<li> G1 = PxGroupsMask for shape S1. See PxSetGroupsMask </li>
+<li> G0 = PxGroupsMask for object o0. See PxSetGroupsMask </li>
+<li> G1 = PxGroupsMask for object o1. See PxSetGroupsMask </li>
 <li> K0 = filtering constant 0. See PxSetFilterConstants </li>
 <li> K1 = filtering constant 1. See PxSetFilterConstants </li>
 <li> b = filtering boolean. See PxSetFilterBool </li>
@@ -90,7 +91,6 @@ struct PxFilterOp
 		PX_FILTEROP_NAND,
 		PX_FILTEROP_NOR,
 		PX_FILTEROP_NXOR,
-		//UBISOFT : FILTERING
 		PX_FILTEROP_SWAP_AND
 	};
 };
@@ -137,7 +137,7 @@ PxFilterFlags PxDefaultSimulationFilterShader(
 bool PxGetGroupCollisionFlag(const PxU16 group1, const PxU16 group2);
 
 /**
-	\brief Specifies if collision should be performed by a pair of shape groups
+	\brief Specifies if collision should be performed by a pair of groups
 
 	\note Collision group is an integer between 0 and 31.
 
@@ -154,25 +154,25 @@ void PxSetGroupCollisionFlag(const PxU16 group1, const PxU16 group2, const bool 
 
 	\note Collision group is an integer between 0 and 31.
 
-	\param[in] actor Rigid body actor
+	\param[in] actor The actor
 
 	\return The collision group this actor belongs to
 
 	@see PxSetGroup
 */
-PxU16 PxGetGroup(const PxRigidActor& actor);
+PxU16 PxGetGroup(const PxActor& actor);
 
 /**
 	\brief Sets which collision group this actor is part of
 
 	\note Collision group is an integer between 0 and 31.
 
-	\param[in] actor Rigid body actor
+	\param[in] actor The actor
 	\param[in] collisionGroup Collision group this actor belongs to
 
 	@see PxGetGroup
 */
-void PxSetGroup(const PxRigidActor& actor, const PxU16 collisionGroup);
+void PxSetGroup(PxActor& actor, const PxU16 collisionGroup);
 
 /**
 \brief Retrieves filtering operation. See comments for PxGroupsMask
@@ -238,23 +238,23 @@ void PxSetFilterConstants(const PxGroupsMask& c0, const PxGroupsMask& c1);
 /**
 \brief Gets 64-bit mask used for collision filtering. See comments for PxGroupsMask
 
-\param[in] actor Rigid body actor
+\param[in] actor The actor
 
-\return The group mask for the shape.
+\return The group mask for the actor.
 
 @see PxSetGroupsMask()
 */
-PxGroupsMask PxGetGroupsMask(const PxRigidActor& actor);
+PxGroupsMask PxGetGroupsMask(const PxActor& actor);
 
 /**
 \brief Sets 64-bit mask used for collision filtering. See comments for PxGroupsMask
 
-\param[in] actor Rigid body actor
-\param[in] mask The group mask to set for the shape.
+\param[in] actor The actor
+\param[in] mask The group mask to set for the actor.
 
 @see PxGetGroupsMask()
 */
-void PxSetGroupsMask(const PxRigidActor& actor, const PxGroupsMask& mask);
+void PxSetGroupsMask(PxActor& actor, const PxGroupsMask& mask);
 
 #ifndef PX_DOXYGEN
 } // namespace physx

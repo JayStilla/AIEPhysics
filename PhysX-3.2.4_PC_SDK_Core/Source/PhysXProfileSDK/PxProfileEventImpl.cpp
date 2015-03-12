@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 #include "PxProfileEvents.h"
 #include "PxProfileEventSerialization.h"
@@ -45,10 +45,16 @@
 #include "PxProfileMemoryEventBuffer.h"
 #include "PxProfileMemoryEventParser.h"
 #include "PxProfileContextProviderImpl.h"
+#include "PsTime.h"
 #include <stdio.h>
 
 namespace physx { 
 	using namespace profile;
+
+	PxU64 PxProfileEventHandler::durationToNanoseconds(PxU64 duration)
+	{
+		return shdfnd::Time::getBootCounterFrequency().toTensOfNanos(duration) * 10;
+	}
 
 	void PxProfileEventHandler::parseEventBuffer( const PxU8* inBuffer, PxU32 inBufferSize, PxProfileEventHandler& inHandler, bool inSwapBytes )
 	{
@@ -227,23 +233,25 @@ namespace physx {
 
 	void PxProfileBulkMemoryEventHandler::parseEventBuffer( const PxU8* inBuffer, PxU32 inBufferSize, PxProfileBulkMemoryEventHandler& inHandler, bool inSwapBytes, PxAllocatorCallback* inAlloc )
 	{
-		ProfileBulkMemoryEventHandlerBuffer<0x1000> theBuffer(&inHandler);
-
 		PxAllocatorCallback* allocator = inAlloc;
 		if( allocator == NULL )
 			allocator = &(PxGetFoundation().getAllocatorCallback());
 
+		ProfileBulkMemoryEventHandlerBuffer<0x1000>* theBuffer = PX_PROFILE_NEW(allocator, ProfileBulkMemoryEventHandlerBuffer<0x1000>)(&inHandler);
+
 		if ( inSwapBytes )
 		{			
 			MemoryEventParser<true> theParser( *allocator );
-			theParser.parseEventData( inBuffer, inBufferSize, &theBuffer );
+			theParser.parseEventData( inBuffer, inBufferSize, theBuffer );
 		}
 		else
 		{
 			MemoryEventParser<false> theParser( *allocator );
-			theParser.parseEventData( inBuffer, inBufferSize, &theBuffer );
+			theParser.parseEventData( inBuffer, inBufferSize, theBuffer );
 		}
-		theBuffer.flush();
+		theBuffer->flush();
+
+		PX_PROFILE_DELETE(*allocator, theBuffer);
 	}
 
 }

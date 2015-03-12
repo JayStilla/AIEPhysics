@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -34,7 +34,7 @@
 @{
 */
 
-#include "PxPhysX.h"
+#include "PxPhysXConfig.h"
 #include "foundation/PxVec3.h"
 #include "foundation/PxStrideIterator.h"
 
@@ -46,7 +46,8 @@ namespace physx
 /**
 \brief Descriptor-like user-side class describing buffers for particle creation.
 
-PxParticleCreationData is used to create particles within the SDK.
+PxParticleCreationData is used to create particles within the SDK. The SDK copies the particle data referenced by PxParticleCreationData, it
+may therefore be deallocated right after the creation call returned.
 
 @see PxParticleBase::createParticles()
 */

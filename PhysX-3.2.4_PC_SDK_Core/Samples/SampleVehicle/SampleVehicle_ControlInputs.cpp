@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,23 +35,30 @@ using namespace SampleFramework;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-
 SampleVehicle_ControlInputs::SampleVehicle_ControlInputs()
 :	mCameraRotateInputY			(0.0f),
 	mCameraRotateInputZ			(0.0f),
 	mAccelKeyPressed			(false),
+	mGearUpKeyPressed			(false),
+	mGearDownKeyPressed			(false),
 	mBrakeKeyPressed			(false),
 	mHandbrakeKeyPressed		(false),
 	mSteerLeftKeyPressed		(false),
 	mSteerRightKeyPressed		(false),
-	mGearUpKeyPressed			(false),
-	mGearDownKeyPressed			(false),
+	mBrakeLeftKeyPressed		(false),
+	mBrakeRightKeyPressed		(false),
+	mThrustLeftKeyPressed		(false),
+	mThrustRightKeyPressed		(false),
 	mAccel						(0.0f),
-	mBrake						(0.0f),
-	mSteer						(0.0f),
 	mGearup						(false),
 	mGeardown					(false),
-	mHandbrake					(false)
+	mBrake						(0.0f),
+	mSteer						(0.0f),
+	mHandbrake					(false),
+	mThrustLeft					(0.0f),
+	mThrustRight				(0.0f),
+	mBrakeLeft					(0.0f),
+	mBrakeRight					(0.0f)
 {
 }
 

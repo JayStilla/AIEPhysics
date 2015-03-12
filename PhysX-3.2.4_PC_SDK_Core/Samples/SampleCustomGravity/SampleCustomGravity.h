@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -77,10 +77,11 @@ class SampleCustomGravityCameraController;
 
 		// Implements SampleApplication
 		virtual	void							onInit();
+        virtual	void						    onInit(bool restart) { onInit(); }
 		virtual	void							onShutdown();
 		virtual	void							onTickPreRender(PxReal dtime);
 		virtual	void							onTickPostRender(PxF32 dtime);
-		virtual bool							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);		
+		virtual void							onDigitalInputEvent(const SampleFramework::InputEvent& , bool val);		
 		virtual void							onPointerInputEvent(const SampleFramework::InputEvent& ie, physx::PxU32 x, physx::PxU32 y, physx::PxReal dx, physx::PxReal dy, bool val);
 		virtual void							collectInputEvents(std::vector<const SampleFramework::InputEvent*>& inputEvents);
 

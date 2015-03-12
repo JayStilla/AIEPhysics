@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -69,7 +69,7 @@ namespace physx
     		EC_SEND_BUFFER_FULL,        // the send buffer is completely full.
     		EC_SEND_FROM_WRONG_THREAD,  // Tried to do a send from a different thread
     		EC_RECEIVE_FROM_WRONG_THREAD, // Tried to do a recieve from a different thread
-    		EC_NO_RECEIVE_PENDING,		// tried to acknowledge a receive but none was pending.
+    		EC_NO_RECEIVE_PENDING		// tried to acknowledge a receive but none was pending.
     	};
 
 
@@ -89,10 +89,10 @@ namespace physx
 		virtual void release(void) = 0;
 
 	protected:
-		virtual ~PxIPC(void) { };
+		virtual ~PxIPC(void) { }
 
 	};
-	}; // end of namespace
-}; // end of namespace
+	} // end of namespace
+} // end of namespace
 
 #endif

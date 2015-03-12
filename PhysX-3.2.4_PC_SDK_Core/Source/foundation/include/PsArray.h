@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -36,6 +36,11 @@
 #include "PsUtilities.h"	// for swap()
 
 #include "PsFPU.h"
+
+#if defined(PX_VC9) || defined(PX_VC10)
+#pragma warning(push)
+#pragma warning(disable:4347) //behavior change: 'function template' is called instead of 'function'
+#endif
 
 namespace physx
 {
@@ -58,64 +63,17 @@ namespace shdfnd
 	template<class T, class Alloc = typename AllocatorTraits<T>::Type >
 	class Array : protected Alloc
 	{
-
 	public:
 
 		typedef T*			Iterator;
 		typedef const T*	ConstIterator;
 
-		explicit  Array(const PxEmpty& v) : Alloc(v)
+		explicit  Array(const PxEMPTY& v) : Alloc(v)
 		{
 			if(mData)
 				mCapacity |= PX_SIGN_BITMASK;
 		}
 
-		// PT: export can be slow, so no inline here
-		template<class Serializer>
-		void				exportArray(Serializer& stream, bool finalize)
-		{
-			// PT: we don't want to serialize useless data so one might want to shrink the array before export.
-			// This is not always true though, sometimes you want to avoid runtime reallocations and really
-			// export the full array capacity.
-			//			(void)finalize;
-			// ### For some reason if I shrink the arrays before export the cloth is not tearable anymore
-			if(finalize)
-				shrink();
-
-			if(mData)
-			{
-				// PT: some issues here...
-				// If capacity>size we still need to export the full capacity, else a push_back on a deserialized array
-				// could overwrite deserialized memory. One solution would be to shrink the array on import.
-				if(mSize)
-		//			stream.storeBuffer(data, size*sizeOfElement);
-					stream.storeBuffer(mData, capacity()*sizeof(T));
-				else if(capacity())
-					stream.storeBuffer(mData, capacity()*sizeof(T));
-			}
-		}
-
-		// PT: import must be as fast as possible, so inline here
-		PX_FORCE_INLINE char*		importArray(char* address)
-		{
-			void** data = PxUnionCast<void**, T**>(&mData);//(void**)&mData;
-
-			if(*data)
-			{
-				if(mSize)
-				{
-					*data = address;
-		//			address += size*sizeof(T);
-					address += capacity()*sizeof(T);
-				}
-				else if(capacity())
-				{
-					*data = address;
-					address += capacity()*sizeof(T);
-				}
-			}
-			return address;
-		}
 
 		/*!
 		Default array constructor. Initialize an empty array
@@ -355,7 +313,7 @@ namespace shdfnd
 		PX_FORCE_INLINE T& pushBack(const T& a)
 		{
 			if(capacity()<=mSize) 
-				grow(capacityIncrement());
+				return growAndPushBack(a);
 
 			PX_PLACEMENT_NEW((void*)(mData + mSize),T)(a);
 
@@ -386,7 +344,9 @@ namespace shdfnd
 			if(capacity()<=mSize) 
 				grow(capacityIncrement());
 
-			return *(new (mData+mSize++)T);
+			T* ptr = mData + mSize++;
+			new (ptr)T; // not 'T()' because PODs should not get default-initialized.
+			return *ptr;
 		}
 
 		/////////////////////////////////////////////////////////////////////////
@@ -418,7 +378,7 @@ namespace shdfnd
 		Operation is O(n)
 		\param i
 		The position of the element that will be subtracted from this array.
-		\return Returns true if the element has been removed.
+		\return true if the element has been removed.
 		*/
 		/////////////////////////////////////////////////////////////////////////
 
@@ -578,6 +538,12 @@ namespace shdfnd
 			return mCapacity & PX_SIGN_BITMASK;
 		}
 
+		/// return reference to allocator
+		PX_INLINE Alloc& getAllocator()
+		{
+			 return *this;
+		}
+
 	protected:
 
 		// constructor for where we don't own the memory
@@ -589,7 +555,23 @@ namespace shdfnd
 		
 		PX_INLINE T* allocate(PxU32 size)
 		{
-			return size ? (T*)Alloc::allocate(sizeof(T) * size, __FILE__, __LINE__) : 0;
+			if(size>0)
+			{
+				T* p = (T*)Alloc::allocate(sizeof(T) * size, __FILE__, __LINE__);
+/**
+Mark a specified amount of memory with 0xcd pattern. This is used to check that the meta data 
+definition for serialized classes is complete in checked builds.
+*/
+#if defined(PX_CHECKED)
+				if (p)
+				{
+					for (PxU32 i = 0; i < (sizeof(T) * size); ++i)
+						reinterpret_cast<PxU8*>(p)[i] = 0xcd;
+				}
+#endif
+				return p;
+			}
+			return 0;
 		}
 
 		PX_INLINE void deallocate(void* mem)
@@ -614,6 +596,12 @@ namespace shdfnd
 			for(; first<last; ++first)
 				first->~T();
 		}
+
+		/*!
+		Called when pushBack() needs to grow the array.
+		\param a The element that will be added to this array.
+		*/
+		PX_NOINLINE T& growAndPushBack(const T& a);
 
 		/*!
 		Resizes the available memory for the array.
@@ -688,10 +676,33 @@ namespace shdfnd
 	}
 
 	template<class T, class Alloc>
+	PX_NOINLINE T& Array<T, Alloc>::growAndPushBack(const T& a)
+	{
+		PxU32 capacity = capacityIncrement();
+
+		T* newData = allocate(capacity);
+		PX_ASSERT((!capacity) || (newData && (newData != mData)));
+		copy(newData, newData + mSize, mData);
+
+		// inserting element before destroying old array
+		// avoids referencing destroyed object when duplicating array element.
+		PX_PLACEMENT_NEW((void*)(newData + mSize),T)(a);
+
+		destroy(mData, mData + mSize);
+		if(!isInUserMemory())
+			deallocate(mData);
+
+		mData = newData;
+		mCapacity = capacity;
+
+		return mData[mSize++];
+	}
+
+	template<class T, class Alloc>
 	PX_NOINLINE void Array<T, Alloc>::recreate(PxU32 capacity)
 	{
 		T* newData = allocate(capacity);
-		PX_ASSERT(!capacity || newData && newData != mData);
+		PX_ASSERT((!capacity) || (newData && (newData != mData)));
 
 		copy(newData, newData + mSize, mData);
 		destroy(mData, mData + mSize);
@@ -710,5 +721,9 @@ namespace shdfnd
 
 } // namespace shdfnd
 } // namespace physx
+
+#if defined(PX_VC9) || defined(PX_VC10)
+#pragma warning(pop)
+#endif
 
 #endif

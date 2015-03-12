@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -35,6 +35,7 @@
 
 #include "CctCharacterController.h"
 #include "PsUserAllocated.h"
+#include "PxDeletionListener.h"
 
 namespace physx
 {
@@ -49,53 +50,57 @@ namespace Cct
 {
 	class CharacterControllerManager;
 
-	class Controller : public Ps::UserAllocated
+	class Controller : public Ps::UserAllocated, public PxDeletionListener
 	{
 	public:
-													Controller(const PxControllerDesc& desc, PxScene* scene);
-		virtual										~Controller();
+														Controller(const PxControllerDesc& desc, PxScene* scene);
+		virtual											~Controller();
 
-					void							releaseInternal();
-					void							getInternalState(PxControllerState& state)	const;
-					void							getInternalStats(PxControllerStats& stats)	const;
+					void								releaseInternal();
+					void								getInternalState(PxControllerState& state)	const;
+					void								getInternalStats(PxControllerStats& stats)	const;
 
-		virtual		PxF32							getHalfHeightInternal()				const	= 0;
-		virtual		bool							getWorldBox(PxExtendedBounds3& box)	const	= 0;
-		virtual		PxController*					getPxController()							= 0;
+		// PxDeletionListener
+		virtual		void								onRelease(const PxBase* observed, void* userData, PxDeletionEventFlag::Enum deletionEvent);
+		//~PxDeletionListener
 
-					PxControllerShapeType::Enum		mType;
-					PxCCTInteractionMode::Enum		mInteractionMode;
-					PxU32							mGroupsBitmask;
+		virtual		PxF32								getHalfHeightInternal()				const	= 0;
+		virtual		bool								getWorldBox(PxExtendedBounds3& box)	const	= 0;
+		virtual		PxController*						getPxController()							= 0;
+
+					void								onOriginShift(const PxVec3& shift);
+
+					PxControllerShapeType::Enum			mType;
 		// User params
-					CCTParams						mUserParams;
-					PxUserControllerHitReport*		mCallback;
-					PxControllerBehaviorCallback*	mBehaviorCallback;
-					void*							mUserData;
+					CCTParams							mUserParams;
+					PxUserControllerHitReport*			mReportCallback;
+					PxControllerBehaviorCallback*		mBehaviorCallback;
+					void*								mUserData;
 		// Internal data
-					SweepTest						mCctModule;			// Internal CCT object. Optim test for Ubi.
-					PxRigidDynamic*					mKineActor;			// Associated kinematic actor
-					PxExtendedVec3					mPosition;			// Current position
-					PxVec3							mDeltaXP;
-					PxVec3							mOverlapRecover;
-					PxScene*						mScene;				// Handy scene owner
-					PxU32							mPreviousSceneTimestamp;
-					CharacterControllerManager*		mManager;			// Owner manager
-					PxF32							mGlobalTime;
-					PxF32							mPreviousGlobalTime;
-					PxF32							mProxyDensity;		// Density for proxy actor
-					PxF32							mProxyScaleCoeff;	// Scale coeff for proxy actor
-					PxU32							mCollisionFlags;	// Last known collision flags (PxControllerFlag)
-					bool							mCachedStandingOnMoving;
+					SweepTest							mCctModule;			// Internal CCT object. Optim test for Ubi.
+					PxRigidDynamic*						mKineActor;			// Associated kinematic actor
+					PxExtendedVec3						mPosition;			// Current position
+					PxVec3								mDeltaXP;
+					PxVec3								mOverlapRecover;
+					PxScene*							mScene;				// Handy scene owner
+					PxU32								mPreviousSceneTimestamp;
+					CharacterControllerManager*			mManager;			// Owner manager
+					PxF32								mGlobalTime;
+					PxF32								mPreviousGlobalTime;
+					PxF32								mProxyDensity;		// Density for proxy actor
+					PxF32								mProxyScaleCoeff;	// Scale coeff for proxy actor
+					PxControllerCollisionFlags			mCollisionFlags;	// Last known collision flags (PxControllerFlag)
+					bool								mCachedStandingOnMoving;
 	protected:
 		// Internal methods
-					void							setUpDirectionInternal(const PxVec3& up);
-					PxShape*						getKineShape()	const;
-					bool							createProxyActor(PxPhysics& sdk, const PxGeometry& geometry, const PxMaterial& material);
-					bool							setPos(const PxExtendedVec3& pos);
-					void							findTouchedObject(const PxControllerFilters& filters, const PxObstacleContext* obstacleContext, const PxVec3& upDirection);
-					bool							rideOnTouchedObject(SweptVolume& volume, const PxVec3& upDirection, PxVec3& disp, const PxObstacleContext* obstacleContext);
+					void								setUpDirectionInternal(const PxVec3& up);
+					PxShape*							getKineShape()	const;
+					bool								createProxyActor(PxPhysics& sdk, const PxGeometry& geometry, const PxMaterial& material);
+					bool								setPos(const PxExtendedVec3& pos);
+					void								findTouchedObject(const PxControllerFilters& filters, const PxObstacleContext* obstacleContext, const PxVec3& upDirection);
+					bool								rideOnTouchedObject(SweptVolume& volume, const PxVec3& upDirection, PxVec3& disp, const PxObstacleContext* obstacleContext);
+					PxControllerCollisionFlags			move(SweptVolume& volume, const PxVec3& disp, PxF32 minDist, PxF32 elapsedTime, const PxControllerFilters& filters, const PxObstacleContext* obstacles, bool constrainedClimbingMode);
 					bool								filterTouchedShape(const PxControllerFilters& filters);
-					PxU32							move(SweptVolume& volume, const PxVec3& disp, PxF32 minDist, PxF32 elapsedTime, const PxControllerFilters& filters, const PxObstacleContext* obstacles, bool constrainedClimbingMode);
 	};
 
 } // namespace Cct

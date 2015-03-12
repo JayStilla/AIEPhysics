@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -38,7 +38,7 @@ struct MotionGenerator
 {
 public:
 	MotionGenerator();
-	MotionGenerator(const PxTransform &pose, const PxVec3& linear, const PxVec3& angular, PxReal animationSpeed = 1.0f);
+	MotionGenerator(const PxTransform &pose, const PxVec3& linear, const PxVec3& angular);
 
 public:
 	const PxTransform& update(float time, float dt);
@@ -47,9 +47,7 @@ public:
 	PxVec3 getAngularVelocity(float time);
 
 	PxVec3 mLinear, mAngular;
-	PxVec3 mCenter;
 	PxTransform mTransform;
-	PxReal mAnimationSpeed;
 };
 
 #endif // TEST_MOTION_GENERATOR

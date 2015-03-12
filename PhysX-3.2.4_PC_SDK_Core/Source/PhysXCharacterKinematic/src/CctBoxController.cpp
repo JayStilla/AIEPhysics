@@ -23,7 +23,7 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 // Copyright (c) 2004-2008 AGEIA Technologies, Inc. All rights reserved.
 // Copyright (c) 2001-2004 NovodeX AG. All rights reserved.  
 
@@ -56,13 +56,10 @@ BoxController::BoxController(const PxControllerDesc& desc, PxPhysics& sdk, PxSce
 	mHalfForwardExtent	= bc.halfForwardExtent;
 
 	// Create kinematic actor under the hood
-	if(1)
-	{
-		PxBoxGeometry boxGeom;
-		boxGeom.halfExtents = CCTtoProxyExtents(bc.halfHeight, bc.halfSideExtent, bc.halfForwardExtent, mProxyScaleCoeff);
+	PxBoxGeometry boxGeom;
+	boxGeom.halfExtents = CCTtoProxyExtents(bc.halfHeight, bc.halfSideExtent, bc.halfForwardExtent, mProxyScaleCoeff);
 
-		createProxyActor(sdk, boxGeom, *desc.material);
-	}
+	createProxyActor(sdk, boxGeom, *desc.material);
 }
 
 BoxController::~BoxController()
@@ -185,8 +182,9 @@ void BoxController::resize(PxReal height)
 
 	const float delta = height - oldHeight;
 	PxExtendedVec3 pos = getPosition();
-	pos += PxVec3(0.0f, delta, 0.0f);
+	pos += mUserParams.mUpDirection * delta;
 	setPosition(pos);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+

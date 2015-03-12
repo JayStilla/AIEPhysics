@@ -23,12 +23,10 @@
 // components in life support devices or systems without express written approval of
 // NVIDIA Corporation.
 //
-// Copyright (c) 2008-2013 NVIDIA Corporation. All rights reserved.
+// Copyright (c) 2008-2014 NVIDIA Corporation. All rights reserved.
 
 
 #include "GLES2RendererMesh.h"
-
-#define LOGI(...) LOG_INFO("GLES2RendererMesh", __VA_ARGS__)
 
 #if defined(RENDERER_ENABLE_GLES2)
 namespace SampleRenderer
@@ -64,8 +62,8 @@ static GLenum getGLIndexType(RendererIndexBuffer::Format format)
 	return gltype;
 }
 
-GLES2RendererMesh::GLES2RendererMesh(const RendererMeshDesc &desc) :
-	RendererMesh(desc)
+GLES2RendererMesh::GLES2RendererMesh(GLES2Renderer& renderer, const RendererMeshDesc &desc) :
+	RendererMesh(desc), m_renderer(renderer)
 {
 	
 }
@@ -75,20 +73,20 @@ GLES2RendererMesh::~GLES2RendererMesh(void)
 	
 }
 
-void GLES2RendererMesh::renderIndices(PxU32 numVertices, PxU32 firstIndex, PxU32 numIndices, RendererIndexBuffer::Format indexFormat) const
-{	
+void GLES2RendererMesh::renderIndices(PxU32 numVertices, PxU32 firstIndex, PxU32 numIndices, RendererIndexBuffer::Format indexFormat, RendererMaterial *material) const
+{
 	const PxU32 indexSize = RendererIndexBuffer::getFormatByteSize(indexFormat);
 	void *buffer = ((PxU8*) 0)+indexSize*firstIndex;
 	glDrawElements(getGLPrimitive(getPrimitives()), numIndices, getGLIndexType(indexFormat), buffer);
 }
 
-void GLES2RendererMesh::renderVertices(PxU32 numVertices) const
+void GLES2RendererMesh::renderVertices(PxU32 numVertices, RendererMaterial *material) const
 {
 	RendererMesh::Primitive primitive = getPrimitives();
 	if(primitive == RendererMesh::PRIMITIVE_POINT_SPRITES) glDepthMask(false);
 	glDrawArrays(getGLPrimitive(primitive), 0, numVertices);
 	if(primitive == RendererMesh::PRIMITIVE_POINT_SPRITES) glDepthMask(true);
-}
+	}
 
 void GLES2RendererMesh::renderIndicesInstanced(PxU32 numVertices, PxU32 firstIndex, PxU32 numIndices, RendererIndexBuffer::Format indexFormat, RendererMaterial *material) const
 {
